@@ -85,6 +85,11 @@ function prepareToQuit(reason = 'quit') {
 let updaterInitialized = false;
 let installAfterDownload = false;
 
+function isPortableBuild() {
+    // electron-builder portable launcher sets these env vars on Windows.
+    return !!(process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR);
+}
+
 function getAppUpdateConfigPath() {
     // electron-builder embeds this file in packaged builds when publish config exists.
     try {
@@ -447,12 +452,22 @@ ipcMain.handle('get-auto-start', () => {
 ipcMain.handle('updater-get-version', () => {
     return {
         version: app.getVersion(),
-        isPackaged: app.isPackaged
+        isPackaged: app.isPackaged,
+        isPortable: isPortableBuild(),
+        exePath: app.getPath('exe')
     };
 });
 
 ipcMain.handle('updater-check', async () => {
     initAutoUpdater();
+
+    if (isPortableBuild()) {
+        sendUpdaterStatus({
+            state: 'error',
+            message: 'Auto-update is not supported in the portable EXE. Download and install the "Setup" (NSIS) build from GitHub Releases, then use in-app updates.'
+        });
+        return { ok: false, error: 'portable_not_supported' };
+    }
 
     if (!app.isPackaged) {
         // Don't hard-fail: allow the UI to show a helpful message.
@@ -478,6 +493,14 @@ ipcMain.handle('updater-check', async () => {
 
 ipcMain.handle('updater-update-now', async () => {
     initAutoUpdater();
+
+    if (isPortableBuild()) {
+        sendUpdaterStatus({
+            state: 'error',
+            message: 'Auto-update is not supported in the portable EXE. Download and install the "Setup" (NSIS) build from GitHub Releases, then use in-app updates.'
+        });
+        return { ok: false, error: 'portable_not_supported' };
+    }
 
     if (!app.isPackaged) {
         sendUpdaterStatus({

@@ -1637,7 +1637,13 @@ function initializeSettings() {
                 }
                 const v = info.version ? `v${info.version}` : 'unknown';
                 const packaged = info.isPackaged ? 'packaged' : 'dev';
-                versionInfo.textContent = `Current version: ${v} (${packaged})`;
+                const portable = info.isPortable ? 'portable' : 'installed';
+                versionInfo.textContent = `Current version: ${v} (${packaged}, ${portable})`;
+
+                if (info.isPortable) {
+                    setStatus('Auto-update is not supported in the portable EXE. Install the "Setup" build from GitHub Releases for in-app updates.');
+                    setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: false });
+                }
             }).catch(() => {
                 if (versionInfo) versionInfo.textContent = '';
             });
@@ -1692,6 +1698,9 @@ function initializeSettings() {
                     if (res && res.ok === false && res.error === 'not_packaged') {
                         setStatus('Updates work only in packaged builds. Build installer/portable and run that build.');
                         setButtons({ canCheck: true, canUpdateNow: false, showUpdateNow: false });
+                    } else if (res && res.ok === false && res.error === 'portable_not_supported') {
+                        setStatus('Auto-update is not supported in the portable EXE. Install the "Setup" build from GitHub Releases.');
+                        setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: false });
                     }
                 } catch (e) {
                     setStatus(`Update error: ${e?.message || String(e)}`);
@@ -1707,7 +1716,13 @@ function initializeSettings() {
                     setUpdateNowBusy(true);
                     setUpdateNowLabel('Updating…');
                     // Main process will download and then install/restart.
-                    await updatesApi.updateNow();
+                    const res = await updatesApi.updateNow();
+                    if (res && res.ok === false && res.error === 'portable_not_supported') {
+                        setStatus('Auto-update is not supported in the portable EXE. Install the "Setup" build from GitHub Releases.');
+                        setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: false });
+                        setUpdateNowBusy(false);
+                        setUpdateNowLabel('Update & Restart');
+                    }
                 } catch (e) {
                     setStatus(`Update error: ${e?.message || String(e)}`);
                     setButtons({ canCheck: true, canUpdateNow: false, showUpdateNow: false });
