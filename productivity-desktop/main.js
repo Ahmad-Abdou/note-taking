@@ -150,17 +150,17 @@ function initAutoUpdater() {
                     prepareToQuit('update_install');
 
                     // Fail-safe: if something still prevents shutdown (e.g., odd event listeners),
-                    // force exit so the installer doesn't prompt the user to close the app.
+                    // force exit quickly so the installer doesn't prompt the user to close the app.
                     setTimeout(() => {
                         try {
-                            process.exit(0);
+                            app.exit(0);
                         } catch (_) {
-                            // ignore
+                            try { process.exit(0); } catch (_) { /* ignore */ }
                         }
-                    }, 6000);
+                    }, 1500);
 
-                    // Trigger installer; it will quit the app and run update.
-                    autoUpdater.quitAndInstall(false, true);
+                    // Trigger installer silently; it will quit the app and run update.
+                    autoUpdater.quitAndInstall(true, true);
                 } catch (e) {
                     sendUpdaterStatus({ state: 'error', message: e?.message || String(e) });
                 }

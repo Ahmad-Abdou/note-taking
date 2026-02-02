@@ -1,6 +1,6 @@
 {
     "name": "productivity-hub-desktop",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Productivity Hub - Focus mode, task management, schedule planning, and productivity tracking",
     "repository": {
         "type": "git",
@@ -40,7 +40,8 @@
         },
         "nsis": {
             "oneClick": false,
-            "allowToChangeInstallationDirectory": true
+            "allowToChangeInstallationDirectory": true,
+            "include": "build/installer.nsh"
         },
         "files": [
             "main.js",
