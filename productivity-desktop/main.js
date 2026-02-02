@@ -14,6 +14,39 @@ let mainWindow;
 let tray;
 let isQuitting = false;
 
+function prepareToQuit(reason = 'quit') {
+    isQuitting = true;
+
+    // Best-effort: close UI surfaces that might keep the app "alive" in user perception.
+    try {
+        const wins = BrowserWindow.getAllWindows?.() || [];
+        for (const w of wins) {
+            try {
+                if (!w.isDestroyed()) w.destroy();
+            } catch (_) {
+                // ignore
+            }
+        }
+    } catch (_) {
+        // ignore
+    }
+
+    // Removing the tray icon avoids "app still running" confusion and can help ensure
+    // the updater can replace files without the app lingering in the tray.
+    try {
+        if (tray && !tray.isDestroyed()) tray.destroy();
+    } catch (_) {
+        // ignore
+    }
+
+    // Log for diagnostics (doesn't crash if console not available)
+    try {
+        console.log(`[App] prepareToQuit: ${reason}`);
+    } catch (_) {
+        // ignore
+    }
+}
+
 // ===== Auto Update (electron-updater) =====
 
 let updaterInitialized = false;
@@ -112,12 +145,32 @@ function initAutoUpdater() {
             // Give renderer a moment to paint status then restart.
             setTimeout(() => {
                 try {
+                    // Ensure the app will actually quit.
+                    // Our window close handler normally hides to tray.
+                    prepareToQuit('update_install');
+
+                    // Fail-safe: if something still prevents shutdown (e.g., odd event listeners),
+                    // force exit so the installer doesn't prompt the user to close the app.
+                    setTimeout(() => {
+                        try {
+                            process.exit(0);
+                        } catch (_) {
+                            // ignore
+                        }
+                    }, 6000);
+
+                    // Trigger installer; it will quit the app and run update.
                     autoUpdater.quitAndInstall(false, true);
                 } catch (e) {
                     sendUpdaterStatus({ state: 'error', message: e?.message || String(e) });
                 }
             }, 600);
         }
+    });
+
+    // When the updater is about to quit for update, ensure we don't block quit.
+    autoUpdater.on('before-quit-for-update', () => {
+        prepareToQuit('before-quit-for-update');
     });
 }
 
@@ -244,6 +297,27 @@ function registerShortcuts() {
 
 // App ready
 app.whenReady().then(() => {
+    // Prevent multiple app instances (a common cause of update installers claiming
+    // the app is still running).
+    const gotLock = app.requestSingleInstanceLock();
+    if (!gotLock) {
+        prepareToQuit('second-instance');
+        app.quit();
+        return;
+    }
+
+    app.on('second-instance', () => {
+        try {
+            if (mainWindow) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        } catch (_) {
+            // ignore
+        }
+    });
+
     createWindow();
     createTray();
     registerShortcuts();
@@ -261,6 +335,11 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
     }
+});
+
+// Ensure app.quit() is not blocked by "minimize to tray" close handler.
+app.on('before-quit', () => {
+    prepareToQuit('before-quit');
 });
 
 // Cleanup on quit
