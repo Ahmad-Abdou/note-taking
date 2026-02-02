@@ -182,9 +182,10 @@ function initAutoUpdater() {
                     // Our window close handler normally hides to tray.
                     prepareToQuit('update_install');
 
-                    // Trigger installer silently; NSIS hooks handle terminating any lingering app
-                    // process and re-launching after the silent update.
-                    autoUpdater.quitAndInstall(true, true);
+                    // Trigger installer (non-silent) and restart.
+                    // This is more reliable for relaunch on Windows than fully silent installs,
+                    // while our NSIS hook still prevents "app cannot be closed" prompts.
+                    autoUpdater.quitAndInstall(false, true);
                 } catch (e) {
                     sendUpdaterStatus({ state: 'error', message: e?.message || String(e) });
                 }

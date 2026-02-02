@@ -14,8 +14,9 @@
 ; When electron-updater runs NSIS in silent mode (/S), there is no finish page
 ; and users may not see any UI. Ensure the app is relaunched after a silent update.
 !macro customInstall
-  IfSilent 0 +5
+  IfSilent 0 done
     ; Give Windows a moment to release file/instance locks before relaunch.
     Sleep 2000
-    nsExec::ExecToLog '"$SYSDIR\\cmd.exe" /c start "" "'$INSTDIR\\Productivity Hub.exe'"'
+    Exec '"$INSTDIR\\Productivity Hub.exe"'
+  done:
 !macroend
