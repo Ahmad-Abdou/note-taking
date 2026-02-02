@@ -1,0 +1,1070 @@
+/* ============================================================================
+   SPACED REPETITION / REVISIONS PAGE STYLES
+   ============================================================================ */
+
+/* Page Header - Ensure button is always clickable */
+#page-revisions .page-header {
+    position: relative;
+    z-index: 10;
+}
+
+#page-revisions .page-header .header-actions {
+    position: relative;
+    z-index: 11;
+}
+
+#page-revisions .page-header .btn-primary {
+    position: relative;
+    z-index: 12;
+    pointer-events: auto;
+}
+
+/* Revision Stats Bar */
+.revision-stats-bar {
+    display: flex;
+    gap: 24px;
+    padding: 20px 24px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.revision-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.revision-stat.due .revision-stat-value {
+    color: var(--warning);
+}
+
+.revision-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+}
+
+.revision-stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Category Tabs */
+.revision-categories {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.revision-categories .category-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+}
+
+.revision-categories .category-tab:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.revision-categories .category-tab.active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark, #6366f1));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+}
+
+.revision-categories .category-tab i {
+    font-size: 1rem;
+    opacity: 0.8;
+}
+
+.revision-categories .category-tab .tab-label {
+    font-weight: 500;
+}
+
+.revision-categories .category-tab .tab-count {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-width: 24px;
+    text-align: center;
+}
+
+.revision-categories .category-tab.active .tab-count {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Due Today tab styling */
+.revision-categories .category-tab[data-category="due"] {
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.revision-categories .category-tab[data-category="due"] i {
+    color: #f59e0b;
+}
+
+.revision-categories .category-tab[data-category="due"].active {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+}
+
+/* Due Items Alert */
+.due-items-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 15px 5px rgba(245, 158, 11, 0.15);
+    }
+}
+
+.due-items-alert i {
+    font-size: 1.4rem;
+    color: #f59e0b;
+}
+
+.due-items-alert span {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.due-items-alert strong {
+    color: #f59e0b;
+}
+
+.due-items-alert.hidden {
+    display: none;
+}
+
+/* Revisions Container */
+.revisions-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+}
+
+/* Empty State */
+.revisions-container .empty-state {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 16px;
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+}
+
+.revisions-container .empty-state i {
+    font-size: 4rem;
+    color: var(--primary);
+    opacity: 0.4;
+    margin-bottom: 20px;
+}
+
+.revisions-container .empty-state h3 {
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.revisions-container .empty-state p {
+    color: var(--text-muted, #888);
+    margin: 0;
+}
+
+.revisions-container .empty-state .hint {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    color: var(--text-muted, #666);
+}
+
+.revisions-container .empty-state.hidden {
+    display: none;
+}
+
+/* Revision Card */
+.revision-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.revision-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--card-accent, var(--primary));
+}
+
+.revision-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--primary);
+    box-shadow: var(--shadow-lg);
+}
+
+.revision-card.due {
+    border-color: var(--warning);
+}
+
+.revision-card.due::before {
+    background: var(--warning);
+}
+
+/* Card Header */
+.revision-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.revision-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    flex: 1;
+    padding-right: 12px;
+    line-height: 1.4;
+}
+
+.revision-card-meta {
+    display: flex;
+    gap: 8px;
+}
+
+.revision-tag {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.revision-tag.tomorrow {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.revision-tag.threeDays,
+.revision-tag.three-days {
+    background: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+}
+
+.revision-tag.week {
+    background: rgba(139, 92, 246, 0.2);
+    color: #8b5cf6;
+}
+
+.revision-tag.due {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    animation: pulse-tag 1.5s infinite;
+}
+
+@keyframes pulse-tag {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Card Content */
+.revision-card-content {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    max-height: 120px;
+    overflow: hidden;
+    position: relative;
+    opacity: 0.85;
+}
+
+.revision-card-content::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(to bottom, transparent, var(--bg-secondary));
+}
+
+/* Card Source Info */
+.revision-card-source {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.revision-card-source i {
+    color: var(--primary);
+}
+
+/* Card Notes */
+.revision-card-notes {
+    padding: 12px;
+    background: rgba(139, 92, 246, 0.08);
+    border-radius: 10px;
+    border-left: 3px solid var(--primary);
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Card Footer */
+.revision-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.revision-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.revision-due-date {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.revision-review-count {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.revision-card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.revision-card-actions button {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+}
+
+.revision-card-actions .btn-edit {
+    background: rgba(99, 102, 241, 0.15);
+    color: #6366f1;
+}
+
+.revision-card-actions .btn-edit:hover {
+    background: rgba(99, 102, 241, 0.3);
+    transform: scale(1.1);
+}
+
+.revision-card-actions .btn-reviewed {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.revision-card-actions .btn-reviewed:hover {
+    background: rgba(16, 185, 129, 0.3);
+    transform: scale(1.1);
+}
+
+.revision-card-actions .btn-delete {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.revision-card-actions .btn-delete:hover {
+    background: rgba(239, 68, 68, 0.3);
+    transform: scale(1.1);
+}
+
+.revision-card-actions .btn-focus {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.2));
+    color: #10b981;
+}
+
+.revision-card-actions .btn-focus:hover {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.4), rgba(16, 185, 129, 0.4));
+    transform: scale(1.1);
+}
+
+/* Revision Modal */
+.revision-modal-content {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.revision-modal-header {
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.revision-modal-header h2 {
+    margin: 0;
+    font-size: 1.3rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.revision-modal-header h2 i {
+    color: var(--primary);
+}
+
+.revision-modal-body {
+    padding: 24px;
+}
+
+.revision-form-group {
+    margin-bottom: 20px;
+}
+
+.revision-form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.revision-form-group input,
+.revision-form-group textarea,
+.revision-form-group select {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.revision-form-group input:focus,
+.revision-form-group textarea:focus,
+.revision-form-group select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+.revision-form-group textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.revision-category-select {
+    display: flex;
+    gap: 10px;
+}
+
+.revision-category-option {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.revision-category-option:hover {
+    border-color: rgba(139, 92, 246, 0.4);
+    color: var(--text-primary);
+}
+
+.revision-category-option.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    color: var(--text-primary);
+}
+
+.revision-category-option i {
+    display: block;
+    font-size: 1.3rem;
+    margin-bottom: 6px;
+}
+
+.revision-category-option span {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.revision-modal-footer {
+    padding: 16px 24px 24px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.revision-modal-footer .btn-cancel {
+    padding: 10px 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.revision-modal-footer .btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.revision-modal-footer .btn-save {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.revision-modal-footer .btn-save:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+}
+
+/* Color Picker for Cards */
+.revision-color-options {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.revision-color-option {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.revision-color-option:hover {
+    transform: scale(1.15);
+}
+
+.revision-color-option.active {
+    border-color: #fff;
+    box-shadow: 0 0 10px currentColor;
+}
+
+/* Light theme adjustments */
+html[data-theme="light"] .revision-card {
+    background: linear-gradient(145deg, #fff, #f8fafc);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .revision-card-content::after {
+    background: linear-gradient(to bottom, transparent, #fff);
+}
+
+html[data-theme="light"] .revisions-container .empty-state {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] .revision-modal-content {
+    background: linear-gradient(145deg, #fff, #f8fafc);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+html[data-theme="light"] .revision-modal-header {
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] .revision-modal-header h2 {
+    color: #1f2937;
+}
+
+html[data-theme="light"] .revision-form-group label {
+    color: #4b5563;
+}
+
+html[data-theme="light"] .revision-form-group input,
+html[data-theme="light"] .revision-form-group textarea,
+html[data-theme="light"] .revision-form-group select {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.15);
+    color: #1f2937;
+}
+
+html[data-theme="light"] .revision-form-group input::placeholder,
+html[data-theme="light"] .revision-form-group textarea::placeholder {
+    color: #9ca3af;
+}
+
+html[data-theme="light"] .revision-category-option {
+    border-color: rgba(0, 0, 0, 0.15);
+    color: #4b5563;
+}
+
+html[data-theme="light"] .revision-category-option:hover {
+    border-color: rgba(139, 92, 246, 0.4);
+    color: #1f2937;
+}
+
+html[data-theme="light"] .revision-category-option.active {
+    color: #fff;
+}
+
+html[data-theme="light"] .revision-modal-footer {
+    background: #f3f4f6;
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] .revision-modal-footer .btn-cancel {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .revision-stats-bar {
+        flex-direction: row;
+        justify-content: space-around;
+    }
+
+    .revision-categories {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 8px;
+    }
+
+    .revision-categories .category-tab {
+        flex-shrink: 0;
+    }
+
+    .revisions-container {
+        grid-template-columns: 1fr;
+    }
+
+    .revision-category-select {
+        flex-direction: column;
+    }
+}
+
+/* ============================================================================
+   DOCUMENT LIBRARY STYLES
+   ============================================================================ */
+
+/* Document Card */
+.document-card {
+    background: linear-gradient(145deg, rgba(30, 30, 35, 0.9), rgba(25, 25, 30, 0.95));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.document-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--card-accent, #6366f1);
+}
+
+.document-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.document-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.document-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.document-icon i {
+    font-size: 1.5rem;
+    color: #fff;
+}
+
+.document-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.document-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 6px 0;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.document-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #888);
+}
+
+.document-preview {
+    font-size: 0.9rem;
+    color: var(--text-muted, #aaa);
+    line-height: 1.5;
+    max-height: 60px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    opacity: 0.8;
+}
+
+.document-actions {
+    display: flex;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.document-actions .btn-study {
+    flex: 1;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.document-actions .btn-study:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+}
+
+.document-actions .btn-delete {
+    padding: 10px 14px;
+    background: rgba(239, 68, 68, 0.15);
+    border: none;
+    border-radius: 10px;
+    color: #ef4444;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.document-actions .btn-delete:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+/* Import Modal */
+.document-import-content {
+    max-width: 480px;
+}
+
+.import-dropzone {
+    padding: 60px 40px;
+    border: 2px dashed rgba(99, 102, 241, 0.4);
+    border-radius: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.import-dropzone:hover,
+.import-dropzone.dragover {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.import-dropzone i {
+    font-size: 3rem;
+    color: #6366f1;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.import-dropzone h3 {
+    font-size: 1.2rem;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+}
+
+.import-dropzone p {
+    color: var(--text-muted, #888);
+    margin: 0;
+}
+
+.import-dropzone .supported-formats {
+    margin-top: 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #666);
+}
+
+/* Document Viewer Modal */
+.document-viewer-content {
+    max-width: 800px;
+    width: 95%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card, #1a1a2e);
+    border-radius: 20px;
+}
+
+.document-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.document-viewer-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.document-viewer-title i {
+    color: #6366f1;
+    font-size: 1.3rem;
+}
+
+.document-viewer-title h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+
+.document-viewer-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.document-viewer-actions .btn-add-selection {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.document-viewer-actions .btn-add-selection:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4);
+}
+
+.document-viewer-actions .btn-add-selection:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.document-viewer-body {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    color: var(--text-primary);
+    font-size: 1rem;
+    line-height: 1.8;
+    user-select: text;
+}
+
+.document-viewer-body h2,
+.document-viewer-body h3,
+.document-viewer-body h4 {
+    color: var(--text-primary);
+    margin-top: 24px;
+    margin-bottom: 12px;
+}
+
+.document-viewer-body p {
+    margin-bottom: 16px;
+}
+
+.document-viewer-body li {
+    margin-bottom: 8px;
+}
+
+/* Selected text preview in revision modal */
+.selected-text-preview {
+    padding: 16px;
+    background: rgba(99, 102, 241, 0.08);
+    border-radius: 10px;
+    border-left: 3px solid #6366f1;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-height: 100px;
+    overflow: hidden;
+}
+
+/* Light theme */
+html[data-theme="light"] .document-card {
+    background: linear-gradient(145deg, #fff, #f8fafc);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .document-preview {
+    color: #4b5563;
+}
+
+html[data-theme="light"] .import-dropzone {
+    background: rgba(99, 102, 241, 0.03);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+html[data-theme="light"] .document-viewer-content {
+    background: #fff;
+}
+
+html[data-theme="light"] .document-viewer-body {
+    color: #1f2937;
+}
+
+/* PDF Notice in document viewer */
+.pdf-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 40px;
+    background: rgba(239, 68, 68, 0.05);
+    border-radius: 16px;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.pdf-notice h3 {
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+}
+
+.pdf-notice p {
+    color: var(--text-secondary);
+    margin: 0 0 12px 0;
+}
+
+.pdf-notice ol {
+    text-align: left;
+    color: var(--text-secondary);
+    margin: 16px 0;
+    padding-left: 24px;
+}
+
+.pdf-notice li {
+    margin-bottom: 8px;
+}
+
+.pdf-notice .hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+}

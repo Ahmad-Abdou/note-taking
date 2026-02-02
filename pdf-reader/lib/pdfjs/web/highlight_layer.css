@@ -1,0 +1,461 @@
+/* Highlight Overlay Layer Styles */
+
+/* 
+ * HIGHLIGHTING APPROACH:
+ * Highlights use semi-transparent RGBA background colors.
+ * Text shows through the transparent highlight color.
+ * Delete button is fully opaque and visible on hover.
+ */
+
+/* Type-specific styles - highlight color is set dynamically by JS */
+.pdf-highlight.highlight-type {
+    transition: background-color 0.2s ease;
+}
+
+.pdf-highlight.comment-type {
+    border-bottom: 2px solid #9c27b0;
+}
+
+.pdf-highlight {
+    position: absolute;
+    pointer-events: none;
+    /* Allow text selection through highlights by default */
+    cursor: pointer;
+}
+
+/* Highlight container - position above text layer for visibility */
+.highlight-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 4 !important;
+    overflow: visible;
+}
+
+.highlight-container .pdf-highlight {
+    pointer-events: none;
+    /* Allow text selection through highlights */
+    z-index: 1;
+}
+
+/* Enable pointer events on hover to allow delete button interaction */
+.pdf-highlight:hover {
+    z-index: 10;
+    pointer-events: auto;
+    /* Enable interactions when hovering */
+}
+
+/* Delete button that appears on hover - large and highly visible */
+.highlight-delete-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 22px;
+    height: 22px;
+    background-color: #d32f2f !important;
+    color: white !important;
+    border: 2px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    z-index: 99999 !important;
+    /* Ensure button is not affected by parent opacity */
+    isolation: isolate;
+}
+
+.pdf-highlight:hover .highlight-delete-btn {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    background-color: #d32f2f !important;
+}
+
+.highlight-delete-btn:hover {
+    transform: scale(1.15);
+    background-color: #b71c1c !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Remove note button styles since we removed the button */
+/* Remove note button styles since we removed the button */
+
+/* Note dialog */
+.highlight-note-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+}
+
+.note-dialog-content {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.note-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.note-dialog-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #333;
+}
+
+.note-dialog-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    line-height: 1;
+}
+
+.note-dialog-highlight-text {
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.note-dialog-highlight-text strong {
+    color: #666;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.note-dialog-highlight-text p {
+    margin: 0;
+    color: #333;
+    font-style: italic;
+}
+
+.note-dialog-input {
+    width: 100%;
+    min-height: 120px;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.note-dialog-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.note-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.note-dialog-cancel,
+.note-dialog-save {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.2s;
+}
+
+.note-dialog-cancel {
+    background: #f0f0f0;
+    color: #666;
+}
+
+.note-dialog-cancel:hover {
+    background: #e0e0e0;
+}
+
+.note-dialog-save {
+    background: #2196F3;
+    color: white;
+}
+
+.note-dialog-save:hover {
+    background: #1976D2;
+}
+
+/* Toast notification */
+.highlight-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 100001;
+    animation: toastIn 0.3s ease;
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Comment tooltip - Edge browser inspired */
+.comment-tooltip {
+    position: fixed;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 10000;
+    max-width: 300px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #333;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.comment-tooltip.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* Arrow pointing down (tooltip is above text) - default */
+.comment-tooltip-arrow {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #f8f9fa;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* Arrow pointing up (tooltip is below text) */
+.comment-tooltip.arrow-top .comment-tooltip-arrow {
+    bottom: auto;
+    top: -8px;
+    border-top: none;
+    border-bottom: 8px solid #ffffff;
+}
+
+.comment-tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #9c27b0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.comment-tooltip-text {
+    color: #555;
+    margin-bottom: 8px;
+    font-style: italic;
+    padding: 8px;
+    background: rgba(156, 39, 176, 0.05);
+    border-left: 3px solid #9c27b0;
+    border-radius: 4px;
+}
+
+.comment-tooltip-comment {
+    color: #333;
+    font-weight: 500;
+}
+
+.comment-tooltip-footer {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+    font-size: 11px;
+    color: #999;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.comment-tooltip-edit {
+    color: #0078d4;
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.comment-tooltip-edit:hover {
+    text-decoration: underline;
+}
+
+/* Ensure page has relative positioning for absolute children */
+.page {
+    position: relative !important;
+}
+
+/* 
+ * NOTE: highlight-container z-index is defined at the top of this file
+ * Do NOT redefine it here - z-index: 1 is correct (below text layer)
+ */
+
+/* Animation for newly created highlights - uses scale instead of opacity */
+@keyframes highlightPulse {
+    0% {
+        transform: scaleY(1);
+        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
+    }
+
+    50% {
+        transform: scaleY(1.1);
+        box-shadow: 0 0 8px 2px rgba(0, 0, 0, 0.15);
+    }
+
+    100% {
+        transform: scaleY(1);
+        box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2);
+    }
+}
+
+.pdf-highlight.newly-created {
+    animation: highlightPulse 0.6s ease-in-out;
+}
+
+/* ============================================================================
+   VOCABULARY WORD HIGHLIGHTING STYLES
+   ============================================================================ */
+
+/* Vocabulary highlight style in text layer */
+
+.vocab-highlight {
+    background: linear-gradient(to bottom, rgba(102, 126, 234, 0.35) 0%, rgba(118, 75, 162, 0.35) 100%) !important;
+    border-radius: 3px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    position: relative !important;
+    transition: background 0.2s ease !important;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    display: inline !important;
+}
+
+.vocab-highlight:hover {
+    background: linear-gradient(to bottom, rgba(102, 126, 234, 0.55) 0%, rgba(118, 75, 162, 0.55) 100%) !important;
+}
+
+/* Vocabulary tooltip */
+.vocabulary-tooltip {
+    position: fixed;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    z-index: 99999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    transform: translateY(5px);
+    max-width: 320px;
+    pointer-events: none;
+    direction: rtl;
+    text-align: right;
+}
+
+.vocabulary-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.vocabulary-tooltip::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #764ba2;
+}
+
+.vocabulary-tooltip .vocab-word {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-bottom: 6px;
+    direction: ltr;
+    text-align: left;
+    font-weight: 500;
+}
+
+.vocabulary-tooltip .vocab-translation {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* Vocabulary word highlight - for individual words within spans */
+.vocab-word-highlight {
+    background: linear-gradient(to bottom, rgba(102, 126, 234, 0.4) 0%, rgba(118, 75, 162, 0.4) 100%);
+    border-radius: 2px;
+    padding: 0 1px;
+    cursor: pointer;
+    position: relative;
+    color: inherit;
+    font-size: inherit;
+    font-family: inherit;
+    transition: background 0.2s ease;
+}
+
+.vocab-word-highlight:hover {
+    background: linear-gradient(to bottom, rgba(102, 126, 234, 0.6) 0%, rgba(118, 75, 162, 0.6) 100%);
+}

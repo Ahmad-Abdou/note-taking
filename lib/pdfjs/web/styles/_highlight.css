@@ -1,0 +1,112 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - HIGHLIGHT SYSTEM STYLES
+ * ============================================================================
+ */
+
+/* ========== Page Layering ========== */
+.page {
+    position: relative !important;
+    background-color: white;
+}
+
+.page canvas {
+    position: relative;
+    z-index: 0 !important;
+}
+
+.page .canvasWrapper {
+    z-index: 0 !important;
+}
+
+/* Highlight container - high z-index, no pointer-events on container itself */
+.page .highlight-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 4 !important;
+    pointer-events: none;
+}
+
+/* Text layer - for text selection */
+.page .textLayer {
+    z-index: 2 !important;
+    opacity: 1 !important;
+}
+
+/* Individual highlights receive pointer events */
+.page .highlight-container .pdf-highlight {
+    pointer-events: auto !important;
+    cursor: pointer;
+    z-index: 5 !important;
+}
+
+/* Text layer spans - transparent, selectable */
+.page .textLayer span {
+    color: transparent !important;
+    position: absolute;
+    white-space: pre;
+    pointer-events: auto;
+    cursor: text;
+}
+
+.page .textLayer span::selection {
+    background: rgba(0, 100, 255, 0.3);
+}
+
+/* ========== PDF Highlights ========== */
+.pdf-highlight {
+    position: absolute;
+    pointer-events: auto !important;
+    cursor: pointer;
+}
+
+.pdf-highlight:hover {
+    z-index: 100 !important;
+}
+
+/* ========== PDF Highlights ========== */
+.pdf-highlight {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* On hover, raise highlight above text layer so delete button is accessible */
+.pdf-highlight:hover {
+    z-index: 100 !important;
+}
+
+/* ========== Highlight Mode Toggle ========== */
+.toolbarButton.active {
+    background-color: rgba(66, 133, 244, 0.3) !important;
+    border: 1px solid #4285f4 !important;
+}
+
+.toolbarButton.active:hover {
+    background-color: rgba(66, 133, 244, 0.4) !important;
+}
+
+/* ========== Color Picker Dropdown ========== */
+#highlightColorPicker.color-picker-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--toolbar-bg-color);
+    border: 1px solid var(--toolbar-border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    margin-top: 8px;
+    z-index: 10001;
+}
+
+#highlightColorPicker.color-picker-dropdown.hidden {
+    display: none;
+}

@@ -1,0 +1,24 @@
+# Playwright / test artifacts
+# These are generated outputs and should not be tracked.
+test-results/
+playwright-report/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Electron / desktop builds
+productivity-desktop/node_modules/
+productivity-desktop/dist/
+productivity-desktop/out/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/

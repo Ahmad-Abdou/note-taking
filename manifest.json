@@ -1,0 +1,78 @@
+{
+    "manifest_version": 3,
+    "name": "Productivity Hub",
+    "version": "1.0",
+    "description": "Focus mode, task management, schedule planning, and productivity tracking.",
+    "permissions": [
+        "storage",
+        "identity",
+        "activeTab",
+        "scripting",
+        "contextMenus",
+        "notifications",
+        "alarms",
+        "declarativeNetRequest",
+        "declarativeNetRequestFeedback"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background/background.js"
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.googleapis.com https://www.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content/content.js"
+            ],
+            "css": [
+                "content/content.css"
+            ],
+            "run_at": "document_end",
+            "all_frames": true
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "icons/*",
+                "productivity/*",
+                "productivity/styles/*"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "icons": {
+        "16": "icons/icon48.png",
+        "32": "icons/icon48.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon48.png"
+    },
+    "action": {
+        "default_title": "Productivity Hub",
+        "default_popup": "popup/menu.html",
+        "default_icon": {
+            "16": "icons/icon48.png",
+            "32": "icons/icon48.png",
+            "48": "icons/icon48.png"
+        }
+    },
+    "options_page": "options.html"
+    ,
+    "oauth2": {
+        "client_id": "151117765646-72psnpn3q906fp2uccgvin82ovnueb0p.apps.googleusercontent.com",
+        "scopes": [
+            "openid",
+            "email",
+            "profile"
+        ]
+    }
+}

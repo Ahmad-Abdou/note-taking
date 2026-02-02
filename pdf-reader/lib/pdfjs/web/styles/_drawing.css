@@ -1,0 +1,177 @@
+/* Drawing Manager Styles */
+
+.drawing-toolbar {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--toolbar-bg, #2a2a2e);
+    border: 1px solid var(--toolbar-border, #444);
+    border-radius: 8px;
+    padding: 8px 12px;
+    z-index: 10000;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.drawing-toolbar.hidden {
+    display: none !important;
+}
+
+.drawing-toolbar-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.drawing-toolbar .tool-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.drawing-toolbar .section-label {
+    font-size: 11px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.drawing-toolbar .tool-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.drawing-toolbar .tool-btn,
+.drawing-toolbar .action-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #ccc;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.drawing-toolbar .tool-btn:hover,
+.drawing-toolbar .action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.drawing-toolbar .tool-btn.active {
+    background: var(--primary, #667eea);
+    color: white;
+    border-color: var(--primary, #667eea);
+}
+
+.drawing-toolbar .color-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.drawing-toolbar input[type="color"] {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.drawing-toolbar .color-presets {
+    display: flex;
+    gap: 4px;
+}
+
+.drawing-toolbar .color-preset,
+.drawing-toolbar .highlight-preset {
+    width: 22px;
+    height: 22px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+.drawing-toolbar .color-preset:hover,
+.drawing-toolbar .highlight-preset:hover {
+    transform: scale(1.1);
+}
+
+.drawing-toolbar .highlight-preset.active {
+    border-color: white;
+}
+
+.drawing-toolbar input[type="range"] {
+    width: 60px;
+    height: 4px;
+    -webkit-appearance: none;
+    background: #444;
+    border-radius: 2px;
+    outline: none;
+}
+
+.drawing-toolbar input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--primary, #667eea);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.drawing-toolbar #sizeValue {
+    font-size: 11px;
+    color: #999;
+    min-width: 30px;
+}
+
+.drawing-toolbar .actions-section {
+    border-left: 1px solid #444;
+    padding-left: 12px;
+}
+
+.drawing-toolbar .close-btn {
+    color: #ff6b6b;
+}
+
+.drawing-toolbar .close-btn:hover {
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
+}
+
+.drawing-toolbar .tool-section.hidden {
+    display: none;
+}
+
+/* Drawing canvas overlay - CRITICAL for drawing to work */
+/* Must be a direct child of .page to be above textLayer (z-index:2) and annotationLayer (z-index:4) */
+.drawing-canvas-overlay {
+    position: absolute !important;
+    pointer-events: none;
+    z-index: 5 !important;
+}
+
+.drawing-canvas-overlay.active {
+    pointer-events: auto !important;
+    cursor: crosshair !important;
+    z-index: 100 !important;
+}
+
+.drawing-canvas-overlay.eraser {
+    cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="white" stroke="black" stroke-width="1"/></svg>') 10 10, auto;
+}
+
+/* Toolbar button active state */
+#drawingModeToggle.active {
+    background: var(--primary, #667eea) !important;
+    color: white !important;
+}

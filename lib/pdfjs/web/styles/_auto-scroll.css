@@ -1,0 +1,244 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - AUTO-SCROLL STYLES (PREMIUM)
+ * ============================================================================
+ */
+
+/* ========== Dropdown Container ========== */
+.autoscroll-dropdown {
+    position: absolute;
+    top: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%) translateY(0);
+    width: 200px;
+    padding: 16px;
+
+    /* Premium Glassmorphism */
+    background: rgba(30, 30, 35, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow:
+        0 10px 30px -5px rgba(0, 0, 0, 0.5),
+        0 4px 10px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+
+    z-index: 10001;
+    opacity: 1;
+    visibility: visible;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: top center;
+}
+
+.autoscroll-dropdown.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(-10px) scale(0.95);
+    pointer-events: none;
+    display: block !important;
+    /* Override d:none to allow transition */
+}
+
+/* ========== Decoration Arrow ========== */
+.autoscroll-dropdown::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: inherit;
+    /* Matches container bg */
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: -1;
+}
+
+/* ========== Speed Value Display ========== */
+.autoscroll-value {
+    text-align: center;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(102, 126, 234, 0.5);
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+}
+
+.autoscroll-value span {
+    background: linear-gradient(135deg, #fff 0%, #b4c6fc 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-variant-numeric: tabular-nums;
+}
+
+.autoscroll-value::after {
+    content: 'px/s';
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.5);
+    /* Reset fill for unit */
+}
+
+/* ========== Slider Styling ========== */
+#scrollSpeedSlider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    position: relative;
+    outline: none;
+}
+
+/* Gradient track progress trick could be added via JS, but simple bg is cleaner for now */
+
+/* Thumb */
+#scrollSpeedSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #667eea;
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s;
+    margin-top: -8px;
+    /* Center on track */
+}
+
+#scrollSpeedSlider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+#scrollSpeedSlider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+
+/* Firefox Support */
+#scrollSpeedSlider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #667eea;
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+#scrollSpeedSlider::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+
+
+/* ========== Speed Presets ========== */
+.speed-presets {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 10px;
+}
+
+.speed-preset-btn {
+    flex: 1;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    filter: grayscale(0.5);
+    opacity: 0.7;
+}
+
+.speed-preset-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+    filter: grayscale(0);
+    opacity: 1;
+}
+
+.speed-preset-btn.active {
+    background: rgba(102, 126, 234, 0.2);
+    border: 1px solid rgba(102, 126, 234, 0.5);
+    filter: grayscale(0);
+    opacity: 1;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+/* ========== Light Mode Overrides ========== */
+body.theme-light .autoscroll-dropdown {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow:
+        0 10px 30px -5px rgba(0, 0, 0, 0.1),
+        0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+body.theme-light .autoscroll-dropdown::before {
+    border-left: 1px solid rgba(0, 0, 0, 0.05);
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+body.theme-light .autoscroll-value {
+    color: #333;
+    text-shadow: none;
+}
+
+body.theme-light .autoscroll-value span {
+    background: linear-gradient(135deg, #333 0%, #666 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+}
+
+body.theme-light .autoscroll-value::after {
+    color: rgba(0, 0, 0, 0.4);
+    -webkit-text-fill-color: rgba(0, 0, 0, 0.4);
+}
+
+body.theme-light #scrollSpeedSlider {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+body.theme-light #scrollSpeedSlider::-webkit-slider-runnable-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+body.theme-light .speed-presets {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+body.theme-light .speed-preset-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}

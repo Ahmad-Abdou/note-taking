@@ -1,0 +1,753 @@
+﻿/* Goal Progress Ring - matches JS: goal-progress-ring */
+.goal-progress-ring {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: var(--spacing-lg) 0;
+    position: relative;
+}
+
+.goal-progress-ring svg {
+    width: 100px;
+    height: 100px;
+    transform: rotate(-90deg);
+}
+
+.goal-progress-ring .progress-bg {
+    stroke: var(--bg-tertiary);
+}
+
+.goal-progress-ring .progress-fill {
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.goal-progress-ring .progress-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+}
+
+.goal-progress-ring .progress-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.goal-progress-ring .progress-percent {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Milestones Preview - matches JS: goal-milestones-preview */
+.goal-milestones-preview {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.milestones-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.milestones-header i {
+    margin-right: var(--spacing-xs);
+}
+
+.milestones-count {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.milestones-dots {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.milestone-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.milestone-dot:hover {
+    transform: scale(1.2);
+}
+
+.milestone-dot.completed {
+    background: var(--success);
+    border-color: var(--success);
+}
+
+.more-dots {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+}
+
+.goal-no-milestones {
+    text-align: center;
+    margin-bottom: var(--spacing-md);
+}
+
+/* Goal Footer - matches JS: goal-footer */
+.goal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+}
+
+.goal-deadline {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.goal-deadline.urgent {
+    color: var(--warning);
+}
+
+.goal-deadline.overdue {
+    color: var(--danger);
+}
+
+.goal-priority {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+}
+
+.goal-priority.high {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger);
+}
+
+.goal-priority.medium {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning);
+}
+
+.goal-priority.low {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--success);
+}
+
+/* ============================================================================
+   GOAL DETAILS MODAL STYLING
+   ============================================================================ */
+.goal-details-content {
+    max-width: 700px;
+}
+
+.goal-detail-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.goal-detail-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.goal-details-body {
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+/* Goal Detail Section */
+.goal-detail-section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+}
+
+.goal-detail-section h4 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-md);
+}
+
+.goal-detail-section h4 i {
+    color: var(--primary);
+}
+
+/* Progress Section */
+.progress-section {
+    background: linear-gradient(135deg, var(--primary-light), var(--bg-secondary));
+}
+
+.progress-overview {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    align-items: center;
+    column-gap: var(--spacing-xl);
+    row-gap: var(--spacing-lg);
+}
+
+.progress-circle-large {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    flex-shrink: 0;
+}
+
+.progress-circle-large svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.progress-circle-large .progress-bg {
+    fill: none;
+    stroke: var(--bg-tertiary);
+    stroke-width: 10;
+}
+
+.progress-circle-large .progress-fill {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.progress-circle-large .progress-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+}
+
+.progress-circle-large .progress-percentage {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: block;
+}
+
+.progress-circle-large .progress-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--spacing-md);
+}
+
+/* Goal Details: prefer a tidy 3-column layout for the top stats */
+.goal-details-content .progress-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    min-height: 72px;
+}
+
+/* Goal Details (progress section) stat cards should be centered */
+.goal-details-content .progress-stats .stat-item {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.goal-details-content .progress-stats .stat-item > div {
+    text-align: center;
+}
+
+.goal-details-content .progress-stats .stat-item i {
+    margin: 0;
+}
+
+.goal-details-content .progress-stats .stat-item .stat-value {
+    line-height: 1;
+}
+
+@media (max-width: 520px) {
+    .progress-overview {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .progress-stats {
+        width: 100%;
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 780px) {
+    .goal-details-content .progress-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.stat-item i {
+    font-size: 1.25rem;
+    color: var(--primary);
+}
+
+.stat-item .stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: block;
+}
+
+.stat-item .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Description Section */
+.goal-full-description {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+/* Milestones Detail Section */
+.milestones-section .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+
+.milestones-section .section-header h4 {
+    margin-bottom: 0;
+}
+
+.milestones-detail-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.milestone-detail-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    transition: all var(--transition-fast);
+}
+
+.milestone-detail-item:hover {
+    border-color: var(--primary);
+}
+
+.milestone-detail-item.completed {
+    opacity: 0.7;
+}
+
+.milestone-drag-handle {
+    color: var(--text-muted);
+    cursor: grab;
+    padding: var(--spacing-xs);
+}
+
+.milestone-drag-handle:hover {
+    color: var(--text-secondary);
+}
+
+.milestone-checkbox {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.milestone-checkbox:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.milestone-checkbox.checked {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.milestone-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.milestone-title {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.milestone-title.strikethrough {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.milestone-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.milestone-date {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.milestone-date i {
+    margin-right: 4px;
+}
+
+.milestone-completed-date {
+    font-size: 0.75rem;
+    color: var(--success);
+}
+
+.milestone-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.milestone-detail-item:hover .milestone-actions {
+    opacity: 1;
+}
+
+.empty-milestones {
+    text-align: center;
+    padding: var(--spacing-xl);
+    color: var(--text-muted);
+}
+
+.empty-milestones i {
+    font-size: 2rem;
+    margin-bottom: var(--spacing-sm);
+    opacity: 0.5;
+}
+
+.empty-milestones p {
+    margin: 0;
+}
+
+.empty-milestones p.sub {
+    font-size: 0.85rem;
+    margin-top: var(--spacing-xs);
+}
+
+/* Notes & Reflections Section */
+.goal-reflection {
+    width: 100%;
+    min-height: 120px;
+    padding: var(--spacing-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color var(--transition-fast);
+}
+
+.goal-reflection:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.goal-reflection::placeholder {
+    color: var(--text-muted);
+}
+
+/* Goal Completed Badge */
+.goal-completed-badge {
+    background: linear-gradient(135deg, var(--success), #059669);
+    color: white;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
+    text-align: center;
+    font-weight: 600;
+    margin-top: var(--spacing-md);
+}
+
+.goal-completed-badge i {
+    margin-right: var(--spacing-xs);
+}
+
+/* Legacy support for old class names */
+.goal-card-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.goal-card-header .goal-category {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--primary-light);
+    color: var(--primary);
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--spacing-sm);
+}
+
+.goal-card-header h3 {
+    font-size: 1.1rem;
+    margin-bottom: var(--spacing-xs);
+}
+
+.goal-card-header .goal-description {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.goal-card-progress {
+    padding: var(--spacing-lg);
+}
+
+.goal-progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-sm);
+}
+
+.goal-progress-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.goal-progress-value {
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.goal-progress-bar {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    margin-bottom: var(--spacing-md);
+}
+
+.goal-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
+    border-radius: var(--radius-full);
+    transition: width 0.5s ease;
+}
+
+.goal-milestones {
+    margin-top: var(--spacing-md);
+}
+
+.goal-milestones h4 {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.milestone-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) 0;
+    font-size: 0.9rem;
+}
+
+.milestone-item .milestone-check {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.milestone-item .milestone-check.completed {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.milestone-item.completed .milestone-title {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.goal-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+.goal-deadline {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.goal-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+/* Achievements Section */
+.achievements-section {
+    margin-top: var(--spacing-2xl);
+}
+
+.achievements-section h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 1.25rem;
+    margin-bottom: var(--spacing-lg);
+}
+
+.achievements-section h2 i {
+    color: var(--warning);
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.achievement-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    transition: all var(--transition-fast);
+}
+
+.achievement-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.achievement-card.locked {
+    opacity: 0.5;
+    filter: grayscale(100%);
+}
+
+.achievement-card .achievement-icon {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--warning-light);
+    color: var(--warning);
+    border-radius: 50%;
+    font-size: 1.5rem;
+    margin-bottom: var(--spacing-md);
+}
+
+.achievement-card.locked .achievement-icon {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.achievement-card .achievement-title {
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+}
+
+.achievement-card .achievement-description {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* ============================================================================
+   FOCUS PAGE STYLES
+   ============================================================================ */
+
+.focus-page-content {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.timer-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);

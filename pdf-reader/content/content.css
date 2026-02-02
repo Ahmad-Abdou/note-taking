@@ -1,0 +1,2 @@
+/* Styles are injected via JS to ensure they work on all pages without conflict, 
+   but this file is loaded by manifest if we need global overrides. */

@@ -1,0 +1,571 @@
+/* ============================================================================
+   MOTIVATION & GAMIFICATION STYLES
+   ============================================================================ */
+
+/* Streak Widget */
+.streak-widget {
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    color: white;
+    text-align: center;
+}
+
+.streak-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.streak-flame {
+    font-size: 2rem;
+    opacity: 0.5;
+    transition: all 0.3s;
+}
+
+.streak-flame.active {
+    opacity: 1;
+    animation: flameFlicker 1s infinite alternate;
+}
+
+@keyframes flameFlicker {
+    0% {
+        transform: scale(1);
+    }
+
+    100% {
+        transform: scale(1.1);
+    }
+}
+
+.streak-count {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.streak-label {
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.streak-info {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+    font-size: 0.75rem;
+    opacity: 0.85;
+}
+
+.streak-freeze {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+}
+
+/* XP Bar Widget */
+.xp-widget {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+}
+
+.xp-level-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-bottom: var(--spacing-sm);
+}
+
+.xp-bar-container {
+    height: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+}
+
+.xp-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);
+    border-radius: var(--radius-full);
+    transition: width 0.5s ease;
+    position: relative;
+}
+
+.xp-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent);
+    border-radius: var(--radius-full) var(--radius-full) 0 0;
+}
+
+.xp-info {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--spacing-xs);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Achievements Preview */
+.achievements-widget {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+}
+
+.achievements-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.achievements-count {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.achievements-badges {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.achievement-badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: transform 0.2s;
+    border: 2px solid var(--border-color);
+}
+
+.achievement-badge:hover {
+    transform: scale(1.15);
+    border-color: var(--primary);
+}
+
+.no-achievements {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Activity Heatmap */
+.heatmap-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+}
+
+.heatmap-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: var(--spacing-sm);
+}
+
+.heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    min-width: 10px;
+    min-height: 10px;
+}
+
+.heatmap-cell.level-0 {
+    background: var(--bg-tertiary);
+}
+
+.heatmap-cell.level-1 {
+    background: #9be9a8;
+}
+
+.heatmap-cell.level-2 {
+    background: #40c463;
+}
+
+.heatmap-cell.level-3 {
+    background: #30a14e;
+}
+
+.heatmap-cell.level-4 {
+    background: #216e39;
+}
+
+.heatmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: flex-end;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.heatmap-legend .heatmap-cell {
+    width: 10px;
+    height: 10px;
+}
+
+/* XP Popup Animation */
+@keyframes xpPopup {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+}
+
+/* Level Up Overlay */
+.level-up-overlay {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.level-up-content {
+    text-align: center;
+    color: white;
+    animation: levelUpBounce 0.5s ease-out;
+}
+
+.level-up-badge {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-md);
+}
+
+.level-up-text {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    margin-bottom: var(--spacing-sm);
+    text-shadow: 0 2px 20px rgba(99, 102, 241, 0.5);
+}
+
+.level-up-number {
+    font-size: 5rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, #6366f1, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@keyframes levelUpBounce {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Motivation Dashboard Card */
+.motivation-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.motivation-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    transition: all 0.2s;
+}
+
+.motivation-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.motivation-card.streak-card {
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    color: white;
+    border: none;
+}
+
+.motivation-card.level-card {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border: none;
+}
+
+/* Quick Stats Row */
+.motivation-stats {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    flex-wrap: wrap;
+}
+
+.motivation-stat {
+    flex: 1;
+    min-width: 120px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    text-align: center;
+}
+
+.motivation-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.motivation-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Daily Challenge Card */
+.daily-challenge {
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
+    border: 2px dashed var(--primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.daily-challenge-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.daily-challenge-icon {
+    font-size: 1.5rem;
+}
+
+.daily-challenge-title {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.daily-challenge-description {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+}
+
+.daily-challenge-progress {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.daily-challenge-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), #10b981);
+    border-radius: var(--radius-full);
+    transition: width 0.3s;
+}
+
+.daily-challenge-reward {
+    margin-top: var(--spacing-sm);
+    font-size: 0.85rem;
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* ============================================================================
+   DASHBOARD QUICK WIDGETS (Items to Review & Today's Tasks)
+   ============================================================================ */
+
+/* Review Widget */
+.review-widget {
+    background: linear-gradient(135deg, var(--bg-card), rgba(139, 92, 246, 0.05));
+    border-left: 3px solid #8b5cf6;
+    overflow: hidden;
+}
+
+.review-widget-header,
+.today-tasks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.review-widget-header span i,
+.today-tasks-header span i {
+    margin-right: 8px;
+    color: var(--primary);
+}
+
+.review-widget-header .view-link,
+.today-tasks-header .view-link {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.review-widget-header .view-link:hover,
+.today-tasks-header .view-link:hover {
+    color: var(--primary);
+}
+
+.review-widget-content,
+.today-tasks-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.empty-review-state,
+.empty-tasks-state {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: var(--spacing-md);
+}
+
+.empty-review-state i,
+.empty-tasks-state i {
+    margin-right: 6px;
+    color: var(--success);
+}
+
+.review-widget-item,
+.today-task-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: background 0.2s;
+}
+
+.review-widget-item:hover,
+.today-task-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.review-item-content,
+.today-task-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.review-item-title,
+.today-task-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.review-item-due {
+    font-size: 0.75rem;
+    color: var(--warning);
+    font-weight: 500;
+}
+
+.today-task-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.today-task-time i {
+    margin-right: 4px;
+}
+
+.review-item-focus,
+.today-task-focus {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    background: var(--primary);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    margin-left: 12px;
+}
+
+.review-item-focus:hover,
+.today-task-focus:hover {
+    background: var(--primary-dark);
+    transform: scale(1.1);
+}
+
+.review-item-focus i,
+.today-task-focus i {
+    font-size: 0.75rem;
+}
+
+/* Today's Tasks Widget */
+.today-tasks-widget {
+    background: linear-gradient(135deg, var(--bg-card), rgba(59, 130, 246, 0.05));
+    border-left: 3px solid #3b82f6;
+}

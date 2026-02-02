@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Taker Dashboard</title>
+    <link rel="stylesheet" href="../desktop/design_system.css">
+    <link rel="stylesheet" href="style.css">
+    <!-- Font Awesome for Icons (using CDN for simplicity, or could use local SVGs) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="brand">
+                <i class="fas fa-book-open"></i> Note Taker
+            </div>
+            <div class="notebook-list-header">
+                <span>NOTEBOOKS</span>
+                <button id="add-notebook-btn" title="New Notebook"><i class="fas fa-plus"></i></button>
+            </div>
+            <ul id="notebook-list">
+                <!-- Notebooks injected here -->
+            </ul>
+
+            <div class="notebook-list-header" style="margin-top: 20px;">
+                <span>BOOKMARKS</span>
+                <button id="refresh-bookmarks-btn" title="Refresh Bookmarks"><i class="fas fa-sync-alt"></i></button>
+            </div>
+            <ul id="bookmark-list">
+            </ul>
+        </aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumbs">
+                    <span id="current-notebook-title">Default Notebook</span>
+                    <span class="separator">/</span>
+                    <span id="current-page-title">Untitled</span>
+                </div>
+
+                <!-- Word-like Formatting Toolbar -->
+                <div class="formatting-toolbar">
+                    <div class="toolbar-group">
+                        <button class="format-btn" data-cmd="bold" title="Bold (Ctrl+B)"><i
+                                class="fas fa-bold"></i></button>
+                        <button class="format-btn" data-cmd="italic" title="Italic (Ctrl+I)"><i
+                                class="fas fa-italic"></i></button>
+                        <button class="format-btn" data-cmd="underline" title="Underline (Ctrl+U)"><i
+                                class="fas fa-underline"></i></button>
+                        <button class="format-btn" data-cmd="strikeThrough" title="Strikethrough"><i
+                                class="fas fa-strikethrough"></i></button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <select id="font-size-select" class="toolbar-select" title="Font Size">
+                            <option value="1">12</option>
+                            <option value="2">14</option>
+                            <option value="3" selected>18</option>
+                            <option value="4">24</option>
+                            <option value="5">30</option>
+                            <option value="6">36</option>
+                            <option value="7">48</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="format-btn" data-cmd="foreColor" data-val="red" title="Text Color: Red"><i
+                                class="fas fa-font" style="color: red;"></i></button>
+                        <button class="format-btn" data-cmd="foreColor" data-val="black" title="Text Color: Black"><i
+                                class="fas fa-font" style="color: black;"></i></button>
+                        <button class="format-btn" data-cmd="backColor" data-val="yellow" title="Highlight: Yellow"><i
+                                class="fas fa-highlighter" style="color: #fdd835;"></i></button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="format-btn" data-cmd="justifyLeft" title="Align Left"><i
+                                class="fas fa-align-left"></i></button>
+                        <button class="format-btn" data-cmd="justifyCenter" title="Align Center"><i
+                                class="fas fa-align-center"></i></button>
+                        <button class="format-btn" data-cmd="justifyRight" title="Align Right"><i
+                                class="fas fa-align-right"></i></button>
+                    </div>
+                    <div class="toolbar-separator"></div>
+                    <div class="toolbar-group">
+                        <button class="format-btn" data-cmd="insertUnorderedList" title="Bullet List"><i
+                                class="fas fa-list-ul"></i></button>
+                        <button class="format-btn" data-cmd="insertOrderedList" title="Numbered List"><i
+                                class="fas fa-list-ol"></i></button>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="export-pdf-btn" class="btn-icon" title="Export PDF"><i
+                            class="fas fa-file-pdf"></i></button>
+                    <button id="export-doc-btn" class="btn-icon" title="Export DOC"><i
+                            class="fas fa-file-word"></i></button>
+                    <button id="delete-notebook-btn" class="btn-icon danger" title="Delete Page"><i
+                            class="fas fa-trash"></i></button>
+                    <button id="page-options-btn" class="btn-icon" title="Page Options"><i
+                            class="fas fa-ellipsis-h"></i></button>
+                </div>
+            </header>
+
+            <!-- Habit Tracker Calendar (primary widget) -->
+            <section id="habit-tracker-root" aria-label="Habit tracker calendar"></section>
+
+            <div class="editor-container">
+                <div id="resizable-page" class="resizable-page">
+                    <div class="page-cover hidden" id="page-cover"></div>
+                    <div class="page-icon hidden" id="page-icon">📄</div>
+                    <h1 id="page-title" class="page-title" contenteditable="true" placeholder="Untitled">Untitled</h1>
+
+                    <div id="document-editor" class="document-editor">
+                        <div id="editor-content" class="page-content" contenteditable="true"
+                            placeholder="Type '/' for commands"></div>
+                    </div>
+
+                    <!-- Resize Handles -->
+                    <div class="resize-handle right" id="resize-handle-right"></div>
+                    <div class="resize-handle bottom" id="resize-handle-bottom"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Page Options Menu -->
+    <div id="page-options-menu" class="popup-menu hidden">
+        <div class="menu-section">
+            <div class="menu-label">Style</div>
+            <div class="font-options">
+                <button class="font-btn active" data-font="sans">Sans</button>
+                <button class="font-btn" data-font="serif" style="font-family: serif;">Serif</button>
+                <button class="font-btn" data-font="mono" style="font-family: monospace;">Mono</button>
+            </div>
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-toggle-item">
+            <div class="menu-text">Small text</div>
+            <label class="switch">
+                <input type="checkbox" id="small-text-toggle">
+                <span class="slider round"></span>
+            </label>
+        </div>
+        <div class="menu-toggle-item">
+            <div class="menu-text">Full width</div>
+            <label class="switch">
+                <input type="checkbox" id="full-width-toggle">
+                <span class="slider round"></span>
+            </label>
+        </div>
+        <div class="menu-toggle-item">
+            <div class="menu-text">Floating toolbar</div>
+            <label class="switch">
+                <input type="checkbox" id="floating-toolbar-toggle" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Floating Text Toolbar -->
+    <div id="text-toolbar" class="text-toolbar hidden">
+        <button class="toolbar-btn" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button class="toolbar-btn" data-cmd="italic" title="Italic (Ctrl+I)"><i>i</i></button>
+        <button class="toolbar-btn" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+        <button class="toolbar-btn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+        <div class="toolbar-separator"></div>
+        <button class="toolbar-btn" data-cmd="foreColor" data-val="red" style="color: red;">A</button>
+        <button class="toolbar-btn" data-cmd="backColor" data-val="yellow"
+            style="background: yellow; color: black;">A</button>
+    </div>
+
+    <!-- Slash Command Menu -->
+    <div id="slash-menu" class="slash-menu hidden">
+        <div class="menu-section-title">Basic blocks</div>
+
+        <div class="menu-item" data-type="text">
+            <i class="fas fa-font"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Text</div>
+                <div class="menu-item-desc">Just start writing with plain text.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="h1">
+            <i class="fas fa-heading"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f; font-size: 24px;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Heading 1</div>
+                <div class="menu-item-desc">Big section heading.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="h2">
+            <i class="fas fa-heading"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f; font-size: 20px;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Heading 2</div>
+                <div class="menu-item-desc">Medium section heading.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="h3">
+            <i class="fas fa-heading"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f; font-size: 16px;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Heading 3</div>
+                <div class="menu-item-desc">Small section heading.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="todo">
+            <i class="fas fa-check-square"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">To-do list</div>
+                <div class="menu-item-desc">Track tasks with a to-do list.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="bullet">
+            <i class="fas fa-list-ul"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Bulleted list</div>
+                <div class="menu-item-desc">Create a simple bulleted list.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="number">
+            <i class="fas fa-list-ol"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Numbered list</div>
+                <div class="menu-item-desc">Create a list with numbering.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="toggle">
+            <i class="fas fa-caret-right"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Toggle list</div>
+                <div class="menu-item-desc">Toggles can hide and show content inside.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="quote">
+            <i class="fas fa-quote-left"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Quote</div>
+                <div class="menu-item-desc">Capture a quote.</div>
+            </div>
+        </div>
+
+        <div class="menu-item" data-type="callout">
+            <i class="fas fa-exclamation-circle"
+                style="width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 3px; color: #37352f;"></i>
+            <div class="menu-item-content">
+                <div class="menu-item-title">Callout</div>
+                <div class="menu-item-desc">Make writing stand out.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for new notebook -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>New Notebook</h3>
+            <input type="text" id="new-notebook-name" placeholder="Notebook Name">
+            <div class="modal-actions">
+                <button id="cancel-modal">Cancel</button>
+                <button id="save-notebook-btn">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="habit_tracker_calendar.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

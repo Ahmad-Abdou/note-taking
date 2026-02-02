@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="bgGrad48" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="48" height="48" rx="10" fill="url(#bgGrad48)"/>
+  
+  <!-- Clock circle -->
+  <circle cx="24" cy="21" r="12" fill="none" stroke="white" stroke-width="2" opacity="0.9"/>
+  
+  <!-- Clock hands -->
+  <line x1="24" y1="21" x2="24" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <line x1="24" y1="21" x2="30" y2="21" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="24" cy="21" r="1.5" fill="white"/>
+  
+  <!-- Checkmark -->
+  <path d="M16 38 L21 43 L32 32" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Spark -->
+  <path d="M38 10 L39 12.5 L41.5 13.5 L39 14.5 L38 17 L37 14.5 L34.5 13.5 L37 12.5 Z" fill="#fbbf24"/>
+</svg>

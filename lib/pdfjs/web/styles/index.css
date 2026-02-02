@@ -1,0 +1,40 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - MAIN CSS ENTRY POINT
+ * ============================================================================
+ * 
+ * This file imports all modular CSS files for the PDF viewer.
+ * Modularized from the original custom_viewer.css for better maintainability.
+ * 
+ * Module Order (dependencies considered):
+ * 1. Variables - CSS custom properties and theme definitions
+ * 2. Base - Reset and foundational styles
+ * 3. Core UI components
+ * 4. Feature-specific panels
+ */
+
+/* ========== Core ========== */
+@import '_variables.css';
+@import '_base.css';
+@import '_themes.css';
+
+/* ========== UI Components ========== */
+@import '_toolbar.css';
+@import '_sidebar.css';
+@import '_modal.css';
+
+/* ========== Features ========== */
+@import '_highlight.css';
+@import '_auto-scroll.css';
+@import '_immersive-reader.css';
+
+/* ========== Side Panels ========== */
+@import '_examination.css';
+@import '_vocabulary.css';
+@import '_citations.css';
+@import '_notes.css';
+@import '_research-library.css';
+@import '_global-notes.css';
+
+/* ========== Utilities ========== */
+@import '_notifications.css';

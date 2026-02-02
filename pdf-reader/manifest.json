@@ -1,0 +1,76 @@
+{
+    "manifest_version": 3,
+    "name": "PDF Reader Pro",
+    "version": "1.0",
+    "description": "Advanced PDF reader with vocabulary builder, bookmarks, and study tools.",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting",
+        "contextMenus"
+    ],
+    "host_permissions": [
+        "<all_urls>",
+        "file://*/*"
+    ],
+    "commands": {
+        "capture_selection": {
+            "suggested_key": {
+                "default": "Alt+C",
+                "mac": "Alt+C"
+            },
+            "description": "Capture selection or area"
+        }
+    },
+    "background": {
+        "service_worker": "background/background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>",
+                "file://*/*"
+            ],
+            "js": [
+                "content/content.js"
+            ],
+            "css": [
+                "content/content.css"
+            ],
+            "run_at": "document_end",
+            "all_frames": true
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "lib/pdfjs/web/viewer.html",
+                "lib/pdfjs/web/viewer.css",
+                "lib/pdfjs/web/styles/*",
+                "lib/pdfjs/web/viewer.js",
+                "lib/pdfjs/build/pdf.js",
+                "lib/pdfjs/build/pdf.worker.js",
+                "icons/*"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "icons": {
+        "16": "icons/icon48.png",
+        "32": "icons/icon48.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon48.png"
+    },
+    "action": {
+        "default_title": "PDF Reader Pro",
+        "default_popup": "popup/menu.html",
+        "default_icon": {
+            "16": "icons/icon48.png",
+            "32": "icons/icon48.png",
+            "48": "icons/icon48.png"
+        }
+    },
+    "options_page": "options.html"
+}

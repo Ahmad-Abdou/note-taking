@@ -1,0 +1,62 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - BASE STYLES
+ * ============================================================================
+ * Foundation styles and resets for the PDF viewer
+ */
+
+/* ========== Box Sizing Reset ========== */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+/* ========== Scrollbar Styling ========== */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--theme-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--theme-border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-text-secondary);
+}
+
+/* ========== Selection ========== */
+::selection {
+    background: rgba(99, 102, 241, 0.3);
+    color: inherit;
+}
+
+/* ========== Focus States ========== */
+:focus {
+    outline: none;
+}
+
+:focus-visible {
+    outline: 2px solid var(--theme-accent-color);
+    outline-offset: 2px;
+}
+
+/* ========== Common Button Reset ========== */
+button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: inherit;
+}
+
+/* ========== Common Transitions ========== */
+.smooth-transition {
+    transition: all 0.2s ease;
+}

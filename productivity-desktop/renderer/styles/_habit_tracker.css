@@ -1,0 +1,466 @@
+/* Habit Tracker Calendar (Extension productivity dashboard) */
+
+#habit-tracker-root {
+    margin: 0 0 var(--spacing-lg);
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+#habit-tracker-root * {
+    box-sizing: border-box;
+}
+
+#habit-tracker-root.habit-tracker-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: var(--spacing-md);
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    width: 100%;
+    min-width: 0;
+}
+
+#habit-tracker-root .habit-tracker-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+
+#habit-tracker-root .habit-tracker-titlewrap {
+    flex: 1 1 220px;
+    min-width: 180px;
+}
+
+#habit-tracker-root .habit-tracker-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+#habit-tracker-root .habit-tracker-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+#habit-tracker-root .habit-tracker-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 520px;
+}
+
+#habit-tracker-root .habit-tracker-controls > * {
+    min-width: 0;
+}
+
+#habit-tracker-root .habit-view-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+#habit-tracker-root .habit-view-tab {
+    height: 28px;
+    padding: 0 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border-right: 1px solid var(--border-color);
+}
+
+#habit-tracker-root .habit-view-tab:last-child {
+    border-right: none;
+}
+
+#habit-tracker-root .habit-view-tab:hover {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--text-primary);
+}
+
+#habit-tracker-root .habit-view-tab.is-active {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--text-primary);
+}
+
+#habit-tracker-root .habit-date-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+
+#habit-tracker-root .habit-date-controls.is-hidden {
+    display: none;
+}
+
+#habit-tracker-root .habit-ctrl {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+#habit-tracker-root .habit-ctrl-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+#habit-tracker-root .habit-select,
+#habit-tracker-root .habit-date {
+    height: 28px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0 6px;
+    font-size: 11px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+#habit-tracker-root .habit-date {
+    width: 110px;
+}
+
+#habit-tracker-root .habit-apply {
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    background: rgba(99, 102, 241, 0.18);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 800;
+    padding: 0 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+#habit-tracker-root .habit-apply:hover {
+    background: rgba(99, 102, 241, 0.28);
+}
+
+#habit-tracker-root .habit-ghost {
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+#habit-tracker-root .habit-ghost:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+#habit-tracker-root .habit-manage-panel {
+    border: 1px dashed rgba(99, 102, 241, 0.45);
+    background: rgba(99, 102, 241, 0.06);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm);
+}
+
+#habit-tracker-root .habit-manage-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: var(--spacing-xs);
+}
+
+#habit-tracker-root .habit-manage-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+#habit-tracker-root .habit-manage-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+#habit-tracker-root .habit-manage-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+#habit-tracker-root .habit-manage-input {
+    flex: 1 1 220px;
+    min-width: 160px;
+    height: 28px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+#habit-tracker-root .habit-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: var(--spacing-xs);
+    max-height: 160px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+#habit-tracker-root .habit-manage-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-xs);
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+#habit-tracker-root .habit-manage-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#habit-tracker-root .habit-manage-rename-input {
+    width: 100%;
+    min-width: 160px;
+    height: 28px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+#habit-tracker-root .habit-manage-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex: 0 0 auto;
+}
+
+#habit-tracker-root .habit-manage-save {
+    height: 28px;
+    padding: 0 10px;
+}
+
+#habit-tracker-root .habit-manage-delete {
+    border-color: rgba(239, 68, 68, 0.35);
+    color: var(--danger);
+}
+
+#habit-tracker-root .habit-manage-delete:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger);
+}
+
+#habit-tracker-root .habit-tracker-body {
+    margin-top: var(--spacing-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    min-width: 0;
+}
+
+#habit-tracker-root .habit-tracker-stats-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-xs);
+    max-width: 100%;
+}
+
+#habit-tracker-root .habit-tracker-stats {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+#habit-tracker-root .habit-tracker-stats.is-error {
+    color: var(--danger);
+}
+
+#habit-tracker-root .habit-tracker-stats.is-info {
+    color: var(--info);
+}
+
+#habit-tracker-root .habit-grid-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+#habit-tracker-root .habit-grid-shell {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: min-content;
+}
+
+#habit-tracker-root .habit-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(7, 24px);
+    grid-auto-columns: 24px;
+    gap: 5px;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+#habit-tracker-root .habit-weekdays {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 0;
+}
+
+#habit-tracker-root .habit-weekday {
+    height: 24px;
+    line-height: 24px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    user-select: none;
+    min-width: 32px;
+}
+
+#habit-tracker-root .habit-cell {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-input);
+    cursor: pointer;
+    transition: transform var(--transition-fast), background var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: transparent;
+}
+
+#habit-tracker-root .habit-cell:hover {
+    transform: translateY(-1px);
+    background: var(--bg-card-hover);
+}
+
+#habit-tracker-root .habit-cell.is-today {
+    border-color: rgba(99, 102, 241, 0.9);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+#habit-tracker-root .habit-cell.is-done {
+    background: #10b981;
+    border-color: #059669;
+    color: #fff;
+}
+
+#habit-tracker-root .habit-cell.is-done::after {
+    content: '✓';
+}
+
+#habit-tracker-root .habit-cell.is-missed {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    cursor: not-allowed;
+}
+
+#habit-tracker-root .habit-cell.is-missed::after {
+    content: '✗';
+}
+
+#habit-tracker-root .habit-cell.is-outside {
+    background: transparent;
+    border-color: rgba(0, 0, 0, 0.08);
+    cursor: default;
+}
+
+#habit-tracker-root .habit-legend {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+#habit-tracker-root .habit-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#habit-tracker-root .habit-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 800;
+}
+
+#habit-tracker-root .habit-swatch-empty {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+#habit-tracker-root .habit-swatch-done {
+    background: #10b981;
+    border-color: #059669;
+    color: #fff;
+}
+
+#habit-tracker-root .habit-swatch-done::after {
+    content: '✓';
+}
+
+#habit-tracker-root .habit-swatch-missed {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+}
+
+#habit-tracker-root .habit-swatch-missed::after {
+    content: '✗';
+}

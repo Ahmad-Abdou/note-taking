@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Taker</title>
+    <link rel="stylesheet" href="style.css?v=5">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>My Notebooks</h1>
+            <div class="controls">
+                <select id="notebook-select">
+                    <option value="default">Default Notebook</option>
+                </select>
+                <button id="new-notebook-btn" title="New Notebook">+</button>
+                <button id="open-dashboard-btn" title="Open Full Screen"
+                    style="background-color: #005a9e; color: white;">&#x2922;</button>
+            </div>
+        </header>
+
+        <main id="notes-container">
+            <!-- Notes will be injected here -->
+            <div class="empty-state">No notes yet. Highlight text on a page to add!</div>
+        </main>
+
+        <footer>
+            <button id="export-pdf-btn">Export PDF</button>
+            <button id="export-doc-btn">Export DOC</button>
+            <button id="clear-notes-btn" class="danger">Clear Notes</button>
+        </footer>
+        <div style="font-size: 10px; color: #666; text-align: center; margin-top: 5px; padding-bottom: 5px;">
+            Tip: Enable "Allow access to file URLs" in extension settings for local PDFs. <br>
+            Use Alt+C to capture selection.
+        </div>
+    </div>
+
+    <!-- Modal for new notebook -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>New Notebook</h3>
+            <input type="text" id="new-notebook-name" placeholder="Notebook Name">
+            <div class="modal-actions">
+                <button id="cancel-modal">Cancel</button>
+                <button id="save-notebook-btn">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

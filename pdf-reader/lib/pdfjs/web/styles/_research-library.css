@@ -1,0 +1,1063 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - RESEARCH LIBRARY STYLES
+ * ============================================================================
+ */
+
+/* ========== Research Library Panel ========== */
+.research-library-panel {
+    position: fixed;
+    top: 50px;
+    right: 10px;
+    width: 400px;
+    max-height: calc(100vh - 70px);
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    z-index: 10000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.research-library-panel.open {
+    display: flex;
+    animation: slideInRight 0.3s ease;
+}
+
+.research-library-panel.hidden {
+    display: none;
+}
+
+.library-panel-header {
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+}
+
+.library-panel-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.library-panel-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.library-panel-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ========== Library Search ========== */
+.library-search {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.library-search input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.library-search select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+}
+
+.library-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    font-size: 12px;
+    color: #666;
+}
+
+.library-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.library-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.library-empty {
+    text-align: center;
+    color: #888;
+    padding: 30px 20px;
+    font-size: 13px;
+}
+
+/* ========== Library Item ========== */
+.library-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    min-height: 70px;
+    box-sizing: border-box;
+}
+
+.library-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.library-item.current {
+    border-color: #22c55e;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+    border-left: 4px solid #22c55e;
+}
+
+.library-item.needs-link {
+    border-left: 3px solid #f59e0b;
+}
+
+.library-item.needs-link:hover {
+    background: #fffbeb;
+}
+
+/* ========== Badges ========== */
+.reading-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 8px;
+    padding: 3px 10px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(34, 197, 94, 0.3);
+    vertical-align: middle;
+}
+
+.local-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+}
+
+.stored-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+}
+
+.current-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: #f5576c;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.library-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #f5576c;
+    color: white;
+    font-size: 10px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.library-badge.hidden {
+    display: none;
+}
+
+/* ========== Library Item Details ========== */
+.item-filename {
+    font-size: 10px;
+    color: #888;
+    font-style: italic;
+}
+
+.item-size {
+    font-size: 10px;
+    color: #666;
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.library-item-main {
+    display: flex;
+    gap: 12px;
+}
+
+.library-item-icon {
+    font-size: 28px;
+}
+
+.library-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.library-item-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.library-item-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 6px;
+}
+
+.library-item-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.library-item-tags .tag {
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    color: #666;
+}
+
+.library-item-actions {
+    display: flex;
+    gap: 4px;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.library-item:hover .library-item-actions {
+    opacity: 1;
+}
+
+.lib-action-btn {
+    background: #f8f9fa;
+    border: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.lib-action-btn:hover {
+    background: #e9ecef;
+}
+
+.lib-action-btn.favorite-btn.active {
+    background: #fff3cd;
+}
+
+/* ========== Library Header (Folder System) ========== */
+.library-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.library-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.library-close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.library-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ========== Library Toolbar ========== */
+.library-toolbar {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.library-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.library-btn {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+}
+
+.library-btn:hover {
+    background: #e9ecef;
+    border-color: #667eea;
+}
+
+.library-btn-small {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+/* ========== Library Filters ========== */
+.library-filters {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.filter-btn {
+    background: transparent;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #666;
+    transition: all 0.2s;
+}
+
+.filter-btn:hover {
+    background: #f0f0f0;
+}
+
+.filter-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+/* ========== Library Breadcrumb ========== */
+.library-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    font-size: 12px;
+}
+
+.breadcrumb-item {
+    cursor: pointer;
+    color: #667eea;
+}
+
+.breadcrumb-item:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-item.active {
+    color: #333;
+    font-weight: 500;
+}
+
+.breadcrumb-separator {
+    color: #999;
+}
+
+/* ========== Library Content ========== */
+.library-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.library-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid #eee;
+    background: #f8f9fa;
+    gap: 10px;
+}
+
+.library-count {
+    font-size: 12px;
+    color: #666;
+}
+
+.library-storage-info {
+    font-size: 11px;
+    color: #3b82f6;
+    background: #eff6ff;
+    padding: 3px 8px;
+    border-radius: 12px;
+    cursor: help;
+}
+
+/* ========== Folder Styles ========== */
+.library-folder {
+    background: #f0f4ff;
+    border: 1px solid #d0d9f0;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+}
+
+.library-folder:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.folder-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    cursor: pointer;
+}
+
+.folder-icon {
+    font-size: 24px;
+}
+
+.folder-name {
+    flex: 1;
+    font-weight: 600;
+    color: #333;
+}
+
+.folder-count {
+    font-size: 11px;
+    color: #888;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.folder-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.library-folder:hover .folder-actions {
+    opacity: 1;
+}
+
+.folder-action-btn {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.folder-action-btn:hover {
+    opacity: 1;
+}
+
+/* ========== Updated Library Item Styles ========== */
+.item-icon {
+    font-size: 32px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.item-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: #888;
+}
+
+.item-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.item-tag {
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    color: #666;
+}
+
+.item-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.library-item:hover .item-actions {
+    opacity: 1;
+}
+
+.item-action-btn {
+    background: #f8f9fa;
+    border: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.item-action-btn:hover {
+    background: #e9ecef;
+}
+
+.item-action-btn.active {
+    background: #fff3cd;
+}
+
+/* ========== Folder Dialog ========== */
+.folder-dialog-overlay {
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+}
+
+.folder-dialog {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    overflow: hidden;
+    animation: fadeInUp 0.2s ease;
+}
+
+.folder-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.folder-dialog-header h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.folder-dialog-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.folder-dialog-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.folder-dialog-content {
+    padding: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.folder-create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.folder-name-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.folder-color-picker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.folder-color-input {
+    width: 40px;
+    height: 30px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.folder-create-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.folder-create-btn:hover {
+    opacity: 0.9;
+}
+
+.folder-list-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.folder-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.folder-option:hover {
+    background: #f0f4ff;
+}
+
+.folder-option-new {
+    border-top: 1px solid #eee;
+    margin-top: 8px;
+    padding-top: 16px;
+    color: #667eea;
+}
+
+/* ========== Edit Dialog ========== */
+.edit-dialog-overlay {
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+}
+
+.edit-dialog {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 450px;
+    overflow: hidden;
+}
+
+.edit-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.edit-dialog-header h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.edit-dialog-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.edit-dialog-content {
+    padding: 16px;
+}
+
+.edit-field {
+    margin-bottom: 12px;
+}
+
+.edit-field label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.edit-field input,
+.edit-field textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.edit-field textarea {
+    resize: vertical;
+}
+
+.edit-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid #eee;
+}
+
+.edit-cancel-btn {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.edit-save-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* ========== Library Edit Dialog ========== */
+.library-edit-dialog {
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9998;
+}
+
+.library-edit-content {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 450px;
+}
+
+.library-edit-content h4 {
+    margin: 0 0 16px 0;
+    color: #333;
+}
+
+.library-edit-content .form-group {
+    margin-bottom: 12px;
+}
+
+.library-edit-content label {
+    display: block;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.library-edit-content input,
+.library-edit-content textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.library-edit-content textarea {
+    resize: vertical;
+}
+
+.edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+/* ========== Toast ========== */
+.library-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 100020;
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.library-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+/* ========== Dark Theme ========== */
+body.theme-dark .research-library-panel {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}
+
+body.theme-dark .library-search {
+    border-color: #444;
+}
+
+body.theme-dark .library-search input,
+body.theme-dark .library-search select {
+    background: #3c3c3c;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.theme-dark .library-stats {
+    background: #363636;
+}
+
+body.theme-dark .library-item {
+    background: #363636;
+    border-color: #444;
+}
+
+body.theme-dark .library-item:hover {
+    border-color: #667eea;
+}
+
+body.theme-dark .library-folder {
+    background: #2a2a3d;
+    border-color: #444;
+}
+
+body.theme-dark .library-folder:hover {
+    border-color: #667eea;
+}
+
+body.theme-dark .folder-name {
+    color: #e0e0e0;
+}
+
+body.theme-dark .library-toolbar,
+body.theme-dark .library-filters,
+body.theme-dark .library-footer {
+    border-color: #444;
+    background: #2d2d2d;
+}
+
+body.theme-dark .library-breadcrumb {
+    background: #363636;
+}
+
+body.theme-dark .library-search-input,
+body.theme-dark .library-btn {
+    background: #3c3c3c;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.theme-dark .filter-btn {
+    color: #aaa;
+}
+
+body.theme-dark .filter-btn:hover {
+    background: #444;
+}
+
+body.theme-dark .filter-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+body.theme-dark .folder-dialog,
+body.theme-dark .edit-dialog {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}
+
+body.theme-dark .folder-dialog-content,
+body.theme-dark .edit-dialog-content {
+    background: #2d2d2d;
+}
+
+body.theme-dark .folder-name-input,
+body.theme-dark .edit-field input,
+body.theme-dark .edit-field textarea {
+    background: #3c3c3c;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.theme-dark .folder-option:hover {
+    background: #3c3c3c;
+}
+
+body.theme-dark .edit-cancel-btn {
+    background: #3c3c3c;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.theme-dark .item-title,
+body.theme-dark .item-info {
+    color: #e0e0e0;
+}
+
+body.theme-dark .item-action-btn {
+    background: #3c3c3c;
+    color: #e0e0e0;
+}
+
+body.theme-dark .item-action-btn:hover {
+    background: #555;
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+    .research-library-panel {
+        width: calc(100% - 20px);
+        right: 10px;
+        left: 10px;
+    }
+}

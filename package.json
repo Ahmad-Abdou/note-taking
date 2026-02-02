@@ -1,0 +1,28 @@
+{
+  "name": "note-taking",
+  "version": "1.0.0",
+  "description": "A browser extension for Microsoft Edge (and Chrome) that allows you to highlight text on any webpage or local PDF and save it to a notebook. You can manage your notebooks and export them as PDF or DOC files.",
+  "main": "options.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep-invert \"Coverage\"",
+    "test:coverage": "playwright test && node tests/e2e/coverage-report.js",
+    "coverage:report": "node tests/e2e/coverage-report.js",
+    "validate:release": "npm run -s test:smoke && npm run -s test:coverage"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-reports": "^3.1.7",
+    "nyc": "^17.1.0",
+    "v8-to-istanbul": "^9.3.0"
+  }
+}

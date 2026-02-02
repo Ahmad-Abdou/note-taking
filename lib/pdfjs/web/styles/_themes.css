@@ -1,0 +1,126 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - THEME STYLES
+ * ============================================================================
+ */
+
+/* ========== Theme Variables ========== */
+body.theme-light {
+    --bg-color: #ffffff;
+    --text-color: #1a1a1a;
+    --toolbar-bg-color: #f5f5f5;
+    --toolbar-border-color: #ddd;
+    --toolbar-text-color: #333;
+    --toolbar-icon-color: #333;
+    --toolbar-hover-bg-color: #e0e0e0;
+    --input-bg-color: #fff;
+    --input-border-color: #ccc;
+    --input-text-color: #333;
+    background-color: #f0f0f0 !important;
+}
+
+body.theme-dark {
+    --bg-color: #1e1e1e;
+    --text-color: #e0e0e0;
+    --toolbar-bg-color: #2d2d2d;
+    --toolbar-border-color: #1e1e1e;
+    --toolbar-text-color: #e0e0e0;
+    --toolbar-icon-color: #e0e0e0;
+    --toolbar-hover-bg-color: #3e3e3e;
+    --input-bg-color: #3c3c3c;
+    --input-border-color: #3c3c3c;
+    --input-text-color: #f0f0f0;
+    background-color: #1e1e1e !important;
+}
+
+body.theme-sepia {
+    --bg-color: #f4ecd8;
+    --text-color: #5b4636;
+    --toolbar-bg-color: #e8dcc8;
+    --toolbar-border-color: #d4c4a8;
+    --toolbar-text-color: #5b4636;
+    --toolbar-icon-color: #5b4636;
+    --toolbar-hover-bg-color: #ddd0b8;
+    --input-bg-color: #f4ecd8;
+    --input-border-color: #d4c4a8;
+    --input-text-color: #5b4636;
+    background-color: #f4ecd8 !important;
+}
+
+/* ========== Theme - Viewer Container ========== */
+body.theme-light #viewerContainer,
+body.theme-sepia #viewerContainer {
+    background-color: var(--bg-color);
+}
+
+body.theme-light .page,
+body.theme-sepia .page {
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* ========== Theme - Page Color Filters ========== */
+body.theme-dark .page canvas {
+    filter: invert(0.9) hue-rotate(180deg);
+}
+
+body.theme-dark .page .canvasWrapper {
+    background-color: #2a2a2a !important;
+}
+
+body.theme-dark .page {
+    background-color: #2a2a2a !important;
+}
+
+body.theme-sepia .page canvas {
+    filter: sepia(0.3) brightness(0.95);
+}
+
+body.theme-sepia .page .canvasWrapper {
+    background-color: #f4ecd8 !important;
+}
+
+body.theme-light .page .canvasWrapper {
+    background-color: white !important;
+}
+
+/* ========== Theme Options UI ========== */
+.theme-options {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.theme-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 8px;
+    background: var(--theme-bg-secondary);
+    border: 2px solid var(--theme-border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+    border-color: var(--theme-accent);
+    background: var(--theme-bg-hover);
+}
+
+.theme-btn.active {
+    border-color: var(--theme-accent);
+    background: var(--theme-accent-light);
+}
+
+.theme-icon {
+    font-size: 24px;
+}
+
+.theme-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--theme-text-primary);
+}

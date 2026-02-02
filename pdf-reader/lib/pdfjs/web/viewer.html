@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html dir="ltr" mozdisallowselectionprint>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="google" content="notranslate">
+    <title>PDF.js Viewer</title>
+
+    <!-- PDF Document Favicon -->
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='4' y='2' width='16' height='20' rx='2' fill='%23e74c3c'/><path d='M8 7h8M8 11h8M8 15h5' stroke='white' stroke-width='1.5' stroke-linecap='round'/><path d='M14 2v4h6' fill='none' stroke='%23c0392b' stroke-width='1'/></svg>">
+
+    <link rel="stylesheet" href="viewer.css">
+    <link rel="stylesheet" href="custom_viewer.css">
+    <link rel="stylesheet" href="highlight_layer.css">
+    <link rel="stylesheet" href="styles/_auto-scroll.css">
+    <link rel="stylesheet" href="styles/_comments.css">
+    <link rel="stylesheet" href="styles/_spaced_repetition.css">
+</head>
+
+<body tabindex="1">
+    <div id="outerContainer">
+        <div id="mainContainer">
+            <div id="toolbarContainer">
+                <div id="toolbarViewer">
+                    <div id="toolbarViewerLeft">
+                        <!-- Sidebar Toggle Removed -->
+
+                        <button id="previous" class="toolbarButton" title="Previous Page">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <button id="next" class="toolbarButton" title="Next Page">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+
+                        <input type="number" id="pageNumber" value="1" min="1">
+                        <span id="numPages" class="toolbarLabel">/</span>
+
+                        <div class="verticalToolbarSeparator"></div>
+
+                        <button id="zoomOut" class="toolbarButton" title="Zoom Out">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                <line x1="8" y1="11" x2="14" y2="11"></line>
+                            </svg>
+                        </button>
+                        <button id="zoomIn" class="toolbarButton" title="Zoom In">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                <line x1="11" y1="8" x2="11" y2="14"></line>
+                                <line x1="8" y1="11" x2="14" y2="11"></line>
+                            </svg>
+                        </button>
+
+                        <select id="scaleSelect" title="Zoom">
+                            <option value="auto">Auto</option>
+                            <option value="page-actual">Actual Size</option>
+                            <option value="page-fit">Page Fit</option>
+                            <option value="page-width">Page Width</option>
+                            <option value="0.5">50%</option>
+                            <option value="0.75">75%</option>
+                            <option value="1" selected>100%</option>
+                            <option value="1.25">125%</option>
+                            <option value="1.5">150%</option>
+                            <option value="2">200%</option>
+                        </select>
+                    </div>
+
+                    <div id="toolbarViewerRight">
+                        <button id="immersiveReader" class="toolbarButton" title="Immersive Reader">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M4 4h16v16H4z"></path>
+                                <path d="M9 9h6"></path>
+                                <path d="M9 13h6"></path>
+                                <path d="M9 17h4"></path>
+                            </svg>
+                        </button>
+                        <button id="examinationBtn" class="toolbarButton" title="Examination Center">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M9 11l3 3L22 4"></path>
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                            </svg>
+                        </button>
+                        <button id="vocabularyBtn" class="toolbarButton" title="Vocabulary Builder">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                                <line x1="12" y1="6" x2="12" y2="10"></line>
+                                <line x1="12" y1="14" x2="12" y2="18"></line>
+                            </svg>
+                        </button>
+                        <button id="print" class="toolbarButton" title="Print">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2">
+                                </path>
+                                <rect x="6" y="14" width="12" height="8"></rect>
+                            </svg>
+                        </button>
+                        <button id="download" class="toolbarButton" title="Download">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                        </button>
+
+                        <!-- Auto-Scroll with Speed Control -->
+                        <div id="autoScrollWrapper" class="toolbar-dropdown-wrapper">
+                            <button id="autoScrollToggle" class="toolbarButton" title="Auto-Scroll (Alt+S)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M12 5v14"></path>
+                                    <path d="M5 12l7 7 7-7"></path>
+                                </svg>
+                            </button>
+                            <div id="autoScrollDropdown" class="autoscroll-dropdown hidden">
+                                <div class="autoscroll-value"><span id="scrollSpeedValue">50</span></div>
+                                <input type="range" id="scrollSpeedSlider" min="5" max="200" value="50">
+                                <div class="speed-presets">
+                                    <button class="speed-preset-btn" data-speed="10" title="Slow">🐢</button>
+                                    <button class="speed-preset-btn active" data-speed="50" title="Normal">🚶</button>
+                                    <button class="speed-preset-btn" data-speed="100" title="Fast">🏃</button>
+                                    <button class="speed-preset-btn" data-speed="150" title="Very Fast">🚀</button>
+                                </div>
+                            </div>
+                        </div>
+
+
+
+                        <!-- Add Bookmark Button -->
+                        <button id="addBookmarkBtn" class="toolbarButton" title="Bookmark This Page">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </button>
+
+                        <!-- Citation Button (Google Scholar style) -->
+                        <button id="citationBtn" class="toolbarButton" title="Cite This Document">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path
+                                    d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V21">
+                                </path>
+                                <path
+                                    d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3">
+                                </path>
+                            </svg>
+                        </button>
+
+                        <!-- Global Notes Button (All notes with folders) -->
+                        <button id="globalNotesBtn" class="toolbarButton" title="All Notes (Alt+N)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+                                <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+                                <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+                                <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+                            </svg>
+                        </button>
+
+                        <!-- Research Library Button -->
+                        <button id="researchLibraryBtn" class="toolbarButton" title="Research Library">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                                <path d="M8 7h8"></path>
+                                <path d="M8 11h6"></path>
+                            </svg>
+                        </button>
+
+                        <!-- Settings Button -->
+                        <button id="settingsBtn" class="toolbarButton" title="Settings">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path
+                                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                </path>
+                            </svg>
+                        </button>
+
+                        <!-- Switch to Native Viewer Button -->
+                        <button id="switchToNativeBtn" class="toolbarButton" title="Open in Native Viewer">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar below toolbar -->
+            <div id="sidebarContainer" class="hidden">
+                <div id="sidebarContent">
+                    <div id="outlineView"></div>
+                </div>
+            </div>
+
+            <div id="viewerContainer" tabindex="0">
+                <div id="viewer" class="pdfViewer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settingsPanel" class="settings-side-panel">
+        <div class="settings-header">
+            <h2>⚙️ Settings</h2>
+            <button class="settings-close">&times;</button>
+        </div>
+        <div class="settings-body">
+            <!-- Theme Section -->
+            <div class="settings-section">
+                <h3>🎨 Theme</h3>
+                <div class="theme-options" id="themeOptions">
+                    <button class="theme-btn" data-theme="light" title="Light">
+                        <span class="theme-icon">☀️</span>
+                        <span class="theme-label">Light</span>
+                    </button>
+                    <button class="theme-btn" data-theme="dark" title="Dark">
+                        <span class="theme-icon">🌙</span>
+                        <span class="theme-label">Dark</span>
+                    </button>
+                    <button class="theme-btn" data-theme="sepia" title="Sepia">
+                        <span class="theme-icon">📜</span>
+                        <span class="theme-label">Sepia</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>🔔 Notifications</h3>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="notif-global" checked>
+                        <span>Enable Notifications</span>
+                    </label>
+                </div>
+                <div class="settings-subsection" id="notif-features">
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-bookmark" checked>
+                            <span>Bookmarks</span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-highlight" checked>
+                            <span>Highlights</span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-notes" checked>
+                            <span>Notes</span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-vocabulary" checked>
+                            <span>Vocabulary</span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-examination" checked>
+                            <span>Examination</span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-citation" checked>
+                            <span>Citations</span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <label>
+                            <input type="checkbox" id="notif-export" checked>
+                            <span>Export</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Line Focus Overlay (for Immersive Reader) -->
+    <div id="lineFocusOverlay" class="hidden">
+        <div class="focus-shade focus-shade-top"></div>
+        <div class="focus-line"></div>
+        <div class="focus-shade focus-shade-bottom"></div>
+    </div>
+
+    <!-- Line Focus Control Panel -->
+    <div id="lineFocusControl" class="hidden">
+        <div class="control-group">
+            <label class="control-label">Lines</label>
+            <input type="range" id="lineFocusLines" min="1" max="10" value="3" class="control-slider">
+            <span id="lineFocusLinesValue" class="control-value">3</span>
+        </div>
+        <div class="control-group">
+            <label class="control-label">Blur</label>
+            <input type="range" id="lineFocusBlur" min="0" max="10" value="3" class="control-slider">
+            <span id="lineFocusBlurValue" class="control-value">3</span>
+        </div>
+        <div class="control-group">
+            <label class="control-label">Shade</label>
+            <input type="range" id="lineFocusShade" min="0" max="100" value="70" class="control-slider">
+            <span id="lineFocusShadeValue" class="control-value">70%</span>
+        </div>
+        <button id="lineFocusClose" class="control-close" title="Close (Esc)">&times;</button>
+    </div>
+
+    <!-- Examination Center Side Panel -->
+    <div id="examinationPanel" class="examination-side-panel">
+        <div class="exam-header">
+            <h2>📝 Examination Center</h2>
+            <button id="examClose" class="panel-close-btn">&times;</button>
+        </div>
+
+        <!-- Exam Type Selection -->
+        <div id="examSetup" class="exam-setup">
+            <p class="exam-description">Choose an examination type to test your knowledge of the PDF content. After
+                completion, review your mistakes to learn!</p>
+
+            <div class="exam-types-grid">
+                <div class="exam-type-card" data-exam="mcq">
+                    <div class="exam-icon">📋</div>
+                    <h3>Multiple Choice</h3>
+                    <p>Classic MCQ questions with 4 options. Tests recall and understanding.</p>
+                </div>
+                <div class="exam-type-card" data-exam="truefalse">
+                    <div class="exam-icon">✓✗</div>
+                    <h3>True/False</h3>
+                    <p>Evaluate statements for accuracy. Quick comprehension check.</p>
+                </div>
+                <div class="exam-type-card" data-exam="fillblank">
+                    <div class="exam-icon">___</div>
+                    <h3>Fill in the Blank</h3>
+                    <p>Complete sentences with missing keywords. Tests precise knowledge.</p>
+                </div>
+                <div class="exam-type-card" data-exam="matching">
+                    <div class="exam-icon">🔗</div>
+                    <h3>Matching</h3>
+                    <p>Match terms with definitions. Tests associations and connections.</p>
+                </div>
+                <div class="exam-type-card" data-exam="shortanswer">
+                    <div class="exam-icon">✏️</div>
+                    <h3>Short Answer</h3>
+                    <p>Write brief answers. Tests deeper understanding and expression.</p>
+                </div>
+                <div class="exam-type-card" data-exam="comprehensive">
+                    <div class="exam-icon">🎯</div>
+                    <h3>Comprehensive</h3>
+                    <p>Mix of all types. Ultimate knowledge assessment.</p>
+                </div>
+            </div>
+
+            <div class="exam-config">
+                <label>
+                    <span>Number of Questions:</span>
+                    <select id="examQuestionCount">
+                        <option value="5">5 Questions</option>
+                        <option value="10" selected>10 Questions</option>
+                        <option value="15">15 Questions</option>
+                        <option value="20">20 Questions</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Difficulty:</span>
+                    <select id="examDifficulty">
+                        <option value="easy">Easy</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Content Selection:</span>
+                    <select id="examPages">
+                        <option value="current">Current Page</option>
+                        <option value="all">All Pages</option>
+                        <option value="chapters" selected>Select Chapters/Sections</option>
+                        <option value="range">Custom Page Range</option>
+                    </select>
+                </label>
+                <div id="examPageRange" class="page-range hidden">
+                    <input type="number" id="examStartPage" placeholder="From" min="1">
+                    <span>to</span>
+                    <input type="number" id="examEndPage" placeholder="To" min="1">
+                </div>
+            </div>
+
+            <!-- Chapter/Content Selection Panel -->
+            <div id="examContentSelection" class="content-selection">
+                <div class="content-selection-header">
+                    <h4>📚 Select Chapters/Sections to Include</h4>
+                    <div class="selection-actions">
+                        <button type="button" id="selectAllChapters" class="select-btn">Select All</button>
+                        <button type="button" id="deselectAllChapters" class="select-btn">Deselect All</button>
+                        <button type="button" id="scanContentBtn" class="scan-btn">🔍 Scan PDF for Chapters</button>
+                    </div>
+                </div>
+                <div id="chaptersList" class="chapters-list">
+                    <div class="scanning-placeholder">
+                        <p>Click "Scan PDF for Chapters" to detect chapters and sections in your PDF.</p>
+                        <p class="hint">Or the content will be automatically scanned when you start the exam.</p>
+                    </div>
+                </div>
+                <div class="selected-summary">
+                    <span id="selectedChaptersCount">0 sections selected</span>
+                </div>
+            </div>
+
+            <button id="startExamBtn" class="start-exam-btn" disabled>Select an Exam Type to Begin</button>
+        </div>
+
+        <!-- Exam Container -->
+        <div id="examContainer" class="exam-container hidden">
+            <div class="exam-progress">
+                <div class="progress-bar">
+                    <div id="examProgressFill" class="progress-fill"></div>
+                </div>
+                <span id="examProgressText">Question 1 of 10</span>
+                <span id="examTimer" class="exam-timer">⏱️ 00:00</span>
+            </div>
+            <div id="examQuestions"></div>
+            <div class="exam-navigation">
+                <button id="examPrevBtn" class="exam-nav-btn" disabled>← Previous</button>
+                <button id="examNextBtn" class="exam-nav-btn">Next →</button>
+                <button id="submitExamBtn" class="exam-submit-btn hidden">Submit Exam</button>
+            </div>
+        </div>
+
+        <!-- Results Container -->
+        <div id="examResults" class="exam-results hidden">
+            <div class="results-summary">
+                <div class="score-circle">
+                    <span id="scorePercent">0%</span>
+                </div>
+                <h3 id="resultsTitle">Exam Completed!</h3>
+                <p id="resultsSubtitle">You scored <span id="correctCount">0</span> out of <span
+                        id="totalCount">0</span></p>
+                <div class="results-stats">
+                    <div class="stat">
+                        <span class="stat-value" id="timeSpent">00:00</span>
+                        <span class="stat-label">Time Spent</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="accuracy">0%</span>
+                        <span class="stat-label">Accuracy</span>
+                    </div>
+                </div>
+            </div>
+            <div class="results-review">
+                <h4>📖 Review Your Mistakes</h4>
+                <div id="mistakesReview"></div>
+            </div>
+            <div class="results-actions">
+                <button id="retakeExamBtn" class="exam-btn">🔄 Retake Exam</button>
+                <button id="newExamBtn" class="exam-btn secondary">📝 New Exam</button>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="examLoading" class="exam-loading hidden">
+            <div class="spinner"></div>
+            <p id="examLoadingText">Generating examination questions using AI...</p>
+        </div>
+    </div>
+
+    <!-- Vocabulary Builder Side Panel -->
+    <div id="vocabularyPanel" class="vocabulary-side-panel">
+        <div class="vocab-header">
+            <h2>📚 Vocabulary Builder</h2>
+            <div class="vocab-header-actions">
+                <button id="vocabSettingsBtn" class="vocab-settings-btn" title="Settings">⚙️</button>
+                <button id="vocabClose" class="panel-close-btn">&times;</button>
+            </div>
+        </div>
+
+        <div class="vocab-tabs">
+            <button class="vocab-tab active" data-tab="add">➕ Add Word</button>
+            <button class="vocab-tab" data-tab="list">📖 My Words</button>
+            <button class="vocab-tab" data-tab="practice">🎯 Practice</button>
+        </div>
+
+        <!-- Add Word Tab -->
+        <div id="vocabAddTab" class="vocab-panel active">
+            <div class="vocab-form">
+                <div class="form-group">
+                    <label>Word / Term</label>
+                    <input type="text" id="vocabWord" placeholder="Enter the word or term">
+                </div>
+                <div class="form-group">
+                    <label>English Translation / Definition</label>
+                    <textarea id="vocabEnglish" placeholder="Enter English definition or translation"></textarea>
+                </div>
+                <div class="form-group">
+                    <label id="vocabTranslationLabel">Translation (الترجمة)</label>
+                    <textarea id="vocabArabic" placeholder="Enter translation" dir="auto"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Example Sentence</label>
+                    <textarea id="vocabExample" placeholder="Write an example sentence using this word"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Example Translation</label>
+                    <textarea id="vocabExampleTranslation" placeholder="Translation of the example sentence"
+                        dir="auto"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Category (Optional)</label>
+                    <select id="vocabCategory">
+                        <option value="">Select Category</option>
+                        <option value="general">General</option>
+                        <option value="academic">Academic</option>
+                        <option value="technical">Technical</option>
+                        <option value="medical">Medical</option>
+                        <option value="legal">Legal</option>
+                        <option value="business">Business</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                    <input type="text" id="vocabCustomCategory" class="hidden" placeholder="Enter custom category">
+                </div>
+                <div class="form-actions">
+                    <button id="saveVocabBtn" class="vocab-btn primary">💾 Save Word</button>
+                    <button id="clearVocabFormBtn" class="vocab-btn secondary">🗑️ Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Word List Tab -->
+        <div id="vocabListTab" class="vocab-panel hidden">
+            <div class="vocab-search">
+                <input type="text" id="vocabSearch" placeholder="🔍 Search words...">
+                <select id="vocabFilterCategory">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+            <div class="vocab-stats">
+                <span id="totalWords">0 words</span>
+                <button id="exportVocabBtn" class="small-btn">📥 Export</button>
+                <button id="importVocabBtn" class="small-btn">📤 Import</button>
+            </div>
+            <div id="vocabList" class="vocab-list">
+                <div class="empty-state">No words saved yet. Start adding words!</div>
+            </div>
+        </div>
+
+        <!-- Practice Tab -->
+        <div id="vocabPracticeTab" class="vocab-panel hidden">
+            <div id="practiceSetup" class="practice-setup">
+                <h3>🎯 Practice Your Vocabulary</h3>
+                <p>Test yourself with flashcards and quizzes based on your saved words.</p>
+                <div class="practice-options">
+                    <label>
+                        <span>Practice Mode:</span>
+                        <select id="practiceMode">
+                            <option value="flashcard">Flashcards</option>
+                            <option value="quiz">Quiz</option>
+                            <option value="write">Write the Word</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Direction:</span>
+                        <select id="practiceDirection">
+                            <option value="word-to-meaning">Word → Meaning</option>
+                            <option value="meaning-to-word">Meaning → Word</option>
+                            <option value="english-to-arabic">English → Arabic</option>
+                            <option value="arabic-to-english">Arabic → English</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Number of Words:</span>
+                        <select id="practiceCount">
+                            <option value="5">5 Words</option>
+                            <option value="10" selected>10 Words</option>
+                            <option value="20">20 Words</option>
+                            <option value="all">All Words</option>
+                        </select>
+                    </label>
+                </div>
+                <button id="startPracticeBtn" class="vocab-btn primary">▶️ Start Practice</button>
+            </div>
+
+            <div id="practiceArea" class="practice-area hidden">
+                <div id="flashcardContainer" class="flashcard-container hidden">
+                    <div class="flashcard" id="flashcard">
+                        <div class="flashcard-inner">
+                            <div class="flashcard-front">
+                                <span id="flashcardFront">Word</span>
+                            </div>
+                            <div class="flashcard-back">
+                                <span id="flashcardBack">Definition</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="flashcard-hint">Click card to flip</p>
+                    <div class="flashcard-controls">
+                        <button id="flashcardPrev" class="fc-btn">← Previous</button>
+                        <span id="flashcardProgress">1 / 10</span>
+                        <button id="flashcardNext" class="fc-btn">Next →</button>
+                    </div>
+                    <div class="flashcard-rating">
+                        <p>How well did you know this?</p>
+                        <button class="rating-btn" data-rating="1">😕 Not at all</button>
+                        <button class="rating-btn" data-rating="2">🤔 Somewhat</button>
+                        <button class="rating-btn" data-rating="3">😊 Well</button>
+                        <button class="rating-btn" data-rating="4">🎉 Perfectly</button>
+                    </div>
+                </div>
+
+                <div id="quizContainer2" class="quiz-container2 hidden">
+                    <!-- Vocabulary quiz questions will be injected here -->
+                </div>
+
+                <div id="writeContainer" class="write-container hidden">
+                    <div class="write-prompt">
+                        <p id="writePrompt">Write the word for:</p>
+                        <p id="writeDefinition" class="definition">Definition will appear here</p>
+                    </div>
+                    <input type="text" id="writeAnswer" placeholder="Type your answer...">
+                    <button id="checkWriteBtn" class="vocab-btn primary">Check Answer</button>
+                    <div id="writeFeedback" class="write-feedback hidden"></div>
+                </div>
+            </div>
+
+            <div id="practiceResults" class="practice-results hidden">
+                <h3>🏆 Practice Complete!</h3>
+                <div id="practiceScore"></div>
+                <button id="endPracticeBtn" class="vocab-btn primary">Back to Setup</button>
+            </div>
+        </div>
+
+        <!-- Settings Tab (Hidden by default, toggled by settings button) -->
+        <div id="vocabSettingsTab" class="vocab-panel hidden">
+            <div class="vocab-settings-panel">
+                <h3>⚙️ Vocabulary Settings</h3>
+
+                <!-- Language Selection -->
+                <div class="settings-section">
+                    <h4>🌐 Translation Language</h4>
+                    <div class="form-group">
+                        <label>Translate words to:</label>
+                        <select id="vocabTargetLanguage">
+                            <option value="ar">Arabic (العربية)</option>
+                            <option value="es">Spanish (Español)</option>
+                            <option value="fr">French (Français)</option>
+                            <option value="de">German (Deutsch)</option>
+                            <option value="zh">Chinese (中文)</option>
+                            <option value="ja">Japanese (日本語)</option>
+                            <option value="ko">Korean (한국어)</option>
+                            <option value="pt">Portuguese (Português)</option>
+                            <option value="ru">Russian (Русский)</option>
+                            <option value="it">Italian (Italiano)</option>
+                            <option value="tr">Turkish (Türkçe)</option>
+                            <option value="hi">Hindi (हिन्दी)</option>
+                            <option value="ur">Urdu (اردو)</option>
+                            <option value="fa">Persian (فارسی)</option>
+                            <option value="nl">Dutch (Nederlands)</option>
+                            <option value="pl">Polish (Polski)</option>
+                        </select>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="vocabSetDefaultLang">
+                            Set as default language
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Highlight Settings -->
+                <div class="settings-section">
+                    <h4>🎨 PDF Highlight Appearance</h4>
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="vocabHighlightEnabled" checked>
+                            Highlight vocabulary words in PDF
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Highlight Color:</label>
+                        <div class="color-picker-row">
+                            <input type="color" id="vocabHighlightColor" value="#667eea">
+                            <span id="vocabColorHex">#667eea</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Opacity: <span id="vocabOpacityVal">40</span>%</label>
+                        <input type="range" id="vocabHighlightOpacity" min="10" max="100" value="40">
+                    </div>
+                    <div class="settings-preview">
+                        <span>Preview: </span>
+                        <span id="vocabSettingsPreview" class="preview-word">vocabulary</span>
+                    </div>
+                </div>
+
+                <!-- Tooltip Settings -->
+                <div class="settings-section">
+                    <h4>💬 Tooltip Appearance</h4>
+                    <div class="form-group">
+                        <label>Tooltip Background:</label>
+                        <div class="color-picker-row">
+                            <input type="color" id="vocabTooltipColor" value="#667eea">
+                            <span id="vocabTooltipColorHex">#667eea</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Tooltip Text Color:</label>
+                        <div class="color-picker-row">
+                            <input type="color" id="vocabTooltipTextColor" value="#ffffff">
+                            <span id="vocabTooltipTextColorHex">#ffffff</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Tooltip Opacity: <span id="vocabTooltipOpacityVal">100</span>%</label>
+                        <input type="range" id="vocabTooltipOpacity" min="50" max="100" value="100">
+                    </div>
+                    <div class="settings-preview">
+                        <span>Tooltip Preview: </span>
+                        <span id="vocabTooltipPreview"
+                            style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%); color: #ffffff; font-size: 14px;">مثال</span>
+                    </div>
+                </div>
+
+                <div class="settings-actions">
+                    <button id="saveVocabSettingsBtn" class="vocab-btn primary">💾 Save Settings</button>
+                    <button id="cancelVocabSettingsBtn" class="vocab-btn secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <input type="file" id="vocabImportInput" class="hidden" accept=".json">
+
+    <input type="file" id="fileInput" class="hidden" accept=".pdf">
+
+    <!--  PDF.js from Local Build -->
+    <script src="../build/pdf.js"></script>
+    <script src="viewer.js"></script>
+
+    <!-- Custom viewer extensions -->
+    <script src="modules/storage_polyfill.js"></script>
+    <script src="modules/ui_utils.js"></script>
+    <script src="modules/viewer_utils.js"></script>
+    <script src="modules/highlight_manager.js"></script>
+    <script src="modules/comment_manager.js"></script>
+    <script src="modules/drawing_manager.js"></script>
+    <script src="modules/tooltip_manager.js"></script>
+    <script src="modules/toolbar_manager.js"></script>
+    <script src="modules/sidebar_manager.js"></script>
+    <script src="modules/sidebar_panel_manager.js"></script>
+    <script src="modules/selection_manager.js"></script>
+    <script src="modules/examination_manager.js"></script>
+    <script src="modules/vocabulary_builder.js"></script>
+    <script src="modules/citation_manager.js"></script>
+    <script src="modules/pdf_notes_manager.js"></script>
+    <script src="modules/global_notes_manager.js"></script>
+    <script src="modules/document_editor.js"></script>
+    <script src="modules/pdf_storage.js"></script>
+    <script src="modules/research_library_manager.js"></script>
+    <script src="modules/reference_linker.js"></script>
+    <script src="modules/storage_manager.js"></script>
+    <script src="modules/spaced_repetition_manager.js"></script>
+    <script src="custom_viewer.js"></script>
+
+    <!-- Performance Monitor (Ctrl+Shift+P to toggle) -->
+    <script src="perf_monitor.js"></script>
+</body>
+
+</html>

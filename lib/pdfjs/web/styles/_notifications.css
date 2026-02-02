@@ -1,0 +1,217 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - NOTIFICATION & SETTINGS STYLES
+ * ============================================================================
+ */
+
+/* ========== Notification System ========== */
+.viewer-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 100003;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.viewer-notification.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.viewer-notification .notification-icon {
+    font-size: 18px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.viewer-notification .notification-message {
+    flex: 1;
+}
+
+.viewer-notification.notification-success {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white;
+}
+
+.viewer-notification.notification-error {
+    background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+    color: white;
+}
+
+.viewer-notification.notification-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+}
+
+.viewer-notification.notification-info {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+/* ========== Settings Side Panel ========== */
+.settings-side-panel {
+    position: fixed;
+    top: 40px;
+    right: -400px;
+    width: 360px;
+    height: calc(100vh - 40px);
+    background: var(--theme-bg-primary);
+    border-left: 1px solid var(--theme-border-color);
+    z-index: 9998;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.3s ease;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.settings-side-panel.visible {
+    right: 0;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    flex-shrink: 0;
+}
+
+.settings-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.settings-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.settings-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.settings-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.settings-section {
+    margin-bottom: 24px;
+}
+
+.settings-section h3 {
+    margin: 0 0 16px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--theme-text-primary);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--theme-border-color);
+}
+
+.settings-option {
+    margin-bottom: 12px;
+}
+
+.settings-option label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--theme-text-primary);
+}
+
+.settings-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--theme-accent);
+    cursor: pointer;
+}
+
+.settings-subsection {
+    margin-left: 30px;
+    padding-left: 12px;
+    border-left: 2px solid var(--theme-border-color);
+    margin-top: 12px;
+}
+
+.settings-subsection .settings-option {
+    margin-bottom: 10px;
+}
+
+.settings-subsection .settings-option label {
+    font-size: 13px;
+    color: var(--theme-text-secondary);
+}
+
+.settings-subsection.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* ========== Panel Close Button (shared) ========== */
+.panel-close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.panel-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ========== Animations ========== */
+@keyframes fadeInUp {
+    from { 
+        transform: translateY(20px); 
+        opacity: 0; 
+    }
+    to { 
+        transform: translateY(0); 
+        opacity: 1; 
+    }
+}
+
+@keyframes slideInRight {
+    from { 
+        transform: translateX(20px); 
+        opacity: 0; 
+    }
+    to { 
+        transform: translateX(0); 
+        opacity: 1; 
+    }
+}

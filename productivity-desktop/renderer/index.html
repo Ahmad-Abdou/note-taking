@@ -1,0 +1,2075 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Productivity Hub</title>
+    <link rel="icon" type="image/svg+xml" href="../icons/productivity-icon.svg">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Modular CSS (split for better VS Code performance) -->
+    <link rel="stylesheet" href="styles/_part00.css?v=5">
+    <link rel="stylesheet" href="styles/_part01.css">
+    <link rel="stylesheet" href="styles/_part02.css?v=2">
+    <link rel="stylesheet" href="styles/_part03.css?v=5">
+    <link rel="stylesheet" href="styles/_part04.css?v=6">
+    <link rel="stylesheet" href="styles/_part05.css">
+    <link rel="stylesheet" href="styles/_part06.css">
+    <link rel="stylesheet" href="styles/_part07.css?v=6">
+    <link rel="stylesheet" href="styles/_part08.css?v=6">
+    <link rel="stylesheet" href="styles/_part09.css?v=5">
+    <link rel="stylesheet" href="styles/_part10.css?v=5">
+    <link rel="stylesheet" href="styles/_part11.css?v=2">
+    <link rel="stylesheet" href="styles/_part12.css?v=2">
+    <link rel="stylesheet" href="styles/_part13.css?v=3">
+    <link rel="stylesheet" href="styles/_part14.css">
+    <link rel="stylesheet" href="styles/_habit_tracker.css?v=1">
+    <link rel="stylesheet" href="styles/_motivation.css">
+    <link rel="stylesheet" href="styles/_idle.css">
+    <link rel="stylesheet" href="styles/_revisions.css">
+</head>
+
+<body>
+    <!-- Focus Mode Overlay -->
+    <div id="focus-overlay" class="focus-overlay hidden">
+        <div class="focus-content">
+            <div class="focus-timer-display">
+                <span id="focus-time">25:00</span>
+            </div>
+            <div class="focus-task-name" id="focus-task-name">Deep Work Session</div>
+
+            <!-- Focus Time Stats -->
+            <div class="focus-time-stats" id="focus-time-stats">
+                <div class="focus-stat">
+                    <span class="focus-stat-value" id="focus-elapsed-time">0:00</span>
+                    <span class="focus-stat-label">Elapsed</span>
+                </div>
+                <div class="focus-stat">
+                    <span class="focus-stat-value" id="focus-sessions-today">0</span>
+                    <span class="focus-stat-label">Sessions Today</span>
+                </div>
+                <div class="focus-stat">
+                    <span class="focus-stat-value" id="focus-total-today">0h</span>
+                    <span class="focus-stat-label">Today</span>
+                </div>
+            </div>
+
+            <div class="focus-controls">
+                <button id="focus-pause-btn" class="focus-btn"><i class="fas fa-pause"></i></button>
+                <button id="focus-stop-btn" class="focus-btn danger"><i class="fas fa-stop"></i></button>
+                <button id="focus-skip-break-btn" class="focus-btn skip-break" title="Start New Focus Session"><i
+                        class="fas fa-forward"></i> New Focus</button>
+                <button id="focus-overlay-toggle-btn" class="focus-btn" title="Toggle Screen Border"><i
+                        class="fas fa-border-all"></i></button>
+            </div>
+            <div class="focus-quote" id="focus-quote">"The successful warrior is the average man, with laser-like
+                focus." - Bruce Lee</div>
+            <div class="blocked-sites-warning">
+                <i class="fas fa-shield-alt"></i> Distractions Blocked
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-rocket"></i>
+                    <span>ProductivityHub</span>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="quick-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="streak-count">0</span>
+                    <span class="stat-label">Day Streak</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="today-hours">0h</span>
+                    <span class="stat-label">Today</span>
+                </div>
+            </div>
+
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="nav-item" data-page="schedule">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Schedule</span>
+                    <span class="badge" id="upcoming-badge">0</span>
+                </li>
+                <li class="nav-item" data-page="tasks">
+                    <i class="fas fa-tasks"></i>
+                    <span>Tasks</span>
+                    <span class="badge" id="tasks-badge">0</span>
+                </li>
+                <li class="nav-item" data-page="goals">
+                    <i class="fas fa-bullseye"></i>
+                    <span>Goals</span>
+                </li>
+                <li class="nav-item" data-page="analytics">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Analytics</span>
+                </li>
+                <li class="nav-item" data-page="focus">
+                    <i class="fas fa-brain"></i>
+                    <span>Focus Mode</span>
+                </li>
+                <li class="nav-item" data-page="revisions">
+                    <i class="fas fa-book-reader"></i>
+                    <span>To Review</span>
+                    <span class="badge" id="revisions-badge" style="display: none;">0</span>
+                </li>
+
+                <li class="nav-item" data-page="blocker">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Blocker</span>
+                </li>
+
+                <li class="nav-item" data-page="notifications">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                </li>
+                <li class="nav-item" data-page="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </li>
+            </ul>
+
+            <!-- Donate Link -->
+            <button type="button" class="donate-link" id="donate-btn">
+                <i class="fas fa-heart"></i>
+                <span>Support Development</span>
+            </button>
+
+            <!-- Start Focus Button -->
+            <div class="sidebar-footer">
+                <button id="quick-focus-btn" class="btn-primary pulse">
+                    <i class="fas fa-play"></i> Start Focus Session
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Dashboard Page -->
+            <section id="page-dashboard" class="page active">
+                <header class="page-header dashboard-header">
+                    <div class="greeting">
+                        <h1 id="greeting-text">Good Morning, Scholar!</h1>
+                        <p id="date-display"></p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-icon notification-btn" id="notifications-btn">
+                            <i class="fas fa-bell"></i>
+                            <span class="notification-dot"></span>
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Habit Tracker Calendar (primary widget) -->
+                <section id="habit-tracker-root" aria-label="Habit tracker calendar"></section>
+
+                <!-- Hero Section with Productivity Score -->
+                <div class="dashboard-hero">
+                    <div class="hero-score-card">
+                        <div class="score-visual">
+                            <svg viewBox="0 0 100 100" class="score-ring">
+                                <circle class="score-bg" cx="50" cy="50" r="42" />
+                                <circle class="score-fill" id="score-circle" cx="50" cy="50" r="42"
+                                    stroke-dasharray="264" stroke-dashoffset="264" />
+                            </svg>
+                            <div class="score-center">
+                                <span class="score-number" id="productivity-score">0</span>
+                                <span class="score-percent">%</span>
+                            </div>
+                        </div>
+                        <div class="score-info">
+                            <h3>Today's Score</h3>
+                            <div class="score-stats">
+                                <div class="score-stat">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span><strong id="tasks-completed">0</strong> tasks</span>
+                                </div>
+                                <div class="score-stat">
+                                    <i class="fas fa-clock"></i>
+                                    <span><strong id="focus-hours">0</strong>h focused</span>
+                                </div>
+                                <div class="score-stat">
+                                    <i class="fas fa-fire"></i>
+                                    <span><strong id="current-streak">0</strong> day streak</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions in Hero -->
+                    <div class="hero-actions">
+                        <button class="hero-action-btn" data-action="focus">
+                            <i class="fas fa-play-circle"></i>
+                            <span>Start Focus</span>
+                        </button>
+                        <button class="hero-action-btn" data-action="task">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>Add Task</span>
+                        </button>
+                        <button class="hero-action-btn" data-action="schedule">
+                            <i class="fas fa-calendar"></i>
+                            <span>Open Schedule</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Motivation & Gamification Section -->
+                <div class="motivation-dashboard">
+                    <!-- Items to Review Widget -->
+                    <div class="motivation-card review-widget" id="review-widget">
+                        <div class="widget-header">
+                            <span><i class="fas fa-brain"></i> Items to Review</span>
+                            <a href="#" class="view-link" data-page="revisions">View All <i
+                                    class="fas fa-arrow-right"></i></a>
+                        </div>
+                        <div class="widget-content" id="review-widget-content">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Dashboard Grid -->
+                <div class="dashboard-grid-modern">
+                    <!-- Today's Schedule - Compact -->
+                    <div class="dash-card schedule-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-calendar-day"></i> Today's Schedule</h3>
+                            <a href="#" class="view-link" data-page="schedule">View All <i
+                                    class="fas fa-arrow-right"></i></a>
+                        </div>
+                        <div class="dash-card-content">
+                            <div class="timeline-compact" id="today-schedule">
+                                <!-- Schedule items injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Priority Tasks -->
+                    <div class="dash-card tasks-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-bolt"></i> Priority Tasks</h3>
+                            <a href="#" class="view-link" data-page="tasks">View All <i
+                                    class="fas fa-arrow-right"></i></a>
+                        </div>
+                        <div class="dash-card-content">
+                            <ul class="task-list-compact" id="priority-tasks">
+                                <!-- Priority tasks injected here -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Upcoming Deadlines -->
+                    <div class="dash-card deadlines-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-hourglass-half"></i> Deadlines</h3>
+                        </div>
+                        <div class="dash-card-content">
+                            <ul class="deadline-list-compact" id="upcoming-deadlines">
+                                <!-- Deadlines injected here -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Weekly Progress Chart -->
+                    <div class="dash-card progress-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-chart-line"></i> This Week</h3>
+                        </div>
+                        <div class="dash-card-content">
+                            <div class="weekly-chart-modern" id="weekly-chart">
+                                <!-- Chart bars -->
+                            </div>
+                            <div class="week-summary">
+                                <div class="week-stat">
+                                    <span class="stat-value" id="week-total-hours">0h</span>
+                                    <span class="stat-label">Total</span>
+                                </div>
+                                <div class="week-stat">
+                                    <span class="stat-value" id="week-avg-hours">0h</span>
+                                    <span class="stat-label">Daily Avg</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Goals - Compact -->
+                    <div class="dash-card goals-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-trophy"></i> Goals</h3>
+                            <a href="#" class="view-link" data-page="goals">View All <i
+                                    class="fas fa-arrow-right"></i></a>
+                        </div>
+                        <div class="dash-card-content">
+                            <div class="goals-preview-compact" id="goals-preview">
+                                <!-- Goals preview injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Schedule Page -->
+            <section id="page-schedule" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-calendar-alt"></i> Task Schedule</h1>
+                </header>
+
+                <!-- Schedule Tabs -->
+                <div class="schedule-tabs">
+                    <button type="button" class="tab-btn active" data-view="school">School Schedule</button>
+                    <button type="button" class="tab-btn" data-view="personal">Personal Schedule</button>
+                    <button type="button" class="tab-btn" data-view="combined">Combined View</button>
+                </div>
+
+                <!-- Countdown Bar (Top) -->
+                <div class="countdown-bar" id="countdown-bar">
+                    <div class="countdown-bar-header">
+                        <i class="fas fa-hourglass-half"></i>
+                        <span>Pinned Countdowns</span>
+                    </div>
+                    <div class="countdown-bar-items" id="countdown-bar-items">
+                        <!-- Countdown items will be injected here -->
+                        <p class="countdown-empty-hint">Pin tasks from the calendar to track countdowns here</p>
+                    </div>
+                </div>
+
+                <!-- Calendar Layout with Sidebar -->
+                <div class="calendar-layout">
+                    <!-- Calendar Sidebar - Simplified -->
+                    <aside class="calendar-sidebar calendar-sidebar-minimal">
+                        <!-- My Tasks Section -->
+                        <div class="sidebar-section">
+                            <h4><i class="fas fa-tasks"></i> My Tasks</h4>
+                            <div class="my-events-list" id="my-events-list">
+                                <!-- Scheduled tasks will be listed here -->
+                                <p class="empty-hint">Your tasks will appear here</p>
+                            </div>
+                        </div>
+
+                        <!-- Filters + Subscribed Calendars (rendered by schedule.js when present) -->
+                        <div class="sidebar-section sidebar-section-collapsible" id="filters-section">
+                            <div class="sidebar-section-header" id="filters-toggle">
+                                <h4><i class="fas fa-sliders-h"></i> Filters</h4>
+                                <button class="sidebar-toggle-btn" title="Toggle filters">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div class="sidebar-section-content collapsed" id="filters-content">
+                                <div class="calendar-filter-list" id="calendar-filter-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-section">
+                            <h4><i class="fas fa-calendar-plus"></i> Subscribed Calendars</h4>
+                            <div class="imported-calendars-list" id="imported-calendars-list">
+                                <p class="empty-hint">No subscribed calendars</p>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <!-- Main Calendar Area -->
+                    <div class="calendar-main">
+                        <!-- Calendar View -->
+                        <div class="calendar-container">
+                            <div class="calendar-header">
+                                <div class="calendar-nav">
+                                    <button type="button" id="prev-week" class="btn-icon"><i
+                                            class="fas fa-chevron-left"></i></button>
+                                    <h2 id="current-week-label">Week of December 1, 2025</h2>
+                                    <button type="button" id="next-week" class="btn-icon"><i
+                                            class="fas fa-chevron-right"></i></button>
+                                    <button type="button" id="today-btn" class="btn-secondary">Today</button>
+                                </div>
+                                <div class="calendar-actions">
+                                    <button type="button" id="import-schedule-btn" class="btn-secondary"
+                                        title="Import or subscribe to a calendar (ICS/iCal)">
+                                        <i class="fas fa-file-import"></i> Import / Subscribe
+                                    </button>
+                                    <button type="button" id="add-event-btn" class="btn-primary"
+                                        title="Add a schedule event">
+                                        <i class="fas fa-plus"></i> Add Event
+                                    </button>
+                                </div>
+                                <div class="view-toggle">
+                                    <button type="button" class="view-toggle-btn" data-view="day">Day</button>
+                                    <button type="button" class="view-toggle-btn active" data-view="week">Week</button>
+                                    <button type="button" class="view-toggle-btn" data-view="month">Month</button>
+                                    <button type="button" class="view-toggle-btn" data-view="agenda">Agenda</button>
+                                </div>
+                            </div>
+                            <div class="calendar-grid" id="calendar-grid">
+                                <!-- Calendar injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tasks Page -->
+            <section id="page-tasks" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-tasks"></i> Task Management</h1>
+                </header>
+
+                <!-- Task Filters -->
+                <div class="task-filters">
+                    <div class="filter-group">
+                        <label>Filter:</label>
+                        <select id="task-filter-status">
+                            <option value="all">All Tasks</option>
+                            <option value="not-started">Not Started</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                        <select id="task-filter-priority">
+                            <option value="all">All Priorities</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <select id="task-filter-category">
+                            <option value="all">All Categories</option>
+                            <option value="homework">Homework</option>
+                            <option value="assignment">Assignment</option>
+                            <option value="exam">Exam Prep</option>
+                            <option value="project">Project</option>
+                            <option value="reading">Reading</option>
+                            <option value="personal">Personal</option>
+                        </select>
+                    </div>
+                    <div class="search-group">
+                        <input type="text" id="task-search" placeholder="Search tasks...">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div class="sort-group">
+                        <label>Sort:</label>
+                        <select id="task-sort">
+                            <option value="dueDate">Due Date</option>
+                            <option value="priority">Priority</option>
+                            <option value="title">Title</option>
+                            <option value="list">List</option>
+                            <option value="createdAt">Created</option>
+                        </select>
+                        <button class="sort-order-btn" id="task-sort-order" title="Toggle sort order">
+                            <i class="fas fa-sort-amount-down"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Task Views -->
+                <div class="task-views">
+                    <button class="view-btn active" data-view="list" title="List View"><i
+                            class="fas fa-list"></i></button>
+                    <button class="view-btn" data-view="grid" title="Grid View"><i class="fas fa-th"></i></button>
+                    <button class="view-btn" data-view="board" title="Board View"><i
+                            class="fas fa-columns"></i></button>
+                    <button class="view-btn" data-view="calendar" title="Calendar View"><i
+                            class="fas fa-calendar"></i></button>
+                </div>
+
+                <!-- Tasks Container -->
+                <div class="tasks-container">
+                    <!-- List View -->
+                    <div class="task-list-view" id="task-list-view">
+                        <div class="task-section">
+                            <h3 class="section-title overdue">
+                                <i class="fas fa-exclamation-triangle"></i> Overdue
+                                <span class="count" id="overdue-count">0</span>
+                            </h3>
+                            <ul class="task-list" id="overdue-tasks"></ul>
+                        </div>
+                        <div class="task-section">
+                            <h3 class="section-title today">
+                                <i class="fas fa-sun"></i> Today
+                                <span class="count" id="today-count">0</span>
+                            </h3>
+                            <ul class="task-list" id="today-tasks"></ul>
+                        </div>
+                        <div class="task-section">
+                            <h3 class="section-title upcoming">
+                                <i class="fas fa-calendar-alt"></i> Upcoming
+                                <span class="count" id="upcoming-count">0</span>
+                            </h3>
+                            <ul class="task-list" id="upcoming-tasks"></ul>
+                        </div>
+                        <div class="task-section completed-section" id="completed-section">
+                            <h3 class="section-title completed">
+                                <span class="section-title-left">
+                                    <i class="fas fa-check-circle"></i> Finished Tasks
+                                    <span class="count" id="completed-count">0</span>
+                                </span>
+                                <button class="toggle-completed-btn" id="toggle-completed-btn"
+                                    title="Toggle finished tasks">
+                                    <i class="fas fa-eye-slash"></i>
+                                </button>
+                            </h3>
+                            <ul class="task-list hidden" id="completed-tasks"></ul>
+                        </div>
+                    </div>
+
+                    <!-- Grid View -->
+                    <div class="task-grid-view hidden" id="task-grid-view">
+                        <!-- Tasks displayed as cards in a grid -->
+                    </div>
+
+                    <!-- Board View -->
+                    <div class="task-board-view hidden" id="task-board-view">
+                        <div class="board-column" data-status="pending">
+                            <h3>To Do</h3>
+                            <ul class="board-tasks" id="board-pending"></ul>
+                        </div>
+                        <div class="board-column" data-status="in-progress">
+                            <h3>In Progress</h3>
+                            <ul class="board-tasks" id="board-in-progress"></ul>
+                        </div>
+                        <div class="board-column" data-status="completed">
+                            <h3>Done</h3>
+                            <ul class="board-tasks" id="board-completed"></ul>
+                        </div>
+                    </div>
+
+                    <!-- Calendar View -->
+                    <div class="task-calendar-view hidden" id="task-calendar-view">
+                        <div class="task-calendar-header">
+                            <button class="btn-icon" id="task-cal-prev"><i class="fas fa-chevron-left"></i></button>
+                            <h3 id="task-cal-month">December 2025</h3>
+                            <button class="btn-icon" id="task-cal-next"><i class="fas fa-chevron-right"></i></button>
+                            <button class="btn-secondary" id="task-cal-today">Today</button>
+                        </div>
+                        <div class="task-calendar-grid" id="task-calendar-grid">
+                            <!-- Calendar will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Goals Page -->
+            <section id="page-goals" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-bullseye"></i> Goals & Milestones</h1>
+                    <div class="header-actions">
+                        <button class="btn-primary" id="add-goal-btn">
+                            <i class="fas fa-plus"></i> New Goal
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Daily Targets Card -->
+                <div class="daily-targets-card">
+                    <h3><i class="fas fa-chart-line"></i> Daily Targets</h3>
+                    <div class="targets-grid">
+                        <div class="target-item">
+                            <div class="target-icon"><i class="fas fa-clock"></i></div>
+                            <div class="target-info">
+                                <label>Study Hours</label>
+                                <div class="target-input">
+                                    <input type="number" id="goals-daily-study" min="1" max="16" value="8">
+                                    <span>hours/day</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="target-item">
+                            <div class="target-icon"><i class="fas fa-tasks"></i></div>
+                            <div class="target-info">
+                                <label>Tasks Complete</label>
+                                <div class="target-input">
+                                    <input type="number" id="goals-daily-tasks" min="1" max="20" value="5">
+                                    <span>tasks/day</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="target-item">
+                            <div class="target-icon"><i class="fas fa-calendar-week"></i></div>
+                            <div class="target-info">
+                                <label>Weekly Study</label>
+                                <div class="target-input">
+                                    <input type="number" id="goals-weekly-study" min="1" max="100" value="40">
+                                    <span>hours/week</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-secondary btn-sm" id="save-daily-targets-btn">
+                        <i class="fas fa-save"></i> Save Targets
+                    </button>
+                </div>
+
+                <!-- Goal Categories -->
+                <div class="goal-categories">
+                    <button class="category-btn active" data-category="all">All Goals</button>
+                    <button class="category-btn" data-category="academic">Academic</button>
+                    <button class="category-btn" data-category="skill">Skills</button>
+                    <button class="category-btn" data-category="project">Projects</button>
+                    <button class="category-btn" data-category="career">Career</button>
+                </div>
+
+                <!-- Goals Grid -->
+                <div class="goals-grid" id="goals-grid">
+                    <!-- Goals injected here -->
+                </div>
+
+                <!-- Achievement Showcase -->
+                <div class="achievements-section">
+                    <h2><i class="fas fa-medal"></i> Achievements</h2>
+                    <div class="achievements-grid" id="achievements-grid">
+                        <!-- Achievements injected here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Focus Page -->
+            <section id="page-focus" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-brain"></i> Focus Mode</h1>
+                </header>
+
+                <div class="focus-page-content">
+                    <!-- Main Focus Card -->
+                    <div class="timer-card focus-redesign">
+                        <div class="focus-header">
+                            <h2><i class="fas fa-stopwatch"></i> Choose Focus Session</h2>
+                            <p class="focus-subtitle">Select a preset or create your own</p>
+                        </div>
+
+                        <!-- Timer Presets - 5 Column Grid -->
+                        <div class="timer-presets-container">
+                            <div class="timer-options-redesign">
+                                <button class="timer-option-card" data-minutes="25">
+                                    <div class="option-icon pomodoro">
+                                        <i class="fas fa-seedling"></i>
+                                    </div>
+                                    <div class="option-content">
+                                        <span class="option-time">25 min</span>
+                                        <span class="option-name">Pomodoro</span>
+                                        <span class="option-desc">Quick focused burst</span>
+                                    </div>
+                                    <div class="option-check"><i class="fas fa-check"></i></div>
+                                </button>
+
+                                <button class="timer-option-card" data-minutes="50">
+                                    <div class="option-icon deepwork">
+                                        <i class="fas fa-brain"></i>
+                                    </div>
+                                    <div class="option-content">
+                                        <span class="option-time">50 min</span>
+                                        <span class="option-name">Deep Work</span>
+                                        <span class="option-desc">Extended focus</span>
+                                    </div>
+                                    <div class="option-check"><i class="fas fa-check"></i></div>
+                                </button>
+
+                                <button class="timer-option-card" data-minutes="90">
+                                    <div class="option-icon flowstate">
+                                        <i class="fas fa-fire-alt"></i>
+                                    </div>
+                                    <div class="option-content">
+                                        <span class="option-time">90 min</span>
+                                        <span class="option-name">Flow State</span>
+                                        <span class="option-desc">Maximum immersion</span>
+                                    </div>
+                                    <div class="option-check"><i class="fas fa-check"></i></div>
+                                </button>
+
+                                <button class="timer-option-card custom" id="custom-timer-btn">
+                                    <div class="option-icon custom-icon">
+                                        <i class="fas fa-sliders-h"></i>
+                                    </div>
+                                    <div class="option-content">
+                                        <span class="option-time">Custom</span>
+                                        <span class="option-name">Your Time</span>
+                                        <span class="option-desc">Set any duration</span>
+                                    </div>
+                                    <div class="option-check"><i class="fas fa-check"></i></div>
+                                </button>
+
+                                <button class="timer-option-card open-ended" id="free-focus-btn">
+                                    <div class="option-icon free-focus-icon">
+                                        <i class="fas fa-infinity"></i>
+                                    </div>
+                                    <div class="option-content">
+                                        <span class="option-time">∞</span>
+                                        <span class="option-name">Free Focus</span>
+                                        <span class="option-desc">No time limit</span>
+                                    </div>
+                                    <div class="option-check"><i class="fas fa-check"></i></div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Session Settings - Clean Layout -->
+                        <div class="session-settings-redesign">
+                            <div class="settings-row">
+                                <div class="setting-group">
+                                    <label for="focus-task-select"><i class="fas fa-tasks"></i> Link to Task</label>
+                                    <select id="focus-task-select">
+                                        <option value="">No specific task</option>
+                                    </select>
+                                </div>
+                                <div class="setting-group">
+                                    <label for="break-duration"><i class="fas fa-coffee"></i> Break Duration</label>
+                                    <select id="break-duration">
+                                        <option value="5">5 minutes</option>
+                                        <option value="10">10 minutes</option>
+                                        <option value="15">15 minutes</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="settings-toggles">
+                                <label class="toggle-pill">
+                                    <input type="checkbox" id="enable-blocking" checked>
+                                    <span class="pill-label"><i class="fas fa-shield-alt"></i> Block Distractions</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" id="enable-breaks" checked>
+                                    <span class="pill-label"><i class="fas fa-bell"></i> Break Reminders</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" id="focus-auto-breaks" checked>
+                                    <span class="pill-label"><i class="fas fa-sync"></i> Auto Breaks</span>
+                                </label>
+                                <label class="toggle-pill">
+                                    <input type="checkbox" id="focus-auto-next">
+                                    <span class="pill-label"><i class="fas fa-forward"></i> Auto Continue</span>
+                                </label>
+                            </div>
+
+                            <!-- Focus Overlay Settings - Collapsible -->
+                            <div class="focus-overlay-settings">
+                                <div class="overlay-header">
+                                    <label class="toggle-pill overlay-toggle">
+                                        <input type="checkbox" id="focus-overlay-enabled" checked>
+                                        <span class="pill-label"><i class="fas fa-border-all"></i> Screen Focus
+                                            Indicator</span>
+                                    </label>
+                                    <button class="btn-icon-sm" id="overlay-settings-toggle" title="Customize">
+                                        <i class="fas fa-cog"></i>
+                                    </button>
+                                </div>
+                                <div class="overlay-customization" id="overlay-customization" style="display: none;">
+                                    <div class="overlay-options">
+                                        <div class="overlay-option-group">
+                                            <label>Color</label>
+                                            <div class="color-presets">
+                                                <button class="color-preset active" data-color="#8b5cf6"
+                                                    style="background: #8b5cf6;" title="Purple"></button>
+                                                <button class="color-preset" data-color="#6366f1"
+                                                    style="background: #6366f1;" title="Indigo"></button>
+                                                <button class="color-preset" data-color="#10b981"
+                                                    style="background: #10b981;" title="Green"></button>
+                                                <button class="color-preset" data-color="#3b82f6"
+                                                    style="background: #3b82f6;" title="Blue"></button>
+                                                <button class="color-preset" data-color="#06b6d4"
+                                                    style="background: #06b6d4;" title="Cyan"></button>
+                                                <button class="color-preset" data-color="#14b8a6"
+                                                    style="background: #14b8a6;" title="Teal"></button>
+                                                <button class="color-preset" data-color="#f59e0b"
+                                                    style="background: #f59e0b;" title="Amber"></button>
+                                                <button class="color-preset" data-color="#ef4444"
+                                                    style="background: #ef4444;" title="Red"></button>
+                                                <button class="color-preset" data-color="#ec4899"
+                                                    style="background: #ec4899;" title="Pink"></button>
+                                                <button class="color-preset" data-color="#64748b"
+                                                    style="background: #64748b;" title="Slate"></button>
+                                            </div>
+                                        </div>
+                                        <div class="overlay-option-group">
+                                            <label>Style</label>
+                                            <div class="style-options">
+                                                <button class="style-option active" data-style="solid"><i
+                                                        class="fas fa-square"></i> Solid</button>
+                                                <button class="style-option" data-style="dashed"><i
+                                                        class="fas fa-grip-lines"></i> Dashed</button>
+                                                <button class="style-option" data-style="glow"><i
+                                                        class="fas fa-sun"></i> Glow</button>
+                                            </div>
+                                        </div>
+                                        <div class="overlay-option-group">
+                                            <label>Width: <span id="overlay-width-value">3</span>px</label>
+                                            <input type="range" id="overlay-width" min="1" max="10" value="3"
+                                                class="overlay-slider">
+                                        </div>
+                                        <div class="overlay-option-group">
+                                            <label>Opacity: <span id="overlay-opacity-value">40</span>%</label>
+                                            <input type="range" id="overlay-opacity" min="10" max="100" value="40"
+                                                class="overlay-slider">
+                                        </div>
+                                    </div>
+                                    <div class="overlay-preview">
+                                        <div class="preview-box" id="overlay-preview-box">
+                                            <span>Preview</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Start Button - Prominent -->
+                        <button class="btn-start-focus" id="start-focus-btn">
+                            <i class="fas fa-play"></i>
+                            <span>Start Focus Session</span>
+                        </button>
+                    </div>
+
+                    <!-- Focus Statistics Section -->
+                    <div class="focus-stats-section">
+                        <h3 class="section-title"><i class="fas fa-chart-bar"></i> Your Progress</h3>
+                        <div class="focus-stats">
+                            <div class="stat-card">
+                                <div class="stat-icon-wrapper">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="total-focus-today">0h 0m</span>
+                                    <span class="stat-label">Today's Focus Time</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon-wrapper">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="sessions-today">0</span>
+                                    <span class="stat-label">Sessions Today</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon-wrapper streak">
+                                    <i class="fas fa-fire"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="focus-streak">0</span>
+                                    <span class="stat-label">Day Streak</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon-wrapper trophy">
+                                    <i class="fas fa-trophy"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="best-streak">0</span>
+                                    <span class="stat-label">Best Streak</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card chart-card" style="margin-top: 16px;">
+                        <div class="card-header">
+                            <h3><i class="fas fa-face-meh"></i> Time by Boredom Level</h3>
+                        </div>
+                        <div class="card-content">
+                            <div id="boredom-breakdown-focus"></div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Sessions -->
+                    <div class="recent-sessions">
+                        <h3><i class="fas fa-history"></i> Recent Focus Sessions</h3>
+                        <div class="sessions-list" id="recent-sessions-list">
+                            <!-- Sessions injected here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Analytics Page -->
+            <section id="page-analytics" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-chart-line"></i> Analytics & Reports</h1>
+                    <div class="header-actions">
+                        <select id="analytics-period">
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="semester">This Semester</option>
+                            <option value="all">All Time</option>
+                        </select>
+                        <button class="btn-secondary" id="export-report-btn">
+                            <i class="fas fa-download"></i> Export Report
+                        </button>
+                    </div>
+                </header>
+
+                <div class="analytics-grid">
+                    <!-- Overview Stats -->
+                    <div class="analytics-overview">
+                        <div class="overview-stat">
+                            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                            <div class="stat-details">
+                                <span class="stat-value" id="total-study-hours">0</span>
+                                <span class="stat-label">Total Study Hours</span>
+                            </div>
+                        </div>
+                        <div class="overview-stat">
+                            <div class="stat-icon"><i class="fas fa-tasks"></i></div>
+                            <div class="stat-details">
+                                <span class="stat-value" id="total-tasks-completed">0</span>
+                                <span class="stat-label">Tasks Completed</span>
+                            </div>
+                        </div>
+                        <div class="overview-stat">
+                            <div class="stat-icon"><i class="fas fa-percentage"></i></div>
+                            <div class="stat-details">
+                                <span class="stat-value" id="avg-productivity">0%</span>
+                                <span class="stat-label">Avg Productivity</span>
+                            </div>
+                        </div>
+                        <div class="overview-stat">
+                            <div class="stat-icon"><i class="fas fa-bullseye"></i></div>
+                            <div class="stat-details">
+                                <span class="stat-value" id="goals-achieved">0</span>
+                                <span class="stat-label">Goals Achieved</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Study Time Chart -->
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3>Study Time Distribution</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-container" id="study-time-chart"></div>
+                        </div>
+                    </div>
+
+                    <!-- Subject Distribution -->
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3>Time by Subject</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="subject-breakdown" id="subject-breakdown"></div>
+                        </div>
+                    </div>
+
+                    <!-- Boredom Distribution -->
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <h3>Time by Boredom Level</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="boredom-breakdown" id="boredom-breakdown-analytics"></div>
+                        </div>
+                    </div>
+
+                    <!-- Weekly Performance Radar -->
+                    <div class="card chart-card radar-card">
+                        <div class="card-header radar-card-header">
+                            <h3>Weekly Performance Radar</h3>
+                            <div class="radar-controls">
+                                <label class="radar-control">
+                                    <span class="radar-control-label">Daily goal (h/day)</span>
+                                    <input id="radar-daily-goal" type="number" min="1" max="16" step="0.5"
+                                        inputmode="decimal" title="Daily study goal in hours (used for Discipline)" />
+                                </label>
+                                <label class="radar-control">
+                                    <input type="checkbox" id="radar-compare-last-week">
+                                    <span>Last week</span>
+                                </label>
+                                <label class="radar-control">
+                                    <input type="checkbox" id="radar-compare-overall">
+                                    <span>Overall</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-content">
+                            <div class="radar-layout">
+                                <canvas id="performance-radar" class="radar-canvas" width="420" height="340"></canvas>
+                                <div class="radar-side">
+                                    <div class="radar-legend" id="performance-radar-legend"></div>
+                                    <div class="radar-values" id="performance-radar-values"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Insights -->
+                    <div class="card insights-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-lightbulb"></i> AI Insights</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="insights-list" id="insights-list">
+                                <!-- Insights injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Blocker Page -->
+            <section id="page-blocker" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-shield-alt"></i> Distraction Blocker</h1>
+                </header>
+
+                <div class="blocker-content">
+                    <!-- Blocker Status -->
+                    <div class="blocker-status-card">
+                        <div class="status-indicator" id="blocker-status">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Blocker Inactive</span>
+                        </div>
+                        <button class="btn-primary" id="toggle-blocker-btn">
+                            <i class="fas fa-power-off"></i> Activate Blocker
+                        </button>
+                    </div>
+
+                    <!-- Blocked Sites -->
+                    <div class="card blocked-sites-card">
+                        <div class="card-header">
+                            <h3>Blocked Websites</h3>
+                            <button class="btn-secondary" id="add-blocked-site-btn">
+                                <i class="fas fa-plus"></i> Add Site
+                            </button>
+                        </div>
+                        <div class="card-content">
+                            <div class="preset-sites">
+                                <h4>Quick Add Presets:</h4>
+                                <div class="preset-buttons">
+                                    <button class="preset-btn"
+                                        data-sites="facebook.com,instagram.com,twitter.com,x.com">Social Media</button>
+                                    <button class="preset-btn"
+                                        data-sites="youtube.com,netflix.com,twitch.tv,tiktok.com">Entertainment</button>
+                                    <button class="preset-btn" data-sites="reddit.com,9gag.com">Forums</button>
+                                    <button class="preset-btn" data-sites="discord.com,slack.com">Chat Apps</button>
+                                </div>
+                            </div>
+                            <ul class="blocked-sites-list" id="blocked-sites-list">
+                                <!-- Blocked sites injected here -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Blocking Schedule -->
+                    <div class="card schedule-blocker-card">
+                        <div class="card-header">
+                            <h3>Scheduled Blocking</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="schedule-option">
+                                <label>
+                                    <input type="checkbox" id="auto-block-focus" checked>
+                                    Automatically block during focus sessions
+                                </label>
+                            </div>
+                            <div class="schedule-option">
+                                <label>
+                                    <input type="checkbox" id="auto-block-schedule">
+                                    Block during school hours
+                                </label>
+                            </div>
+                            <div class="schedule-times">
+                                <div class="time-range">
+                                    <label>Block From:</label>
+                                    <input type="time" id="block-start-time" value="08:00">
+                                </div>
+                                <div class="time-range">
+                                    <label>Block Until:</label>
+                                    <input type="time" id="block-end-time" value="17:00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Website Time Limits Card -->
+                    <div class="card time-limits-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-stopwatch"></i> Website Time Limits</h3>
+                            <button class="btn-secondary" id="add-time-limit-btn">
+                                <i class="fas fa-plus"></i> Add Limit
+                            </button>
+                        </div>
+                        <div class="card-content">
+                            <p class="time-limits-info">Set daily time limits for distracting websites. When exceeded,
+                                they'll be blocked for the rest of the day.</p>
+                            <div class="time-limits-list" id="time-limits-list">
+                                <!-- Time limit items injected here -->
+                                <div class="empty-state" id="time-limits-empty">
+                                    <i class="fas fa-hourglass-half"></i>
+                                    <p>No time limits set. Add one to start tracking!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Blocked Attempts Log -->
+                    <div class="card attempts-card">
+
+                        <div class="card-header">
+                            <h3>Blocked Attempts Today</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="attempts-list" id="blocked-attempts-list">
+                                <!-- Attempts injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Idle Tracker Page -->
+            <section id="page-idle" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-hourglass-start"></i> Idle Tracker</h1>
+                </header>
+
+                <div class="idle-page-content">
+                    <!-- Status Card -->
+                    <div class="idle-status-card" id="idle-status-card">
+                        <!-- Rendered by JS -->
+                    </div>
+
+                    <div class="idle-grid">
+                        <!-- Left Column: Records -->
+                        <div class="idle-records-wrapper">
+                            <div class="idle-records-container">
+                                <div class="section-header">
+                                    <h3><i class="fas fa-list"></i> Idle Records</h3>
+                                </div>
+                                <div class="idle-records-list" id="idle-records-list">
+                                    <!-- Rendered by JS -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Categories & Summary -->
+                        <div class="idle-sidebar">
+                            <div class="idle-categories-container" id="idle-categories-list">
+                                <!-- Rendered by JS -->
+                            </div>
+
+                            <!-- Category Breakdown (Pie Chart) -->
+                            <div class="idle-summary-container" id="idle-summary">
+                                <!-- Rendered by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Notifications Page -->
+            <section id="page-notifications" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-bell"></i> Notifications</h1>
+                </header>
+
+                <div class="notifications-content compact">
+                    <!-- Quick Settings Row -->
+                    <div class="quick-settings-row">
+                        <div class="quick-toggle">
+                            <input type="checkbox" id="notify-enabled" checked>
+                            <label for="notify-enabled">Enable Notifications</label>
+                        </div>
+                        <div class="quick-toggle">
+                            <input type="checkbox" id="notify-sound-enabled" checked>
+                            <label for="notify-sound-enabled">Sound</label>
+                        </div>
+                        <div class="volume-control">
+                            <i class="fas fa-volume-up"></i>
+                            <input type="range" id="notification-volume" min="0" max="100" value="70">
+                            <span id="volume-display">70%</span>
+                        </div>
+                        <div class="sound-select">
+                            <select id="notification-sound-type">
+                                <option value="reminder">🔔 Bell</option>
+                                <option value="success">✨ Chime</option>
+                                <option value="focusStart">🎯 Focus</option>
+                                <option value="warning">⚠️ Alert</option>
+                                <option value="achievement">🏆 Win</option>
+                            </select>
+                            <button type="button" id="test-sound-btn" class="btn-icon" title="Test Sound">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Notification Types Grid -->
+                    <div class="notification-types-grid">
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-breaks" checked>
+                            <span class="type-icon"><i class="fas fa-coffee"></i></span>
+                            <span class="type-label">Breaks</span>
+                        </label>
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-deadlines" checked>
+                            <span class="type-icon"><i class="fas fa-clock"></i></span>
+                            <span class="type-label">Task Due Reminders</span>
+                        </label>
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-focus" checked>
+                            <span class="type-icon"><i class="fas fa-brain"></i></span>
+                            <span class="type-label">Focus</span>
+                        </label>
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-goals" checked>
+                            <span class="type-icon"><i class="fas fa-bullseye"></i></span>
+                            <span class="type-label">Goals</span>
+                        </label>
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-summary" checked>
+                            <span class="type-icon"><i class="fas fa-chart-bar"></i></span>
+                            <span class="type-label">Summary</span>
+                        </label>
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-achievements" checked>
+                            <span class="type-icon"><i class="fas fa-trophy"></i></span>
+                            <span class="type-label">Achievements</span>
+                        </label>
+                        <label class="notify-type-item">
+                            <input type="checkbox" id="notify-streaks" checked>
+                            <span class="type-icon"><i class="fas fa-fire"></i></span>
+                            <span class="type-label">Streaks</span>
+                        </label>
+                    </div>
+
+                    <!-- Timing Settings -->
+                    <div class="timing-settings">
+                        <div class="timing-item">
+                            <label><i class="fas fa-bell"></i> Remind before deadline:</label>
+                            <select id="deadline-reminder-time">
+                                <option value="5">5 min</option>
+                                <option value="15" selected>15 min</option>
+                                <option value="30">30 min</option>
+                                <option value="60">1 hour</option>
+                                <option value="1440">1 day</option>
+                            </select>
+                        </div>
+                        <div class="timing-item">
+                            <label>
+                                <input type="checkbox" id="daily-reminder-enabled" checked>
+                                Daily planning reminder at
+                            </label>
+                            <input type="time" id="daily-reminder-time" value="20:30">
+                            <button type="button" id="test-daily-reminder-btn" class="btn-icon" title="Test">
+                                <i class="fas fa-bell"></i>
+                            </button>
+                        </div>
+
+                        <div class="timing-item">
+                            <label>
+                                <input type="checkbox" id="habit-reminder-enabled" checked>
+                                Daily habit reminder at
+                            </label>
+                            <input type="time" id="habit-reminder-time" value="09:00">
+                            <select id="habit-reminder-repeat" title="Repeat">
+                                <option value="once" selected>Once</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="until-done">Until done</option>
+                            </select>
+                            <button type="button" id="test-habit-reminder-btn" class="btn-icon" title="Test">
+                                <i class="fas fa-check-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Revisions / Spaced Repetition Page -->
+            <section id="page-revisions" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-brain"></i> Spaced Repetition</h1>
+                    <div class="header-actions">
+                        <button class="btn-primary" id="add-revision-btn">
+                            <i class="fas fa-plus"></i> Add Item
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Revision Stats Bar -->
+                <div class="revision-stats-bar">
+                    <div class="revision-stat">
+                        <span class="revision-stat-value" id="revision-total-count">0</span>
+                        <span class="revision-stat-label">Total Items</span>
+                    </div>
+                    <div class="revision-stat">
+                        <span class="revision-stat-value" id="revision-due-count">0</span>
+                        <span class="revision-stat-label">Due Today</span>
+                    </div>
+                    <div class="revision-stat">
+                        <span class="revision-stat-value" id="revision-review-count">0</span>
+                        <span class="revision-stat-label">Reviews Done</span>
+                    </div>
+                </div>
+
+                <!-- Due Items Alert -->
+                <div class="due-items-alert hidden" id="due-items-alert">
+                    <i class="fas fa-bell"></i>
+                    <span>You have <strong id="due-alert-count">0</strong> items due for review!</span>
+                    <button class="btn-secondary btn-sm" id="review-due-btn">Review Now</button>
+                </div>
+
+                <!-- Category Tabs -->
+                <div class="revision-categories">
+                    <button class="category-tab due-tab active" data-category="due">
+                        <i class="fas fa-exclamation-circle"></i> Due Today
+                        <span class="tab-count" id="rev-count-due">0</span>
+                    </button>
+                    <button class="category-tab" data-category="tomorrow">
+                        <i class="fas fa-calendar-day"></i> Tomorrow
+                        <span class="tab-count" id="rev-count-tomorrow">0</span>
+                    </button>
+                    <button class="category-tab" data-category="3days">
+                        <i class="fas fa-calendar-week"></i> In 3 Days
+                        <span class="tab-count" id="rev-count-3days">0</span>
+                    </button>
+                    <button class="category-tab" data-category="week">
+                        <i class="fas fa-calendar-alt"></i> In a Week
+                        <span class="tab-count" id="rev-count-week">0</span>
+                    </button>
+                    <button class="category-tab" data-category="finished">
+                        <i class="fas fa-check-circle"></i> Finished
+                        <span class="tab-count" id="rev-count-finished">0</span>
+                    </button>
+                    <button class="category-tab" data-category="all">
+                        <i class="fas fa-list"></i> All
+                        <span class="tab-count" id="rev-count-all">0</span>
+                    </button>
+                </div>
+
+                <!-- Revisions Container -->
+                <div class="revisions-container" id="revisions-container">
+                    <!-- Empty State -->
+                    <div class="revisions-empty" id="revisions-empty">
+                        <div class="empty-icon">
+                            <i class="fas fa-brain"></i>
+                        </div>
+                        <h3>No items to review</h3>
+                        <p>Add content you want to memorize or revise later.</p>
+                        <p class="hint">Use the "Add Item" button to create your first review card.</p>
+                    </div>
+
+                    <!-- Revision cards will be inserted here -->
+                </div>
+            </section>
+
+            <!-- Settings Page -->
+            <section id="page-settings" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-cog"></i> Settings</h1>
+                </header>
+
+                <div class="settings-redesigned">
+                    <!-- Settings Navigation Tabs -->
+                    <div class="settings-tabs">
+                        <button class="settings-tab active" data-tab="profile"><i class="fas fa-user"></i>
+                            Profile</button>
+                        <button class="settings-tab" data-tab="appearance"><i class="fas fa-palette"></i>
+                            Appearance</button>
+                        <button class="settings-tab" data-tab="notifications"><i class="fas fa-bell"></i>
+                            Alerts</button>
+                        <button class="settings-tab" data-tab="data"><i class="fas fa-database"></i> Data</button>
+                    </div>
+
+                    <!-- Settings Panels -->
+                    <div class="settings-panels">
+                        <!-- Profile Panel -->
+                        <div class="settings-panel active" id="settings-profile">
+                            <div class="panel-header">
+                                <div class="panel-icon"><i class="fas fa-user-circle"></i></div>
+                                <div>
+                                    <h3>Profile Settings</h3>
+                                    <p>Personalize your experience</p>
+                                </div>
+                            </div>
+                            <div class="panel-content">
+                                <div class="input-group">
+                                    <label><i class="fas fa-signature"></i> Your Name</label>
+                                    <input type="text" id="user-name" placeholder="Enter your name">
+                                </div>
+                                <div class="input-group">
+                                    <label><i class="fas fa-university"></i> School/University</label>
+                                    <input type="text" id="user-school" placeholder="Enter your school">
+                                </div>
+                                <div class="input-group">
+                                    <label><i class="fas fa-calendar-alt"></i> Current Semester</label>
+                                    <input type="text" id="user-semester" placeholder="e.g., Fall 2025">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Appearance Panel -->
+                        <div class="settings-panel" id="settings-appearance">
+                            <div class="panel-header">
+                                <div class="panel-icon"><i class="fas fa-paint-brush"></i></div>
+                                <div>
+                                    <h3>Appearance</h3>
+                                    <p>Customize the look and feel</p>
+                                </div>
+                            </div>
+                            <div class="panel-content">
+                                <div class="input-group">
+                                    <label><i class="fas fa-moon"></i> Theme</label>
+                                    <div class="theme-selector">
+                                        <button class="theme-btn" data-theme="dark"><i class="fas fa-moon"></i>
+                                            Dark</button>
+                                        <button class="theme-btn active" data-theme="light"><i class="fas fa-sun"></i>
+                                            Light</button>
+                                        <button class="theme-btn" data-theme="auto"><i class="fas fa-desktop"></i>
+                                            Auto</button>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label><i class="fas fa-tint"></i> Accent Color</label>
+                                    <div class="accent-colors">
+                                        <button class="accent-btn active" data-color="#6366f1"
+                                            style="background:#6366f1"></button>
+                                        <button class="accent-btn" data-color="#8b5cf6"
+                                            style="background:#8b5cf6"></button>
+                                        <button class="accent-btn" data-color="#06b6d4"
+                                            style="background:#06b6d4"></button>
+                                        <button class="accent-btn" data-color="#10b981"
+                                            style="background:#10b981"></button>
+                                        <button class="accent-btn" data-color="#f59e0b"
+                                            style="background:#f59e0b"></button>
+                                        <button class="accent-btn" data-color="#ef4444"
+                                            style="background:#ef4444"></button>
+                                        <button class="accent-btn" data-color="#ec4899"
+                                            style="background:#ec4899"></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notifications Panel -->
+                        <div class="settings-panel" id="settings-notifications">
+                            <div class="panel-header">
+                                <div class="panel-icon"><i class="fas fa-bell"></i></div>
+                                <div>
+                                    <h3>Notification Settings</h3>
+                                    <p>Control your alerts</p>
+                                </div>
+                            </div>
+                            <div class="panel-content">
+                                <div class="toggle-setting">
+                                    <div class="toggle-info">
+                                        <span class="toggle-label">Enable Notifications</span>
+                                        <span class="toggle-desc">Receive alerts for tasks and reminders</span>
+                                    </div>
+                                    <label class="switch"><input type="checkbox" id="settings-notif-enabled"
+                                            checked><span class="slider"></span></label>
+                                </div>
+                                <div class="toggle-setting">
+                                    <div class="toggle-info">
+                                        <span class="toggle-label">Sound Alerts</span>
+                                        <span class="toggle-desc">Play sound with notifications</span>
+                                    </div>
+                                    <label class="switch"><input type="checkbox" id="settings-notif-sound" checked><span
+                                            class="slider"></span></label>
+                                </div>
+                                <div class="toggle-setting">
+                                    <div class="toggle-info">
+                                        <span class="toggle-label">Desktop Notifications</span>
+                                        <span class="toggle-desc">Show system notifications</span>
+                                    </div>
+                                    <label class="switch"><input type="checkbox" id="settings-notif-desktop"
+                                            checked><span class="slider"></span></label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Data Panel -->
+                        <div class="settings-panel" id="settings-data">
+                            <div class="panel-header">
+                                <div class="panel-icon"><i class="fas fa-database"></i></div>
+                                <div>
+                                    <h3>Data Management</h3>
+                                    <p>Backup and manage your data</p>
+                                </div>
+                            </div>
+                            <div class="panel-content">
+                                <!-- Sync Section -->
+                                <div class="sync-section">
+                                    <div class="sync-header">
+                                        <i class="fas fa-sync-alt"></i>
+                                        <span>Sync Between Extension & Desktop</span>
+                                    </div>
+                                    <p class="sync-description">Export your data to sync with the desktop app, or import
+                                        data from the desktop app to keep everything in sync.</p>
+                                    <div class="sync-actions">
+                                        <button class="sync-btn export" id="sync-export-btn">
+                                            <i class="fas fa-file-export"></i>
+                                            <span>Export for Sync</span>
+                                        </button>
+                                        <button class="sync-btn import" id="sync-import-btn">
+                                            <i class="fas fa-file-import"></i>
+                                            <span>Import & Sync</span>
+                                        </button>
+                                    </div>
+                                    <div class="sync-options">
+                                        <label class="sync-option">
+                                            <input type="checkbox" id="sync-merge-option" checked>
+                                            <span>Merge with existing data (keeps both, updates conflicts)</span>
+                                        </label>
+                                    </div>
+
+                                    <div class="cloud-sync">
+                                        <div class="cloud-sync-header">
+                                            <i class="fas fa-cloud"></i>
+                                            <span>Account Sync</span>
+                                        </div>
+                                        <p class="cloud-sync-description">Sign in (Google or email/password), then click
+                                            Sync Now on desktop or extension to keep everything in sync.</p>
+                                        <div class="cloud-sync-form">
+                                            <!-- User Profile Card (shown when signed in) -->
+                                            <div class="user-profile-card hidden" id="firebase-user-profile">
+                                                <img class="user-avatar" id="firebase-user-avatar" src="" alt="Profile">
+                                                <div class="user-info">
+                                                    <span class="user-name" id="firebase-user-name"></span>
+                                                    <span class="user-email" id="firebase-user-email"></span>
+                                                </div>
+                                            </div>
+                                            <div class="cloud-sync-user" id="firebase-sync-user" aria-live="polite">
+                                            </div>
+                                            <input type="email" id="firebase-sync-email" class="cloud-sync-input"
+                                                placeholder="Email (optional)">
+                                            <input type="password" id="firebase-sync-password" class="cloud-sync-input"
+                                                placeholder="Password (optional)">
+                                        </div>
+                                        <div class="cloud-sync-actions">
+                                            <button class="sync-btn import" id="firebase-sync-google-btn">
+                                                <i class="fab fa-google"></i>
+                                                <span>Google Sign-In</span>
+                                            </button>
+                                            <button class="sync-btn neutral" id="firebase-sync-email-signin-btn">
+                                                <i class="fas fa-envelope"></i>
+                                                <span>Email Sign-In</span>
+                                            </button>
+                                            <button class="sync-btn neutral" id="firebase-sync-signup-btn">
+                                                <i class="fas fa-user-plus"></i>
+                                                <span>Create Account</span>
+                                            </button>
+                                        </div>
+                                        <div class="cloud-sync-actions cloud-sync-actions-secondary">
+                                            <button class="sync-btn export" id="firebase-sync-sync-btn" disabled>
+                                                <i class="fas fa-cloud-upload-alt"></i>
+                                                <span>Sync Now</span>
+                                            </button>
+                                            <button class="sync-btn neutral" id="firebase-sync-link-password-btn"
+                                                disabled>
+                                                <i class="fas fa-key"></i>
+                                                <span>Link Password</span>
+                                            </button>
+                                            <button class="sync-btn neutral" id="firebase-sync-signout-btn" disabled>
+                                                <i class="fas fa-sign-out-alt"></i>
+                                                <span>Sign Out</span>
+                                            </button>
+                                        </div>
+                                        <div class="cloud-sync-status" id="cloud-sync-status" aria-live="polite"></div>
+                                    </div>
+                                </div>
+
+                                <div class="data-divider"></div>
+
+                                <!-- App Updates (Desktop) -->
+                                <div class="cloud-sync" id="app-update-section">
+                                    <div class="cloud-sync-header">
+                                        <i class="fas fa-arrow-rotate-right"></i>
+                                        <span>App Updates</span>
+                                    </div>
+                                    <p class="cloud-sync-description">Check for the latest version, download it, then install and restart.</p>
+                                    <div class="cloud-sync-actions">
+                                        <button class="sync-btn neutral" id="app-update-check-btn">
+                                            <i class="fas fa-magnifying-glass"></i>
+                                            <span>Check for Updates</span>
+                                        </button>
+                                        <button class="sync-btn export" id="app-update-now-btn" disabled style="display:none;">
+                                            <i class="fas fa-arrow-up"></i>
+                                            <span>Update & Restart</span>
+                                        </button>
+                                    </div>
+                                    <div class="cloud-sync-status" id="app-version-info" aria-live="polite"></div>
+                                    <div class="cloud-sync-status" id="app-update-status" aria-live="polite"></div>
+                                </div>
+
+                                <div class="data-divider"></div>
+
+                                <div class="data-actions">
+                                    <button class="data-action-btn" id="export-data-btn">
+                                        <div class="action-icon"><i class="fas fa-download"></i></div>
+                                        <div class="action-info">
+                                            <span class="action-title">Export Data</span>
+                                            <span class="action-desc">Download all your data as JSON</span>
+                                        </div>
+                                    </button>
+                                    <button class="data-action-btn" id="import-data-btn">
+                                        <div class="action-icon"><i class="fas fa-upload"></i></div>
+                                        <div class="action-info">
+                                            <span class="action-title">Import Data</span>
+                                            <span class="action-desc">Restore from backup file</span>
+                                        </div>
+                                    </button>
+                                    <button class="data-action-btn danger" id="clear-data-btn">
+                                        <div class="action-icon"><i class="fas fa-trash-alt"></i></div>
+                                        <div class="action-info">
+                                            <span class="action-title">Clear All Data</span>
+                                            <span class="action-desc">Permanently delete everything</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn-save-settings" id="save-settings-btn">
+                        <i class="fas fa-check"></i> Save Changes
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- Add Task Modal - Simplified -->
+    <div class="modal" id="task-modal">
+        <div class="modal-content modal-streamlined">
+            <div class="modal-header-minimal">
+                <h2 id="task-modal-title"><i class="fas fa-plus-circle"></i> New Task</h2>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <div class="modal-body-streamlined">
+                <!-- Main Input -->
+                <div class="main-input-group">
+                    <input type="text" id="task-title" placeholder="What do you need to do?" required
+                        autocomplete="off">
+                </div>
+
+                <!-- Quick Options Row -->
+                <div class="quick-options">
+                    <div class="quick-option">
+                        <label><i class="fas fa-calendar"></i> Start</label>
+                        <input type="date" id="task-start-date">
+                    </div>
+                    <div class="quick-option">
+                        <label><i class="fas fa-flag-checkered"></i> Due</label>
+                        <input type="date" id="task-due-date" required>
+                    </div>
+                    <div class="quick-option">
+                        <label><i class="fas fa-clock"></i> Time</label>
+                        <input type="time" id="task-due-time">
+                    </div>
+                </div>
+
+                <!-- Priority Pills -->
+                <div class="priority-pills">
+                    <span class="pill-label">Priority:</span>
+                    <button type="button" class="priority-pill" data-priority="low"><i class="fas fa-minus"></i>
+                        Low</button>
+                    <button type="button" class="priority-pill active" data-priority="medium"><i
+                            class="fas fa-equals"></i> Medium</button>
+                    <button type="button" class="priority-pill" data-priority="high"><i class="fas fa-arrow-up"></i>
+                        High</button>
+                    <button type="button" class="priority-pill urgent" data-priority="urgent"><i
+                            class="fas fa-exclamation"></i> Urgent</button>
+                    <input type="hidden" id="task-priority" value="medium">
+                </div>
+
+                <!-- Repeat Options -->
+                <div class="repeat-section">
+                    <div class="repeat-toggle">
+                        <label class="toggle-label"><i class="fas fa-redo"></i> Repeat</label>
+                        <label class="switch-mini"><input type="checkbox" id="task-repeat-enabled"><span
+                                class="slider-mini"></span></label>
+                    </div>
+                    <div class="repeat-options hidden" id="task-repeat-options">
+                        <select id="task-repeat-frequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="biweekly">Every 2 Weeks</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                        <div class="repeat-end">
+                            <label>Until:</label>
+                            <select id="task-repeat-end-type">
+                                <option value="forever">Forever</option>
+                                <option value="date">End Date</option>
+                                <option value="count">After X times</option>
+                            </select>
+                            <input type="date" id="task-repeat-end-date" class="hidden">
+                            <input type="number" id="task-repeat-count" class="hidden" min="1" max="100" value="10"
+                                placeholder="Times">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reminder -->
+                <div class="reminder-row">
+                    <label><i class="fas fa-bell"></i> Remind me</label>
+                    <select id="task-reminder-time">
+                        <option value="-1">No reminder</option>
+                        <option value="0">At due time</option>
+                        <option value="5">5 min before</option>
+                        <option value="15" selected>15 min before</option>
+                        <option value="30">30 min before</option>
+                        <option value="60">1 hour before</option>
+                        <option value="1440">1 day before</option>
+                    </select>
+                </div>
+
+                <!-- Optional: Description (collapsible) -->
+                <details class="optional-details">
+                    <summary><i class="fas fa-align-left"></i> Add description</summary>
+                    <textarea id="task-description" placeholder="Add more details..."></textarea>
+                </details>
+
+                <!-- Optional: Assign to list -->
+                <details class="optional-details">
+                    <summary><i class="fas fa-list"></i> Assign to list</summary>
+                    <div class="list-assign-row">
+                        <div class="list-select-wrapper">
+                            <select id="task-list-select">
+                                <option value="">No List</option>
+                            </select>
+                            <button type="button" class="btn-new-list" id="btn-create-list" title="Create new list">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <div class="color-options" id="task-color-options" aria-label="Task color"></div>
+                        <input type="hidden" id="task-color" value="#6366f1">
+                    </div>
+                    <!-- Inline new list form -->
+                    <div class="new-list-form hidden" id="new-list-form">
+                        <input type="text" id="new-list-name" placeholder="List name" maxlength="30">
+                        <div class="color-options" id="new-list-color-options" aria-label="List color"></div>
+                        <input type="hidden" id="new-list-color" value="#6366f1">
+                        <button type="button" class="btn-save-list" id="btn-save-new-list"><i
+                                class="fas fa-check"></i></button>
+                        <button type="button" class="btn-cancel-list" id="btn-cancel-new-list"><i
+                                class="fas fa-times"></i></button>
+                    </div>
+                </details>
+
+                <!-- Add as Countdown Toggle -->
+                <div class="countdown-toggle-row">
+                    <label class="toggle-label"><i class="fas fa-hourglass-half"></i> Add as Countdown</label>
+                    <label class="switch-mini"><input type="checkbox" id="task-add-countdown"><span
+                            class="slider-mini"></span></label>
+                </div>
+
+                <!-- Hidden fields for compatibility -->
+                <input type="hidden" id="task-category" value="personal">
+                <input type="hidden" id="task-subject" value="">
+                <input type="hidden" id="task-recurring" value="false">
+                <input type="hidden" id="task-recurrence" value="weekly">
+                <input type="hidden" id="task-estimate-hours" value="0">
+                <input type="hidden" id="task-estimate-minutes" value="30">
+            </div>
+            <div class="modal-footer-streamlined">
+                <button class="btn-cancel" id="cancel-task-btn">Cancel</button>
+                <button class="btn-create" id="save-task-btn"><i class="fas fa-check"></i> Create Task</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Add Goal Modal -->
+    <div class="modal" id="goal-modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2 id="goal-modal-title">Create New Goal</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Goal Title *</label>
+                    <input type="text" id="goal-title-input" placeholder="What do you want to achieve?" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="goal-description-input" placeholder="Describe your goal in detail..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="goal-category-input">
+                            <option value="academic">Academic</option>
+                            <option value="skill">Skill Development</option>
+                            <option value="project">Project</option>
+                            <option value="career">Career</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="goal-priority-input">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Target Date *</label>
+                    <input type="date" id="goal-target-date-input" required>
+                </div>
+                <div class="form-group">
+                    <label>Milestones</label>
+                    <div class="milestones-list" id="milestones-list">
+                        <!-- Milestones added dynamically -->
+                    </div>
+                    <button type="button" class="btn-secondary" id="add-milestone-btn">
+                        <i class="fas fa-plus"></i> Add Milestone
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary cancel-modal">Cancel</button>
+                <button class="btn-primary" id="save-goal-btn">Create Goal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Timer Modal -->
+    <div class="modal" id="custom-timer-modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Custom Timer</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Focus Duration (minutes)</label>
+                    <input type="number" id="custom-focus-minutes" min="1" max="180" value="45">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary cancel-modal">Cancel</button>
+                <button class="btn-primary" id="start-custom-timer-btn">Start Timer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Sliding Notification Panel -->
+    <div class="sliding-notification-container" id="sliding-notification-container"></div>
+
+    <!-- Floating Action Button for Quick Task Creation -->
+    <div class="fab-container" id="fab-container">
+        <button class="fab-main" id="fab-main" title="Quick Actions (Alt+Q)">
+            <i class="fas fa-plus"></i>
+        </button>
+        <!-- Task List Modal -->
+        <div class="modal" id="task-list-modal">
+            <div class="modal-content small">
+                <div class="modal-header">
+                    <h2 id="task-list-modal-title">Create New List</h2>
+                    <button class="close-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>List Name *</label>
+                        <input type="text" id="task-list-name" placeholder="e.g., Math Homework" required>
+                    </div>
+                    <div class="form-group">
+                        <label>List Color</label>
+                        <div class="color-options" id="task-list-colors">
+                            <button type="button" class="color-btn active" data-color="#6366f1"></button>
+                            <button type="button" class="color-btn" data-color="#3b82f6"></button>
+                            <button type="button" class="color-btn" data-color="#10b981"></button>
+                            <button type="button" class="color-btn" data-color="#f59e0b"></button>
+                            <button type="button" class="color-btn" data-color="#ef4444"></button>
+                            <button type="button" class="color-btn" data-color="#8b5cf6"></button>
+                            <button type="button" class="color-btn" data-color="#06b6d4"></button>
+                            <button type="button" class="color-btn" data-color="#ec4899"></button>
+                            <button type="button" class="color-btn" data-color="#14b8a6"></button>
+                            <button type="button" class="color-btn" data-color="#64748b"></button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Icon</label>
+                        <div class="icon-options" id="task-list-icons">
+                            <button type="button" class="icon-btn active" data-icon="list"><i
+                                    class="fas fa-list"></i></button>
+                            <button type="button" class="icon-btn" data-icon="book"><i class="fas fa-book"></i></button>
+                            <button type="button" class="icon-btn" data-icon="calculator"><i
+                                    class="fas fa-calculator"></i></button>
+                            <button type="button" class="icon-btn" data-icon="flask"><i
+                                    class="fas fa-flask"></i></button>
+                            <button type="button" class="icon-btn" data-icon="code"><i class="fas fa-code"></i></button>
+                            <button type="button" class="icon-btn" data-icon="paint-brush"><i
+                                    class="fas fa-paint-brush"></i></button>
+                            <button type="button" class="icon-btn" data-icon="music"><i
+                                    class="fas fa-music"></i></button>
+                            <button type="button" class="icon-btn" data-icon="dumbbell"><i
+                                    class="fas fa-dumbbell"></i></button>
+                            <button type="button" class="icon-btn" data-icon="briefcase"><i
+                                    class="fas fa-briefcase"></i></button>
+                            <button type="button" class="icon-btn" data-icon="home"><i class="fas fa-home"></i></button>
+                            <button type="button" class="icon-btn" data-icon="star"><i class="fas fa-star"></i></button>
+                            <button type="button" class="icon-btn" data-icon="heart"><i
+                                    class="fas fa-heart"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-danger" id="delete-task-list-btn" style="display:none">Delete</button>
+                    <button class="btn-secondary cancel-modal">Cancel</button>
+                    <button class="btn-primary" id="save-task-list-btn">Create List</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Idle Category Modal -->
+        <div class="modal" id="idle-category-modal">
+            <div class="modal-content small">
+                <div class="modal-header">
+                    <h2 id="category-modal-title">Add Category</h2>
+                    <button class="close-modal" id="close-idle-category-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="category-id">
+                    <div class="form-group">
+                        <label>Category Name *</label>
+                        <input type="text" id="category-name" placeholder="e.g., Social Media, Gaming" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Color</label>
+                        <div class="color-options" id="category-color-options" aria-label="Category color"></div>
+                        <input type="hidden" id="category-color" value="#6366f1">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="cancel-idle-category-btn">Cancel</button>
+                    <button class="btn-primary" id="save-idle-category-btn">Save Category</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="fab-container">
+            <div class="fab-menu" id="fab-menu">
+                <button class="fab-action" data-action="quick-task" title="New Task (Alt+N)">
+                    <i class="fas fa-tasks"></i>
+                    <span>New Task</span>
+                </button>
+                <button class="fab-action" data-action="quick-focus" title="Start Focus (Alt+F)">
+                    <i class="fas fa-clock"></i>
+                    <span>Focus</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Quick Entry Modal -->
+        <div class="modal" id="quick-entry-modal">
+            <div class="modal-backdrop" data-action="close-quick-entry"></div>
+            <div class="modal-content quick-entry-content">
+                <input type="text" id="quick-entry-input"
+                    placeholder="Quick add: 'Buy groceries today !high #shopping' or 'Meeting tomorrow 2pm'"
+                    autocomplete="off">
+                <div class="quick-entry-hints">
+                    <span class="hint"><kbd>today</kbd> / <kbd>tomorrow</kbd> for due date</span>
+                    <span class="hint"><kbd>!high</kbd> / <kbd>!urgent</kbd> / <kbd>!low</kbd> for priority</span>
+                    <span class="hint"><kbd>#work</kbd> / <kbd>#study</kbd> for category</span>
+                </div>
+                <div class="quick-entry-actions">
+                    <button type="button" class="btn-ghost" data-action="close-quick-entry">Cancel</button>
+                    <button type="button" class="btn-primary" id="quick-entry-submit">
+                        <i class="fas fa-plus"></i> Create Task
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Time Limit Modal -->
+        <div class="modal" id="time-limit-modal">
+            <div class="modal-backdrop" data-action="close-time-limit"></div>
+            <div class="modal-content modal-streamlined">
+                <div class="modal-header-minimal">
+                    <h2 id="time-limit-modal-title"><i class="fas fa-stopwatch"></i> Add Time Limit</h2>
+                    <button class="close-modal-btn" data-action="close-time-limit">&times;</button>
+                </div>
+                <div class="modal-body-streamlined">
+                    <div class="input-group">
+                        <label for="time-limit-domain"><i class="fas fa-globe"></i> Website</label>
+                        <input type="text" id="time-limit-domain" placeholder="e.g., youtube.com" required>
+                        <small class="input-hint">Enter the domain without https:// or www.</small>
+                    </div>
+                    <div class="input-group">
+                        <label for="time-limit-minutes"><i class="fas fa-clock"></i> Daily Limit (minutes)</label>
+                        <input type="number" id="time-limit-minutes" min="1" max="1440" value="60" required>
+                        <div class="time-presets">
+                            <button type="button" class="time-preset-btn" data-minutes="15">15m</button>
+                            <button type="button" class="time-preset-btn" data-minutes="30">30m</button>
+                            <button type="button" class="time-preset-btn active" data-minutes="60">1h</button>
+                            <button type="button" class="time-preset-btn" data-minutes="120">2h</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer-streamlined">
+                    <button type="button" class="btn-ghost" data-action="close-time-limit">Cancel</button>
+                    <button type="button" class="btn-primary" id="save-time-limit-btn">
+                        <i class="fas fa-check"></i> Save Limit
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scripts - logger and utils must load first as other scripts depend on them -->
+        <script src="storage-polyfill.js"></script>
+        <script src="logger.js"></script>
+        <script src="utils.js"></script>
+        <script src="data.js"></script>
+        <script src="firebase-config.js"></script>
+        <script src="lib/firebase/firebase-app-compat.js"></script>
+        <script src="lib/firebase/firebase-auth-compat.js"></script>
+        <script src="lib/firebase/firebase-firestore-compat.js"></script>
+        <script src="firebase-sync.js"></script>
+        <script src="notification-sounds.js"></script>
+        <script src="notifications.js"></script>
+        <script src="habit_tracker_calendar.js"></script>
+        <script src="app.js?v=5"></script>
+        <script src="schedule.js?v=15"></script>
+        <script src="tasks.js?v=5"></script>
+        <script src="goals.js"></script>
+        <script src="focus.js"></script>
+        <script src="analytics.js"></script>
+        <script src="time-tracker.js"></script>
+        <script src="blocker.js"></script>
+        <script src="motivation.js"></script>
+        <script src="idle.js"></script>
+        <script src="revisions.js"></script>
+
+        <!-- Donation Modal -->
+        <div id="donate-modal" class="donate-modal" style="display: none;">
+            <div class="donate-modal-backdrop"></div>
+            <div class="donate-modal-content">
+                <button type="button" class="donate-modal-close" aria-label="Close">&times;</button>
+                <div class="donate-modal-header">
+                    <i class="fas fa-heart"></i>
+                    <h2>Support Development</h2>
+                </div>
+                <p class="donate-modal-desc">Love this tool? Your contributions help keep this project ad-free and
+                    maintained.</p>
+                <div class="donate-options">
+                    <a href="https://paypal.me/ahmadao963" target="_blank" rel="noopener noreferrer"
+                        class="donate-option donate-paypal">
+                        <i class="fab fa-paypal"></i>
+                        <span>PayPal</span>
+                    </a>
+                    <a href="https://buy.stripe.com/6oU6oG2SigjjcG0aJs08g00" target="_blank" rel="noopener noreferrer"
+                        class="donate-option donate-stripe">
+                        <i class="fab fa-stripe"></i>
+                        <span>Card / Stripe</span>
+                    </a>
+                </div>
+                <p class="donate-modal-thanks">Thank you for your support! 💖</p>
+            </div>
+        </div>
+</body>
+
+</html>

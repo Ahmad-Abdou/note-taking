@@ -1,0 +1,666 @@
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive settings grid */
+@media (max-width: 900px) {
+    .settings-content {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-section.full-width {
+        grid-column: 1;
+    }
+
+    .settings-tabs {
+        flex-wrap: wrap;
+    }
+
+    .dashboard-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .dashboard-grid-modern {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 1400px) {
+    .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .schedule-card,
+    .tasks-card,
+    .deadlines-card,
+    .progress-card,
+    .goals-preview-card {
+        grid-column: span 1;
+    }
+
+    .quick-actions-card {
+        grid-column: span 2;
+    }
+
+    .analytics-overview {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .blocker-content {
+        grid-template-columns: 1fr;
+    }
+
+    .blocker-status-card {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 1024px) {
+    .sidebar {
+        width: var(--sidebar-collapsed);
+    }
+
+    .sidebar .logo span,
+    .sidebar .nav-item span,
+    .sidebar .stat-label,
+    .sidebar .quick-stats {
+        display: none;
+    }
+
+    .sidebar .nav-item {
+        justify-content: center;
+        padding: var(--spacing-md);
+    }
+
+    .sidebar .nav-item .badge {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        margin: 0;
+    }
+
+    .sidebar-footer {
+        padding: var(--spacing-md);
+    }
+
+    .sidebar-footer .btn-primary span {
+        display: none;
+    }
+
+    /* Fix quick-focus-btn for small windows */
+    #quick-focus-btn {
+        display: flex !important;
+        flex-wrap: wrap;
+        height: 88px;
+        width: 100%;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+    }
+
+    #quick-focus-btn i {
+        flex-basis: 100%;
+        margin-bottom: 4px;
+    }
+
+    #quick-focus-btn span {
+        flex-basis: 100%;
+        font-size: 0.85rem;
+    }
+
+    .main-content {
+        margin-left: var(--sidebar-collapsed);
+        width: calc(100% - var(--sidebar-collapsed));
+        max-width: calc(100% - var(--sidebar-collapsed));
+        min-width: 0;
+    }
+
+    .timer-options {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .focus-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .kanban-board {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+
+    /* Fix quick-focus-btn for mobile/small screens */
+    #quick-focus-btn {
+        display: flex !important;
+        flex-wrap: wrap;
+        height: 88px;
+        width: 100%;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        padding: var(--spacing-sm);
+    }
+
+    #quick-focus-btn i {
+        flex-basis: 100%;
+        margin-bottom: 4px;
+        font-size: 1.2rem;
+    }
+
+    #quick-focus-btn span {
+        flex-basis: 100%;
+        font-size: 0.85rem;
+        line-height: 1.2;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .schedule-card,
+    .tasks-card,
+    .deadlines-card,
+    .progress-card,
+    .goals-preview-card,
+    .quick-actions-card {
+        grid-column: span 1;
+    }
+
+    .quick-actions-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .productivity-score-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .page {
+        padding: var(--spacing-md);
+    }
+
+    .task-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-group input {
+        width: 100%;
+    }
+
+    .session-settings {
+        grid-template-columns: 1fr;
+    }
+
+    .goals-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-overview {
+        grid-template-columns: 1fr;
+    }
+
+    /* Responsive Focus Mode */
+    .timer-options-redesign {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .timer-option-card {
+        padding: var(--spacing-md);
+    }
+
+    .option-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.2rem;
+    }
+
+    .option-time {
+        font-size: 1.2rem;
+    }
+
+    .settings-row {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-toggles {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .toggle-pill {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        display: none;
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .quick-actions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .focus-timer-display span {
+        font-size: 4rem;
+    }
+
+    .timer-options {
+        grid-template-columns: 1fr;
+    }
+
+    .focus-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================================================
+   FLOATING ACTION BUTTON (FAB)
+   ============================================================================ */
+
+.fab-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 1000;
+}
+
+.fab-main {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    border: none;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    transition: all var(--transition-normal);
+}
+
+.fab-main:hover {
+    background: var(--primary-dark);
+    transform: scale(1.1);
+    box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
+}
+
+.fab-main.active {
+    transform: rotate(45deg);
+    background: var(--danger);
+}
+
+.fab-menu {
+    position: absolute;
+    bottom: 70px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: all var(--transition-normal);
+}
+
+.fab-container.open .fab-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.fab-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 30px;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-fast);
+    color: var(--text-primary);
+}
+
+.fab-action:hover {
+    background: var(--bg-tertiary);
+    transform: translateX(-8px);
+    border-color: var(--primary);
+}
+
+.fab-action i {
+    width: 24px;
+    text-align: center;
+    color: var(--primary);
+}
+
+.fab-action span {
+    font-weight: 500;
+}
+
+/* ============================================================================
+   QUICK ENTRY MODAL
+   ============================================================================ */
+
+#quick-entry-modal {
+    z-index: 1100;
+}
+
+#quick-entry-modal .modal-backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.quick-entry-content {
+    max-width: 600px;
+    width: 90%;
+    padding: 0;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#quick-entry-input {
+    width: 100%;
+    padding: 20px 24px;
+    font-size: 1.1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    outline: none;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#quick-entry-input::placeholder {
+    color: var(--text-muted);
+}
+
+.quick-entry-hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px 24px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.quick-entry-hints .hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.quick-entry-hints kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    color: var(--primary);
+}
+
+.quick-entry-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+}
+
+/*
+   Sliding notifications were deprecated in favor of the unified toast component.
+   Keep only one notification style across the app.
+*/
+
+/* Settings divider */
+.setting-divider {
+    position: relative;
+    text-align: center;
+    margin: 24px 0 16px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+}
+
+.setting-divider span {
+    background: var(--bg-card);
+    padding: 0 12px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================================================
+   WEEK NUMBER BADGE
+   ============================================================================ */
+
+.week-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-right: 10px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    text-transform: uppercase;
+}
+
+/* ============================================================================
+   FOCUS SETTINGS CARD (in Focus Mode page)
+   ============================================================================ */
+
+.focus-settings-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin-top: var(--spacing-lg);
+}
+
+.focus-settings-card h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.focus-settings-card h3 i {
+    color: var(--primary);
+}
+
+.focus-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.focus-settings-grid .setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+}
+
+.focus-settings-grid .setting-item label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.focus-settings-grid .setting-item select {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+/* ============================================================================
+   DAILY TARGETS CARD (in Goals page)
+   ============================================================================ */
+
+.daily-targets-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.daily-targets-card h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.daily-targets-card h3 i {
+    color: var(--primary);
+}
+
+.targets-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+}
+
+.target-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.target-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+}
+
+.target-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.target-info label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.target-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.target-input input {
+    width: 70px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.target-input input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.target-input span {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.daily-targets-card .btn-sm {
+    padding: 10px 20px;
+    font-size: 0.85rem;
+}
+
+/* ============================================================================
+   REDESIGNED TASK MODAL
+   ============================================================================ */
+.task-modal-redesign {
+    max-width: 480px;
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}

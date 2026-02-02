@@ -1,0 +1,58 @@
+{
+    "name": "productivity-hub-desktop",
+    "version": "1.0.0",
+    "description": "Productivity Hub - Focus mode, task management, schedule planning, and productivity tracking",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Ahmad-Abdou/note-taking.git"
+    },
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "build:clean": "node scripts/clean-dist.js",
+        "build": "npm run build:clean && electron-builder --win portable",
+        "build:installer": "npm run build:clean && electron-builder --win nsis",
+        "release:publish": "npm run build:clean && electron-builder --win nsis --publish always"
+    },
+    "author": "Ahmad",
+    "license": "MIT",
+    "devDependencies": {
+        "electron": "^28.0.0",
+        "electron-builder": "^24.9.1",
+        "electron-icon-maker": "^0.0.5",
+        "png-to-ico": "^3.0.1",
+        "rimraf": "^6.0.1"
+    },
+    "dependencies": {
+        "build": "^0.1.4",
+        "electron-store": "^8.1.0",
+        "electron-updater": "^6.3.0"
+    },
+    "build": {
+        "appId": "com.productivity.hub",
+        "productName": "Productivity Hub",
+        "win": {
+            "target": [
+                "portable",
+                "nsis"
+            ],
+            "icon": "assets/icons/win/icon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "renderer/**/*",
+            "assets/**/*"
+        ],
+        "publish": [
+            {
+                "provider": "github",
+                "releaseType": "release"
+            }
+        ]
+    }
+}

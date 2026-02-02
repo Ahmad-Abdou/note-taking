@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extension Settings</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="shared/toast.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            color: #1a73e8;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+        }
+
+        .btn {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #1557b0;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .help-text a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+
+        .help-text a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>⚙️ Extension Settings</h1>
+        <p class="subtitle">Configure your Gemini AI integration</p>
+
+        <div>
+            <label for="api-key">Gemini API Key</label>
+            <input type="text" id="api-key" placeholder="Enter your Gemini API key here">
+            <p class="help-text">
+                Don't have an API key? <a href="https://aistudio.google.com/app/apikey" target="_blank">Get one from
+                    Google AI Studio</a>
+            </p>
+        </div>
+
+        <hr style="margin: 20px 0; border-color: #eee;">
+
+        <h2 style="font-size: 18px; margin-bottom: 15px;">📄 PDF Viewer Settings</h2>
+        
+        <div class="toggle-option" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <label for="default-pdf-reader" style="margin-bottom: 4px;">Use as Default PDF Reader</label>
+                <p class="help-text" style="margin-top: 4px;">
+                    When enabled, all PDF files opened in the browser will use this extension's 
+                    enhanced PDF viewer with highlights, notes, and citations.
+                </p>
+            </div>
+            <label class="switch" style="flex-shrink: 0; margin-left: 15px;">
+                <input type="checkbox" id="default-pdf-reader" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <div class="info-box" style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+            <p style="margin: 0; font-size: 13px; color: #1565c0;">
+                💡 <strong>Tip:</strong> To fully set this extension as your default PDF viewer, you may also need to:
+            </p>
+            <ol style="margin: 8px 0 0 0; padding-left: 20px; font-size: 12px; color: #1976d2;">
+                <li>Go to <code>edge://settings/content/pdfDocuments</code></li>
+                <li>Enable "Always open PDF files externally" to disable Edge's built-in viewer</li>
+                <li>Or drag & drop PDFs into the browser to use this extension's viewer</li>
+            </ol>
+        </div>
+
+        <hr style="margin: 20px 0; border-color: #eee;">
+
+        <h2 style="font-size: 18px; margin-bottom: 15px;">🔔 Notifications</h2>
+
+        <div class="toggle-option" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div>
+                <label for="task-reminders-enabled" style="margin-bottom: 4px;">Task Reminders</label>
+                <p class="help-text" style="margin-top: 4px;">
+                    When disabled, the extension will stop showing task reminder popups on websites.
+                </p>
+            </div>
+            <label class="switch" style="flex-shrink: 0; margin-left: 15px;">
+                <input type="checkbox" id="task-reminders-enabled" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <button id="save-btn" class="btn">Save Settings</button>
+    </div>
+
+    <style>
+        /* Toggle switch styles */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+        }
+        input:checked + .slider {
+            background-color: #1a73e8;
+        }
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+        .slider.round {
+            border-radius: 26px;
+        }
+        .slider.round:before {
+            border-radius: 50%;
+        }
+    </style>
+
+    <script src="shared/toast.js"></script>
+    <script src="options.js"></script>
+</body>
+
+</html>

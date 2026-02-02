@@ -1,0 +1,67 @@
+﻿    background: linear-gradient(
+        90deg,
+        var(--bg-tertiary) 25%,
+        var(--bg-secondary) 50%,
+        var(--bg-tertiary) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* Trend Lines Animation */
+.trend-line {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: drawLine 2s ease-out forwards;
+}
+
+@keyframes drawLine {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Period Selector Enhancement */
+#analytics-period {
+    transition: all 0.2s ease;
+}
+
+#analytics-period:hover {
+    border-color: var(--primary);
+}
+
+#analytics-period:focus {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Export Button Animation */
+#export-report-btn {
+    transition: all 0.3s ease;
+}
+
+#export-report-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#export-report-btn:hover i {
+    animation: bounce 0.5s ease;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+/* Responsive Chart Animations */
+@media (prefers-reduced-motion: reduce) {
+    .chart-bar-wrapper .chart-bar,
+    .pie-chart path,
+    .category-item,
+    .heatmap-cell,
+    .overview-stat,
+    .insight-item {
+        animation: none;
+        opacity: 1;
+    }
+}

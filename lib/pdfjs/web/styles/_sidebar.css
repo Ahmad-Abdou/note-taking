@@ -1,0 +1,318 @@
+/**
+ * ============================================================================
+ * PDF VIEWER - SIDEBAR STYLES
+ * ============================================================================
+ */
+
+/* ========== Sidebar Container ========== */
+#sidebarContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100%;
+    background-color: #252526;
+    border-right: 1px solid #1e1e1e;
+    overflow-x: hidden;
+    overflow-y: auto;
+    transition: width 0.25s ease;
+    z-index: 100;
+}
+
+
+#mainContainer.sidebarOpen #sidebarContainer {
+    width: 280px;
+    visibility: visible;
+}
+
+#mainContainer.sidebarOpen #viewerContainer {
+    left: 280px;
+}
+
+#sidebarContent {
+    width: 280px;
+    padding: 12px;
+    overflow-y: auto;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* ========== Sidebar Thumbnails ========== */
+#thumbnailView {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 5px;
+}
+
+.thumbnail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 8px;
+    transition: background-color 0.2s;
+}
+
+.thumbnail:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.thumbnail.selected {
+    background-color: rgba(66, 133, 244, 0.3);
+}
+
+.thumbnailImage {
+    border: 1px solid #444;
+    border-radius: 2px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.thumbnailNumber {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888;
+}
+
+/* ========== Sidebar Outline - Modern Design ========== */
+#outlineView {
+    padding: 8px;
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
+}
+
+/* Header for Outline section */
+#outlineView::before {
+    content: 'Table of Contents';
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    padding: 8px 12px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+}
+
+/* Outline list created by sidebar_panel_manager.js */
+.outlineList,
+.outlineList ul,
+.outlineList li {
+    list-style: none !important;
+    list-style-type: none !important;
+}
+
+.outlineList {
+    padding: 0;
+    margin: 0;
+}
+
+.outlineList ul {
+    padding: 0;
+    margin: 0;
+    margin-left: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    max-height: 5000px;
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+    opacity: 1;
+}
+
+.outlineList li {
+    margin: 1px 0;
+}
+
+/* Collapsed state - smooth animation */
+.outlineList li.collapsed>ul {
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.25s ease-in, opacity 0.2s ease-in;
+}
+
+/* Outline item container */
+.outline-item-container {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    gap: 8px;
+    margin: 2px 0;
+    position: relative;
+}
+
+.outline-item-container:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+}
+
+.outline-item-container.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(139, 92, 246, 0.25) 100%);
+    border-left: 2px solid #8b5cf6;
+    margin-left: -2px;
+}
+
+/* Link styling - OVERRIDE BROWSER DEFAULTS */
+#outlineView a,
+#outlineView .outline-item-container a {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-size: 13px;
+    font-weight: 400;
+    text-decoration: none !important;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+    line-height: 1.4;
+}
+
+#outlineView a:visited,
+#outlineView a:link,
+#outlineView a:active {
+    color: rgba(255, 255, 255, 0.85) !important;
+    text-decoration: none !important;
+}
+
+#outlineView .outline-item-container:hover a {
+    color: #fff !important;
+    text-decoration: none !important;
+}
+
+/* Level-based styling - deeper levels get subtle color changes */
+.outlineList>li>.outline-item-container a {
+    font-weight: 500;
+    color: #e0e0e8;
+}
+
+.outlineList>li>ul>li>.outline-item-container a {
+    font-size: 12.5px;
+}
+
+.outlineList>li>ul>li>ul>li>.outline-item-container a {
+    font-size: 12px;
+    color: #9898a0;
+}
+
+/* Toggle button - animated chevron */
+.outline-toggle {
+    font-size: 8px;
+    color: #6366f1;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.25s ease, color 0.2s ease, background-color 0.2s ease;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.outline-toggle:hover {
+    color: #818cf8;
+    background: rgba(99, 102, 241, 0.2);
+}
+
+/* Rotate chevron when expanded */
+li:not(.collapsed)>.outline-item-container>.outline-toggle {
+    transform: rotate(90deg);
+}
+
+.outline-toggle.spacer {
+    visibility: hidden;
+    background: transparent;
+}
+
+/* Legacy outlineItem styles (for compatibility) */
+.outlineItem {
+    padding: 8px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    color: #b8b8c0;
+    font-size: 13px;
+    display: block;
+    text-decoration: none;
+}
+
+.outlineItem:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+    color: #fff;
+}
+
+.outlineItems {
+    padding-left: 16px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Loading state */
+.outline-loading {
+    padding: 20px;
+    color: #888;
+    font-size: 13px;
+    text-align: center;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Empty state */
+.outline-empty {
+    padding: 20px;
+    color: #666;
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* ========== Sidebar Tabs ========== */
+.sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid #444;
+    margin-bottom: 10px;
+}
+
+.sidebar-tab {
+    flex: 1;
+    padding: 10px;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+}
+
+.sidebar-tab:hover {
+    color: #ccc;
+}
+
+.sidebar-tab.active {
+    color: #4285f4;
+    border-bottom-color: #4285f4;
+}
+
+/* ========== Sidebar Views ========== */
+.sidebar-view {
+    display: none;
+}
+
+.sidebar-view.active {
+    display: block;
+}

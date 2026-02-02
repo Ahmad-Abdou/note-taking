@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Productivity Hub</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="../shared/toast.css">
+</head>
+
+<body>
+    <div class="header">
+        <h2>Productivity Hub</h2>
+        <i class="fas fa-rocket" style="color: #667eea;"></i>
+    </div>
+
+    <!-- Focus Session Status (shown when active) -->
+    <div id="focus-status" class="focus-status" style="display: none;">
+        <div class="focus-status-header">
+            <i class="fas fa-brain"></i>
+            <span>Focus Session Active</span>
+        </div>
+        <div class="focus-status-timer" id="focus-timer-display">25:00</div>
+        <div class="focus-status-task" id="focus-task-display"></div>
+        <div class="focus-sessions-count" id="focus-sessions-count"
+            style="font-size: 12px; color: #888; margin-bottom: 8px;">
+            <i class="fas fa-fire" style="color: #f59e0b;"></i>
+            <span id="popup-sessions-today">0</span> sessions today
+        </div>
+        <div class="focus-status-actions">
+            <button id="pause-focus-btn" class="btn-sm btn-secondary">
+                <i class="fas fa-pause"></i>
+            </button>
+            <button id="stop-focus-btn" class="btn-sm btn-danger">
+                <i class="fas fa-stop"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Today's Tasks Section (shown when no focus session) -->
+    <div id="todays-tasks" class="todays-tasks-section">
+        <div class="todays-tasks-header">
+            <div class="todays-tasks-title">
+                <i class="fas fa-calendar-day" style="color: #8b5cf6;"></i>
+                <span>Today's Tasks</span>
+            </div>
+            <span class="task-count-badge" id="today-task-count">0</span>
+        </div>
+
+        <!-- Quick Add Task Form -->
+        <div class="quick-add-task-form">
+            <input type="text" id="quick-task-title" placeholder="Add a new task..." maxlength="100">
+            <select id="quick-task-priority">
+                <option value="medium">Med</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+            </select>
+            <button id="quick-add-btn" title="Add Task">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+
+        <div class="todays-tasks-list" id="todays-tasks-list">
+            <!-- Tasks loaded dynamically -->
+        </div>
+
+        <!-- Overdue Tasks Section -->
+        <div id="overdue-tasks-section" class="overdue-tasks-section" style="display: none;">
+            <div class="overdue-tasks-header">
+                <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
+                <span>Overdue</span>
+                <span class="overdue-count-badge" id="overdue-task-count">0</span>
+            </div>
+            <div class="overdue-tasks-list" id="overdue-tasks-list">
+                <!-- Overdue tasks loaded dynamically -->
+            </div>
+        </div>
+        <div class="quick-focus-fallback" id="quick-focus-fallback">
+            <div class="quick-focus-mini-title">Quick Focus</div>
+            <div class="quick-focus-mini-btns">
+                <button class="focus-time-btn-mini" data-minutes="15">15m</button>
+                <button class="focus-time-btn-mini" data-minutes="25">25m</button>
+                <button class="focus-time-btn-mini" data-minutes="45">45m</button>
+                <button class="focus-time-btn-mini" data-minutes="60">1h</button>
+                <button class="focus-time-btn-mini free-focus-btn" id="free-focus-popup-btn"
+                    title="Free Focus - No time limit">∞</button>
+            </div>
+
+            <div class="custom-focus-input">
+                <input type="number" id="custom-focus-minutes" min="1" max="180" placeholder="Custom">
+                <span>min</span>
+                <button id="start-custom-focus" class="focus-time-btn-mini">Go</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="open-productivity-btn" class="btn btn-primary"
+            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <i class="fas fa-rocket"></i> Open Productivity Hub
+        </button>
+        <button id="open-settings-btn" class="btn btn-secondary">
+            <i class="fas fa-cog" style="color: #666;"></i> Extension Settings
+        </button>
+    </div>
+
+    <script src="../shared/toast.js"></script>
+    <script src="menu.js"></script>
+</body>
+
+</html>
