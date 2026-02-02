@@ -158,6 +158,8 @@
         const merge = getMergeOption();
         const docRef = db.collection('syncSnapshots').doc(user.uid);
 
+        let didImport = false;
+
         setStatus('Syncing… downloading cloud data', 'info');
         const snap = await docRef.get();
         const remotePayload = snap.exists ? snap.data()?.payload : null;
@@ -165,6 +167,7 @@
         if (typeof remotePayload === 'string' && remotePayload.trim()) {
             const result = await window.ProductivityData.DataStore.importAllData(remotePayload, { merge });
             if (!result?.success) throw new Error(result?.error || 'Import failed');
+            didImport = true;
         }
 
         setStatus('Syncing… uploading local data', 'info');
@@ -177,7 +180,14 @@
             updatedBy: 'desktop'
         }, { merge: true });
 
-        setStatus('Synced successfully.', 'success');
+        if (didImport) {
+            setStatus('Synced successfully. Reloading to show updated data…', 'success');
+            setTimeout(() => {
+                try { window.location.reload(); } catch (_) { /* ignore */ }
+            }, 700);
+        } else {
+            setStatus('Synced successfully.', 'success');
+        }
     }
 
     function wire() {
