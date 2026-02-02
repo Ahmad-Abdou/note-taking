@@ -14,6 +14,39 @@ let mainWindow;
 let tray;
 let isQuitting = false;
 
+let didStartApp = false;
+
+function wireSecondInstanceHandler() {
+    // Focus existing instance when user tries to open a second one.
+    app.on('second-instance', () => {
+        try {
+            if (mainWindow) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        } catch (_) {
+            // ignore
+        }
+    });
+}
+
+function startApp() {
+    if (didStartApp) return;
+    didStartApp = true;
+
+    createWindow();
+    createTray();
+    registerShortcuts();
+    initAutoUpdater();
+
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        }
+    });
+}
+
 function prepareToQuit(reason = 'quit') {
     isQuitting = true;
 
@@ -286,40 +319,35 @@ function registerShortcuts() {
     });
 }
 
-// App ready
-app.whenReady().then(() => {
-    // Prevent multiple app instances (a common cause of update installers claiming
-    // the app is still running).
+// Single instance lock
+// Note: During auto-update, the installer may relaunch the app very quickly.
+// If the old instance is still exiting, the lock can be temporarily unavailable.
+// We retry once after a short delay to avoid "updated then immediately closed".
+function acquireSingleInstanceLockWithRetry() {
     const gotLock = app.requestSingleInstanceLock();
-    if (!gotLock) {
-        prepareToQuit('second-instance');
-        app.quit();
-        return;
-    }
+    if (gotLock) return true;
 
-    app.on('second-instance', () => {
+    setTimeout(() => {
         try {
-            if (mainWindow) {
-                if (mainWindow.isMinimized()) mainWindow.restore();
-                mainWindow.show();
-                mainWindow.focus();
+            const gotRetry = app.requestSingleInstanceLock();
+            if (!gotRetry) {
+                app.quit();
+                return;
             }
+            wireSecondInstanceHandler();
+            app.whenReady().then(startApp);
         } catch (_) {
-            // ignore
+            app.quit();
         }
-    });
+    }, 2500);
 
-    createWindow();
-    createTray();
-    registerShortcuts();
-    initAutoUpdater();
+    return false;
+}
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
-});
+if (acquireSingleInstanceLockWithRetry()) {
+    wireSecondInstanceHandler();
+    app.whenReady().then(startApp);
+}
 
 // Quit when all windows closed (except on macOS)
 app.on('window-all-closed', () => {
