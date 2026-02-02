@@ -921,6 +921,12 @@
     flex-wrap: wrap;
 }
 
+/* App update button busy state */
+#app-update-now-btn[data-busy="1"] {
+    opacity: 0.85;
+    cursor: not-allowed;
+}
+
 .cloud-sync-actions-secondary {
     margin-top: var(--spacing-sm);
 }

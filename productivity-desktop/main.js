@@ -149,17 +149,8 @@ function initAutoUpdater() {
                     // Our window close handler normally hides to tray.
                     prepareToQuit('update_install');
 
-                    // Fail-safe: if something still prevents shutdown (e.g., odd event listeners),
-                    // force exit quickly so the installer doesn't prompt the user to close the app.
-                    setTimeout(() => {
-                        try {
-                            app.exit(0);
-                        } catch (_) {
-                            try { process.exit(0); } catch (_) { /* ignore */ }
-                        }
-                    }, 1500);
-
-                    // Trigger installer silently; it will quit the app and run update.
+                    // Trigger installer silently; NSIS hooks handle terminating any lingering app
+                    // process and re-launching after the silent update.
                     autoUpdater.quitAndInstall(true, true);
                 } catch (e) {
                     sendUpdaterStatus({ state: 'error', message: e?.message || String(e) });

@@ -1594,6 +1594,21 @@ function initializeSettings() {
         const updatesApi = window.electronAPI?.updates;
         const hasUpdater = !!(updatesApi && typeof updatesApi.check === 'function');
 
+        let updateInProgress = false;
+
+        const setUpdateNowLabel = (label) => {
+            if (!updateNowBtn) return;
+            const span = updateNowBtn.querySelector('span');
+            if (span) span.textContent = label;
+        };
+
+        const setUpdateNowBusy = (busy) => {
+            updateInProgress = !!busy;
+            if (!updateNowBtn) return;
+            updateNowBtn.disabled = busy;
+            updateNowBtn.dataset.busy = busy ? '1' : '0';
+        };
+
         const setStatus = (text) => {
             if (statusEl) statusEl.textContent = text || '';
         };
@@ -1635,25 +1650,37 @@ function initializeSettings() {
                 if (state === 'checking') {
                     setStatus('Checking for updates...');
                     setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: false });
+                    setUpdateNowBusy(false);
+                    setUpdateNowLabel('Update & Restart');
                 } else if (state === 'available') {
                     const v = payload.version ? `v${payload.version}` : 'a newer version';
                     setStatus(`Update available: ${v}`);
                     setButtons({ canCheck: true, canUpdateNow: true, showUpdateNow: true });
+                    setUpdateNowBusy(false);
+                    setUpdateNowLabel('Update & Restart');
                     showToast?.('info', 'Update Available', `A new version (${v}) is available.`);
                 } else if (state === 'not-available') {
                     setStatus('You are already on the latest version.');
                     setButtons({ canCheck: true, canUpdateNow: false, showUpdateNow: false });
+                    setUpdateNowBusy(false);
+                    setUpdateNowLabel('Update & Restart');
                 } else if (state === 'downloading') {
                     const p = typeof payload.percent === 'number' ? payload.percent : null;
                     setStatus(p === null ? 'Downloading update...' : `Downloading update... ${p.toFixed(1)}%`);
                     setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: true });
+                    setUpdateNowBusy(true);
+                    setUpdateNowLabel('Updating…');
                 } else if (state === 'downloaded') {
                     const v = payload.version ? `v${payload.version}` : 'the update';
                     setStatus(`Update downloaded (${v}). Installing...`);
                     setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: true });
+                    setUpdateNowBusy(true);
+                    setUpdateNowLabel('Installing…');
                 } else if (state === 'error') {
                     setStatus(payload.message ? `Update error: ${payload.message}` : 'Update error.');
                     setButtons({ canCheck: true, canUpdateNow: false, showUpdateNow: false });
+                    setUpdateNowBusy(false);
+                    setUpdateNowLabel('Update & Restart');
                 }
             });
 
@@ -1674,13 +1701,18 @@ function initializeSettings() {
 
             updateNowBtn?.addEventListener('click', async () => {
                 try {
+                    if (updateInProgress) return;
                     setStatus('Downloading update...');
                     setButtons({ canCheck: false, canUpdateNow: false, showUpdateNow: true });
+                    setUpdateNowBusy(true);
+                    setUpdateNowLabel('Updating…');
                     // Main process will download and then install/restart.
                     await updatesApi.updateNow();
                 } catch (e) {
                     setStatus(`Update error: ${e?.message || String(e)}`);
                     setButtons({ canCheck: true, canUpdateNow: false, showUpdateNow: false });
+                    setUpdateNowBusy(false);
+                    setUpdateNowLabel('Update & Restart');
                 }
             });
         }
