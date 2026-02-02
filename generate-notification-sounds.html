@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Notification Sound Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #25D366;
+            padding-bottom: 10px;
+        }
+        .instructions {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #25D366;
+        }
+        .sound-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .sound-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .sound-card h3 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 16px;
+        }
+        .sound-card .pattern {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .button-group {
+            display: flex;
+            gap: 8px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .btn-play {
+            background: #25D366;
+            color: white;
+            flex: 1;
+        }
+        .btn-play:hover {
+            background: #20BD5A;
+        }
+        .btn-download {
+            background: #0088cc;
+            color: white;
+            flex: 1;
+        }
+        .btn-download:hover {
+            background: #0077b3;
+        }
+        .btn-primary {
+            background: #25D366;
+            color: white;
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .btn-primary:hover {
+            background: #20BD5A;
+        }
+        .status {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        .status.active {
+            display: block;
+        }
+        .actions {
+            text-align: center;
+            margin: 30px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>📱 WhatsApp-Style Notification Sound Generator</h1>
+
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li><strong>Test Individual Sounds:</strong> Click "Play" on any sound to preview it</li>
+            <li><strong>Download Individual:</strong> Click "Download WAV" to save a single sound</li>
+            <li><strong>Generate All:</strong> Click "Generate & Download All Sounds" below to create all 13 sounds at once</li>
+            <li><strong>Convert to MP3/OGG:</strong> Use an online converter (like CloudConvert.com) or FFmpeg to convert WAV files to MP3 and OGG formats</li>
+        </ol>
+        <p><strong>Note:</strong> These sounds are designed to match WhatsApp's professional, short notification style.</p>
+    </div>
+
+    <div class="sound-grid" id="soundGrid"></div>
+
+    <div class="actions">
+        <button class="btn-primary" onclick="generateAllSounds()">🎵 Generate & Download All Sounds</button>
+        <button class="btn-primary" onclick="testAllSounds()">🔊 Test All Sounds (Sequential)</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <script>
+        // Sound definitions (WhatsApp-style)
+        const soundDefinitions = {
+            default: {
+                name: 'Default',
+                pattern: 'E5 (659Hz) + A5 (880Hz)',
+                description: 'Double tone, 0.15s gap',
+                notes: [
+                    { freq: 659, time: 0, duration: 0.12 },
+                    { freq: 880, time: 0.15, duration: 0.12 }
+                ]
+            },
+            reminder: {
+                name: 'Reminder',
+                pattern: 'G4 (392Hz) + D5 (587Hz)',
+                description: 'Gentle attention sound',
+                notes: [
+                    { freq: 392, time: 0, duration: 0.10 },
+                    { freq: 587, time: 0.12, duration: 0.10 }
+                ]
+            },
+            success: {
+                name: 'Success',
+                pattern: 'C5 (523Hz) + E5 (659Hz) + G5 (784Hz)',
+                description: 'Triple ascending',
+                notes: [
+                    { freq: 523, time: 0, duration: 0.09 },
+                    { freq: 659, time: 0.10, duration: 0.09 },
+                    { freq: 784, time: 0.20, duration: 0.12 }
+                ]
+            },
+            warning: {
+                name: 'Warning',
+                pattern: 'A5 (880Hz) + F5 (698Hz)',
+                description: 'Double descending',
+                notes: [
+                    { freq: 880, time: 0, duration: 0.10 },
+                    { freq: 698, time: 0.10, duration: 0.12 }
+                ]
+            },
+            focusStart: {
+                name: 'Focus Start',
+                pattern: 'C5 (523Hz) + G5 (784Hz)',
+                description: 'Double ascending',
+                notes: [
+                    { freq: 523, time: 0, duration: 0.11 },
+                    { freq: 784, time: 0.13, duration: 0.13 }
+                ]
+            },
+            focusEnd: {
+                name: 'Focus End',
+                pattern: 'G5 (784Hz) + E5 (659Hz) + C5 (523Hz)',
+                description: 'Triple descending',
+                notes: [
+                    { freq: 784, time: 0, duration: 0.09 },
+                    { freq: 659, time: 0.10, duration: 0.09 },
+                    { freq: 523, time: 0.20, duration: 0.14 }
+                ]
+            },
+            break: {
+                name: 'Break',
+                pattern: 'A4 (440Hz) + E5 (659Hz)',
+                description: 'Relaxed, 0.18s gap',
+                notes: [
+                    { freq: 440, time: 0, duration: 0.13 },
+                    { freq: 659, time: 0.18, duration: 0.13 }
+                ]
+            },
+            achievement: {
+                name: 'Achievement',
+                pattern: 'E5 (659Hz) + B5 (988Hz) + E6 (1318Hz)',
+                description: 'Triple bright',
+                notes: [
+                    { freq: 659, time: 0, duration: 0.08 },
+                    { freq: 988, time: 0.09, duration: 0.08 },
+                    { freq: 1318, time: 0.18, duration: 0.13 }
+                ]
+            },
+            streak: {
+                name: 'Streak',
+                pattern: 'D5 (587Hz) + A5 (880Hz)',
+                description: 'Energetic, quick gap',
+                notes: [
+                    { freq: 587, time: 0, duration: 0.09 },
+                    { freq: 880, time: 0.08, duration: 0.11 }
+                ]
+            },
+            ping: {
+                name: 'Ping',
+                pattern: 'C6 (1047Hz)',
+                description: 'Single high, short',
+                notes: [
+                    { freq: 1047, time: 0, duration: 0.15 }
+                ]
+            },
+            message: {
+                name: 'Message',
+                pattern: 'G5 (784Hz) + C6 (1047Hz)',
+                description: 'Double mid-high',
+                notes: [
+                    { freq: 784, time: 0, duration: 0.10 },
+                    { freq: 1047, time: 0.12, duration: 0.10 }
+                ]
+            },
+            ding: {
+                name: 'Ding',
+                pattern: 'E5 (659Hz)',
+                description: 'Single bell, sustained',
+                notes: [
+                    { freq: 659, time: 0, duration: 0.25 }
+                ]
+            },
+            chime: {
+                name: 'Chime',
+                pattern: 'C5 (523Hz) + G5 (784Hz)',
+                description: 'Pleasant double tone',
+                notes: [
+                    { freq: 523, time: 0, duration: 0.12 },
+                    { freq: 784, time: 0.15, duration: 0.12 }
+                ]
+            }
+        };
+
+        // Create AudioContext
+        let audioContext = null;
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        // Generate a professional notification sound
+        function generateSound(soundDef) {
+            const ctx = getAudioContext();
+
+            // Calculate total duration
+            const totalDuration = Math.max(...soundDef.notes.map(n => n.time + n.duration)) + 0.1;
+            const sampleRate = ctx.sampleRate;
+            const numSamples = Math.ceil(totalDuration * sampleRate);
+
+            // Create buffer
+            const buffer = ctx.createBuffer(1, numSamples, sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // Generate each note
+            soundDef.notes.forEach(note => {
+                const startSample = Math.floor(note.time * sampleRate);
+                const noteSamples = Math.floor(note.duration * sampleRate);
+
+                for (let i = 0; i < noteSamples; i++) {
+                    const sampleIndex = startSample + i;
+                    if (sampleIndex >= numSamples) break;
+
+                    const t = i / sampleRate;
+                    const relativeT = i / noteSamples;
+
+                    // Envelope (ADSR)
+                    const attackTime = 0.005;
+                    const releaseTime = 0.05;
+                    let envelope = 1;
+
+                    if (t < attackTime) {
+                        envelope = t / attackTime;
+                    } else if (t > note.duration - releaseTime) {
+                        envelope = (note.duration - t) / releaseTime;
+                    }
+
+                    // Generate tone with harmonics (bell-like)
+                    const fundamental = Math.sin(2 * Math.PI * note.freq * t);
+                    const harmonic2 = 0.3 * Math.sin(2 * Math.PI * note.freq * 2 * t);
+                    const harmonic3 = 0.15 * Math.sin(2 * Math.PI * note.freq * 3 * t);
+
+                    const sample = (fundamental + harmonic2 + harmonic3) * envelope * 0.5;
+
+                    data[sampleIndex] += sample;
+                }
+            });
+
+            // Normalize
+            let max = 0;
+            for (let i = 0; i < data.length; i++) {
+                max = Math.max(max, Math.abs(data[i]));
+            }
+            if (max > 0) {
+                const normalizationFactor = 0.8 / max; // -3dB headroom
+                for (let i = 0; i < data.length; i++) {
+                    data[i] *= normalizationFactor;
+                }
+            }
+
+            return buffer;
+        }
+
+        // Play sound
+        function playSound(soundType) {
+            const ctx = getAudioContext();
+            const soundDef = soundDefinitions[soundType];
+            const buffer = generateSound(soundDef);
+
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.start(0);
+        }
+
+        // Convert AudioBuffer to WAV blob
+        function audioBufferToWav(buffer) {
+            const numChannels = 1;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+
+            const data = buffer.getChannelData(0);
+            const dataLength = data.length * numChannels * (bitDepth / 8);
+            const bufferLength = 44 + dataLength;
+            const arrayBuffer = new ArrayBuffer(bufferLength);
+            const view = new DataView(arrayBuffer);
+
+            // Write WAV header
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + dataLength, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
+            view.setUint16(32, numChannels * (bitDepth / 8), true);
+            view.setUint16(34, bitDepth, true);
+            writeString(36, 'data');
+            view.setUint32(40, dataLength, true);
+
+            // Write audio data
+            let offset = 44;
+            for (let i = 0; i < data.length; i++) {
+                const sample = Math.max(-1, Math.min(1, data[i]));
+                const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                view.setInt16(offset, intSample, true);
+                offset += 2;
+            }
+
+            return new Blob([arrayBuffer], { type: 'audio/wav' });
+        }
+
+        // Download sound
+        function downloadSound(soundType) {
+            const ctx = getAudioContext();
+            const soundDef = soundDefinitions[soundType];
+            const buffer = generateSound(soundDef);
+            const blob = audioBufferToWav(buffer);
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${soundType}.wav`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showStatus(`Downloaded: ${soundType}.wav`);
+        }
+
+        // Generate all sounds
+        async function generateAllSounds() {
+            showStatus('Generating all sounds... Please wait.');
+
+            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+            for (const [soundType, soundDef] of Object.entries(soundDefinitions)) {
+                downloadSound(soundType);
+                await delay(500); // Small delay between downloads
+            }
+
+            showStatus('✅ All 13 sounds generated! Now convert them to MP3 and OGG using an online converter or FFmpeg.');
+        }
+
+        // Test all sounds sequentially
+        async function testAllSounds() {
+            showStatus('Playing all sounds sequentially...');
+
+            for (const [soundType, soundDef] of Object.entries(soundDefinitions)) {
+                showStatus(`Playing: ${soundDef.name}...`);
+                playSound(soundType);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+
+            showStatus('✅ All sounds tested!');
+        }
+
+        // Show status message
+        function showStatus(message) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.classList.add('active');
+        }
+
+        // Build UI
+        function buildUI() {
+            const grid = document.getElementById('soundGrid');
+
+            for (const [soundType, soundDef] of Object.entries(soundDefinitions)) {
+                const card = document.createElement('div');
+                card.className = 'sound-card';
+                card.innerHTML = `
+                    <h3>${soundDef.name}</h3>
+                    <div class="pattern">${soundDef.pattern}</div>
+                    <div class="button-group">
+                        <button class="btn-play" onclick="playSound('${soundType}')">▶️ Play</button>
+                        <button class="btn-download" onclick="downloadSound('${soundType}')">💾 Download WAV</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            }
+        }
+
+        // Initialize on load
+        buildUI();
+    </script>
+</body>
+</html>

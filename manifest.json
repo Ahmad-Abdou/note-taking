@@ -43,7 +43,8 @@
             "resources": [
                 "icons/*",
                 "productivity/*",
-                "productivity/styles/*"
+                "productivity/styles/*",
+                "productivity/sounds/*"
             ],
             "matches": [
                 "<all_urls>"
