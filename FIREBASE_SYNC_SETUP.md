@@ -35,6 +35,10 @@ Paste it into both:
 - [productivity/firebase-config.js](productivity/firebase-config.js)
 - [productivity-desktop/renderer/firebase-config.js](productivity-desktop/renderer/firebase-config.js)
 
+Important:
+- These files ship with placeholder values (`__FILL_ME__`). Sync will not work until you paste your own Firebase config.
+- If you see `permission-denied`, it almost always means your Firestore Rules do not allow the signed-in user to write.
+
 ## 4) Use it
 
 In the app go to **Settings → Data Management → Account Sync**:

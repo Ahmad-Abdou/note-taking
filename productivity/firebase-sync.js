@@ -325,7 +325,42 @@
         syncBtn.addEventListener('click', () => {
             syncNow().catch((err) => {
                 console.error(err);
-                setStatus(err.message || 'Sync failed.', 'error');
+                let message = err?.message || 'Sync failed.';
+                const errCode = err?.code || '';
+
+                if (errCode === 'unauthenticated') {
+                    message = 'You are not signed in. Sign in first, then click Sync Now.';
+                } else if (errCode === 'permission-denied' || /permission/i.test(message)) {
+                    let debug = '';
+                    try {
+                        const { auth } = ensureFirebaseInitialized();
+                        const projectId = window.FIREBASE_CONFIG?.projectId || '(unknown project)';
+                        const user = auth.currentUser;
+                        const who = user?.email || user?.uid || 'not signed in';
+                        debug = `\n\nDebug:\n- Project: ${projectId}\n- User: ${who}\n- Path: syncSnapshots/${user?.uid || '(no uid)'}`;
+                    } catch (_) {
+                        // ignore
+                    }
+
+                    message =
+                        'Permission denied by Firestore rules.\n\n' +
+                        'Fix checklist:\n' +
+                        '1) Confirm you are signed in\n' +
+                        '2) In Firebase Console -> Firestore -> Rules, allow users to read/write their own doc\n' +
+                        '3) Confirm you pasted YOUR Firebase config (not placeholders)\n\n' +
+                        'Expected rules (example):\n' +
+                        'rules_version = \'2\';\n' +
+                        'service cloud.firestore {\n' +
+                        '  match /databases/{database}/documents {\n' +
+                        '    match /syncSnapshots/{uid} {\n' +
+                        '      allow read, write: if request.auth != null && request.auth.uid == uid;\n' +
+                        '    }\n' +
+                        '  }\n' +
+                        '}\n' +
+                        debug;
+                }
+
+                setStatus(message, 'error');
             });
         });
 
