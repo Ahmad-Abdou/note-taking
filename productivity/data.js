@@ -38,7 +38,9 @@ const STORAGE_KEYS = {
     IDLE_CATEGORIES: 'productivity_idle_categories',
     REVISIONS: 'productivity_revisions',
     WEBSITE_TIME_LIMITS: 'productivity_website_time_limits',
-    WEBSITE_DAILY_USAGE: 'productivity_website_daily_usage'
+    WEBSITE_DAILY_USAGE: 'productivity_website_daily_usage',
+    DAY_REVIEW: 'productivity_day_review',
+    DAY_REVIEW_CLOCK_FORMAT: 'productivity_day_review_clock_format'
 };
 
 // ============================================================================
@@ -1101,6 +1103,27 @@ const DataStore = {
                 resolve();
             }
         });
+    },
+
+    // ========== DAY REVIEW (24h time blocks) ==========
+    async getDayReviewMap() {
+        return await this.get(STORAGE_KEYS.DAY_REVIEW, {});
+    },
+
+    async getDayReviewForDate(dateYMD) {
+        const map = await this.getDayReviewMap();
+        const key = String(dateYMD || '').trim();
+        const entries = key && Array.isArray(map[key]) ? map[key] : [];
+        return entries;
+    },
+
+    async saveDayReviewForDate(dateYMD, entries) {
+        const map = await this.getDayReviewMap();
+        const key = String(dateYMD || '').trim();
+        if (!key) return [];
+        map[key] = Array.isArray(entries) ? entries : [];
+        await this.set(STORAGE_KEYS.DAY_REVIEW, map);
+        return map[key];
     },
 
     // ========== TASK LISTS ==========

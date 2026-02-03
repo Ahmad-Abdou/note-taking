@@ -211,6 +211,9 @@ function navigateTo(page) {
         case 'analytics':
             if (typeof loadAnalyticsPage === 'function') loadAnalyticsPage();
             break;
+        case 'day-review':
+            if (typeof loadDayReviewPage === 'function') loadDayReviewPage();
+            break;
         case 'blocker':
             if (typeof loadBlocker === 'function') loadBlocker();
             break;

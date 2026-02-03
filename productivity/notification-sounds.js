@@ -9,6 +9,7 @@ class NotificationSounds {
         this.audioContext = null;
         this.audioBuffers = {}; // Cache for decoded audio
         this.basePath = this.getBasePath();
+        this._missingLogged = new Set();
         this.soundTypes = [
             'default', 'reminder', 'success', 'warning',
             'focusStart', 'focusEnd', 'break', 'achievement',
@@ -40,6 +41,11 @@ class NotificationSounds {
         // Return cached buffer if available
         if (this.audioBuffers[type]) {
             return this.audioBuffers[type];
+        }
+
+        // Ensure we have an AudioContext for fallback generation
+        if (!this.audioContext) {
+            await this.init();
         }
 
         try {
@@ -80,9 +86,73 @@ class NotificationSounds {
             this.audioBuffers[type] = audioBuffer;
             return audioBuffer;
         } catch (error) {
-            console.error(`Error loading sound ${type}:`, error);
-            return null;
+            // If audio files are missing (common in dev builds), fall back to a simple generated tone.
+            if (!this._missingLogged.has(type)) {
+                this._missingLogged.add(type);
+                console.warn(`Notification sound files missing for '${type}'. Using fallback tone.`);
+            }
+            const fallback = this.createFallbackBuffer(type);
+            this.audioBuffers[type] = fallback;
+            return fallback;
         }
+    }
+
+    createFallbackBuffer(type) {
+        const sr = this.audioContext.sampleRate || 44100;
+
+        // Small patterns per type (frequency in Hz, duration in seconds)
+        const patterns = {
+            success: [{ f: 880, d: 0.07 }, { f: 1175, d: 0.09 }],
+            warning: [{ f: 440, d: 0.09 }, { f: 392, d: 0.10 }],
+            reminder: [{ f: 660, d: 0.08 }, { f: 660, d: 0.08 }],
+            focusStart: [{ f: 523, d: 0.10 }, { f: 784, d: 0.10 }],
+            focusEnd: [{ f: 784, d: 0.10 }, { f: 523, d: 0.10 }],
+            break: [{ f: 330, d: 0.12 }],
+            achievement: [{ f: 659, d: 0.08 }, { f: 784, d: 0.08 }, { f: 988, d: 0.10 }],
+            streak: [{ f: 740, d: 0.08 }, { f: 932, d: 0.10 }],
+            ping: [{ f: 988, d: 0.06 }],
+            message: [{ f: 880, d: 0.06 }],
+            ding: [{ f: 1046, d: 0.09 }],
+            chime: [{ f: 784, d: 0.08 }, { f: 1046, d: 0.10 }],
+            default: [{ f: 880, d: 0.06 }]
+        };
+
+        const seq = patterns[type] || patterns.default;
+        const totalDur = seq.reduce((sum, p) => sum + p.d, 0) + 0.05;
+        const length = Math.max(1, Math.floor(totalDur * sr));
+        const buffer = this.audioContext.createBuffer(1, length, sr);
+        const data = buffer.getChannelData(0);
+
+        // Simple ADSR-ish envelope per segment
+        let cursor = 0;
+        for (const p of seq) {
+            const segLen = Math.floor(p.d * sr);
+            const attack = Math.floor(segLen * 0.12);
+            const release = Math.floor(segLen * 0.25);
+            const sustainLen = Math.max(0, segLen - attack - release);
+
+            for (let i = 0; i < segLen && (cursor + i) < data.length; i++) {
+                const t = i / sr;
+                const phase = 2 * Math.PI * p.f * t;
+                let env = 1;
+                if (i < attack) env = i / Math.max(1, attack);
+                else if (i < attack + sustainLen) env = 1;
+                else {
+                    const r = (i - attack - sustainLen) / Math.max(1, release);
+                    env = 1 - r;
+                }
+                data[cursor + i] += Math.sin(phase) * env * 0.25;
+            }
+            cursor += segLen + Math.floor(0.015 * sr);
+        }
+
+        // Soft clip
+        for (let i = 0; i < data.length; i++) {
+            const x = data[i];
+            data[i] = Math.tanh(x);
+        }
+
+        return buffer;
     }
 
     async play(type = 'default', volume = 0.7) {
@@ -123,6 +193,7 @@ class NotificationSounds {
 
     // Preload all sounds for instant playback
     async preloadAll() {
+        await this.init();
         const promises = this.soundTypes.map(type => this.loadSound(type));
         await Promise.allSettled(promises);
     }

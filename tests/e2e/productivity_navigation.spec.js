@@ -36,7 +36,7 @@ test.describe('Productivity navigation', () => {
       // Wait for app init
       await page.waitForFunction(() => typeof window.navigateTo === 'function' || document.querySelector('.nav-item'));
 
-      const pages = ['dashboard', 'schedule', 'tasks', 'goals', 'focus', 'revisions', 'blocker', 'notifications', 'settings'];
+      const pages = ['dashboard', 'schedule', 'tasks', 'goals', 'day-review', 'focus', 'revisions', 'blocker', 'notifications', 'settings'];
 
       for (const p of pages) {
         await page.click(`.nav-item[data-page="${p}"]`);
