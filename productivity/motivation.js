@@ -315,6 +315,182 @@ function checkLevelAchievements() {
 }
 
 // ============================================================================
+// XP PENALTY & DECAY SYSTEM
+// ============================================================================
+
+/**
+ * Apply XP penalty (loss) - used for stake losses, goal abandonment, etc.
+ */
+function applyXPPenalty(amount, reason = '') {
+    if (amount <= 0) return 0;
+
+    const previousLevel = MotivationState.level;
+    MotivationState.totalXP = Math.max(0, MotivationState.totalXP - amount);
+    MotivationState.level = calculateLevel(MotivationState.totalXP);
+
+    // Show penalty notification
+    showXPPenaltyNotification(amount, reason);
+
+    // Check for level down
+    if (MotivationState.level < previousLevel) {
+        showLevelDownNotification(previousLevel, MotivationState.level);
+    }
+
+    // Update UI
+    renderXPBar();
+    saveMotivationData();
+
+    return amount;
+}
+
+function showXPPenaltyNotification(amount, reason) {
+    const notification = document.createElement('div');
+    notification.className = 'xp-popup penalty';
+    notification.innerHTML = `
+        <div class="xp-penalty-content">
+            <span class="xp-amount">-${amount} XP</span>
+            ${reason ? `<span class="xp-reason">${reason}</span>` : ''}
+        </div>
+    `;
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 100px;
+        right: 20px;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 12px;
+        font-weight: bold;
+        z-index: 10000;
+        animation: xpPenaltyPop 3s ease-out forwards;
+        box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+    `;
+
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+}
+
+function showLevelDownNotification(oldLevel, newLevel) {
+    if (typeof showToast === 'function') {
+        showToast('warning', 'Level Down', `You dropped from Level ${oldLevel} to Level ${newLevel}. Stay active to rebuild!`);
+    }
+}
+
+/**
+ * XP Decay System - applies daily XP decay during inactivity
+ */
+async function checkXPDecay() {
+    try {
+        const settings = await ProductivityData.DataStore.getSettings();
+
+        if (!settings.xpDecayEnabled) return;
+
+        const stats = await ProductivityData.DataStore.getCommitmentStats();
+        const today = new Date().toISOString().split('T')[0];
+
+        // Check if user was active today
+        const todayActivity = MotivationState.activityLog[today];
+        const wasActiveToday = todayActivity &&
+            (todayActivity.tasks > 0 || todayActivity.focusSessions > 0 || todayActivity.minutes > 30);
+
+        if (wasActiveToday) {
+            stats.consecutiveInactiveDays = 0;
+            stats.lastActivityDate = today;
+            await ProductivityData.DataStore.saveCommitmentStats(stats);
+            return;
+        }
+
+        // Check if decay was already applied today
+        const lastDecayCheck = await ProductivityData.DataStore.get(
+            ProductivityData.STORAGE_KEYS.XP_DECAY_LAST_CHECK, null
+        );
+        if (lastDecayCheck === today) return;
+
+        // Calculate days since last activity
+        if (stats.lastActivityDate) {
+            const lastActive = new Date(stats.lastActivityDate);
+            const now = new Date();
+            const daysDiff = Math.floor((now - lastActive) / (1000 * 60 * 60 * 24));
+
+            if (daysDiff > 1) {
+                // Apply decay
+                const decayPercent = settings.xpDecayDailyPercent || 1;
+                const maxDecay = settings.xpDecayMaxDaily || 50;
+                const decayAmount = Math.min(
+                    Math.floor(MotivationState.totalXP * (decayPercent / 100)),
+                    maxDecay
+                );
+
+                if (decayAmount > 0) {
+                    applyXPPenalty(decayAmount, `Inactivity decay (${daysDiff} days)`);
+                    stats.totalXPLostToDecay += decayAmount;
+                    stats.consecutiveInactiveDays = daysDiff;
+                }
+            }
+        }
+
+        await ProductivityData.DataStore.set(ProductivityData.STORAGE_KEYS.XP_DECAY_LAST_CHECK, today);
+        await ProductivityData.DataStore.saveCommitmentStats(stats);
+    } catch (error) {
+        console.error('XP decay check failed:', error);
+    }
+}
+
+/**
+ * Calculate the cost of breaking current streak
+ */
+function getStreakBreakCost() {
+    const currentStreak = MotivationState.currentStreak;
+
+    if (currentStreak <= 0) {
+        return { daysLost: 0, xpLost: 0, message: '' };
+    }
+
+    // Calculate cumulative XP from streak bonuses
+    let totalStreakXP = 0;
+    for (let day = 1; day <= currentStreak; day++) {
+        totalStreakXP += XP_REWARDS.streakBonus(day);
+    }
+
+    // Calculate next milestone
+    const milestones = [3, 7, 14, 30, 50, 100];
+    const nextMilestone = milestones.find(m => m > currentStreak) || 100;
+    const daysToMilestone = nextMilestone - currentStreak;
+
+    return {
+        daysLost: currentStreak,
+        xpLost: totalStreakXP,
+        nextMilestone,
+        daysToMilestone,
+        message: `Breaking your streak will lose ${currentStreak} days of progress and ~${totalStreakXP} XP in bonuses.`
+    };
+}
+
+/**
+ * Show streak warning when user might break streak
+ */
+function showStreakWarning() {
+    const cost = getStreakBreakCost();
+
+    if (cost.daysLost >= 3) {
+        if (typeof showToast === 'function') {
+            showToast('warning', 'Streak at Risk!', cost.message, {
+                duration: 8000,
+                actions: [
+                    {
+                        label: 'Start Focus Session',
+                        primary: true,
+                        callback: () => {
+                            document.querySelector('[data-page="focus"]')?.click();
+                        }
+                    }
+                ]
+            });
+        }
+    }
+}
+
+// ============================================================================
 // ACHIEVEMENT SYSTEM
 // ============================================================================
 function hasAchievement(achievementId) {
@@ -663,5 +839,10 @@ window.MotivationSystem = {
     renderActivityHeatmap,
     ACHIEVEMENTS,
     getCurrentLevelProgress,
-    getAchievementProgress
+    getAchievementProgress,
+    // Commitment & accountability
+    applyXPPenalty,
+    checkXPDecay,
+    getStreakBreakCost,
+    showStreakWarning
 };

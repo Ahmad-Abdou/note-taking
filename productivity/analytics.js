@@ -67,6 +67,7 @@ async function loadAnalyticsPage() {
         renderWeeklyPerformanceRadar().catch(() => void 0);
         renderHeatmap(AnalyticsState.heatmapData);
         generateInsights();
+        renderCommitmentStats().catch(() => void 0);
         
         // Setup period selector
         setupPeriodSelector();
@@ -1614,6 +1615,225 @@ function formatMinutesLong(minutes) {
 // capitalizeFirst is now provided by utils.js
 
 // ============================================================================
+// COMMITMENT STATISTICS
+// ============================================================================
+async function renderCommitmentStats() {
+    try {
+        const stats = await ProductivityData.DataStore.getCommitmentStats();
+        const checkinStreak = await ProductivityData.DataStore.getCheckinStreak();
+
+        // Calculate commitment score
+        const totalGoals = stats.goalsCompleted + stats.goalsAbandoned;
+        const commitmentScore = totalGoals > 0
+            ? Math.round((stats.goalsCompleted / totalGoals) * 100)
+            : 100;
+
+        // Update score circle
+        const scoreValue = document.getElementById('commitment-score-value');
+        const scoreFill = document.getElementById('commitment-score-fill');
+        const scoreDesc = document.getElementById('commitment-score-description');
+
+        if (scoreValue) scoreValue.textContent = totalGoals > 0 ? commitmentScore : '--';
+
+        if (scoreFill) {
+            // SVG circle progress (circumference = 2 * PI * 45 ≈ 283)
+            const circumference = 283;
+            const offset = circumference - (circumference * commitmentScore / 100);
+            scoreFill.style.strokeDasharray = circumference;
+            scoreFill.style.strokeDashoffset = totalGoals > 0 ? offset : circumference;
+
+            // Color based on score
+            if (commitmentScore >= 80) {
+                scoreFill.style.stroke = 'var(--success, #10b981)';
+            } else if (commitmentScore >= 50) {
+                scoreFill.style.stroke = 'var(--warning, #f59e0b)';
+            } else {
+                scoreFill.style.stroke = 'var(--danger, #ef4444)';
+            }
+        }
+
+        if (scoreDesc) {
+            if (totalGoals === 0) {
+                scoreDesc.textContent = 'Complete goals to build your commitment score';
+            } else if (commitmentScore >= 80) {
+                scoreDesc.textContent = 'Excellent! You follow through on your commitments';
+            } else if (commitmentScore >= 50) {
+                scoreDesc.textContent = 'Room for improvement. Stay committed!';
+            } else {
+                scoreDesc.textContent = 'Focus on completing what you start';
+            }
+        }
+
+        // Update stats
+        const completedEl = document.getElementById('goals-completed-count');
+        const abandonedEl = document.getElementById('goals-abandoned-count');
+        const xpLostEl = document.getElementById('xp-lost-total');
+        const streakEl = document.getElementById('checkin-streak-count');
+
+        if (completedEl) completedEl.textContent = stats.goalsCompleted;
+        if (abandonedEl) abandonedEl.textContent = stats.goalsAbandoned;
+        if (xpLostEl) xpLostEl.textContent = stats.totalXPLost;
+        if (streakEl) streakEl.textContent = checkinStreak;
+
+    } catch (error) {
+        console.error('Failed to render commitment stats:', error);
+    }
+}
+
+async function showCheckinHistoryModal() {
+    let modal = document.getElementById('checkin-history-modal');
+
+    if (!modal) {
+        modal = createCheckinHistoryModal();
+    }
+
+    await populateCheckinHistory(modal);
+    modal.classList.add('active');
+}
+
+function createCheckinHistoryModal() {
+    const modal = document.createElement('div');
+    modal.id = 'checkin-history-modal';
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-checkin-history"></div>
+        <div class="modal-content medium">
+            <div class="modal-header checkin-history-header">
+                <h2><i class="fas fa-history"></i> Check-in History</h2>
+                <button class="btn-icon" data-action="close-checkin-history">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="checkin-history-summary">
+                    <div class="history-stat">
+                        <span class="stat-value" id="history-total-checkins">0</span>
+                        <span class="stat-label">Total Check-ins</span>
+                    </div>
+                    <div class="history-stat">
+                        <span class="stat-value" id="history-current-streak">0</span>
+                        <span class="stat-label">Current Streak</span>
+                    </div>
+                    <div class="history-stat">
+                        <span class="stat-value" id="history-best-streak">0</span>
+                        <span class="stat-label">Best Streak</span>
+                    </div>
+                </div>
+                <div class="checkin-history-list" id="checkin-history-list">
+                    <!-- History entries populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-action="close-checkin-history">Close</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Setup event listeners
+    modal.querySelectorAll('[data-action="close-checkin-history"]').forEach(el => {
+        el.addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+    });
+
+    return modal;
+}
+
+async function populateCheckinHistory(modal) {
+    try {
+        const checkins = await ProductivityData.DataStore.getAccountabilityCheckins();
+        const streak = await ProductivityData.DataStore.getCheckinStreak();
+
+        // Calculate best streak
+        let bestStreak = 0;
+        let currentStreakCount = 0;
+        let lastDate = null;
+
+        const sortedDates = Object.keys(checkins).sort().reverse();
+
+        for (const dateStr of sortedDates) {
+            const date = new Date(dateStr);
+            if (lastDate === null) {
+                currentStreakCount = 1;
+            } else {
+                const diff = (lastDate - date) / (1000 * 60 * 60 * 24);
+                if (diff === 1) {
+                    currentStreakCount++;
+                } else {
+                    bestStreak = Math.max(bestStreak, currentStreakCount);
+                    currentStreakCount = 1;
+                }
+            }
+            lastDate = date;
+        }
+        bestStreak = Math.max(bestStreak, currentStreakCount);
+
+        // Update summary
+        const totalEl = document.getElementById('history-total-checkins');
+        const currentEl = document.getElementById('history-current-streak');
+        const bestEl = document.getElementById('history-best-streak');
+
+        if (totalEl) totalEl.textContent = sortedDates.length;
+        if (currentEl) currentEl.textContent = streak;
+        if (bestEl) bestEl.textContent = bestStreak;
+
+        // Populate list
+        const listEl = document.getElementById('checkin-history-list');
+        if (!listEl) return;
+
+        if (sortedDates.length === 0) {
+            listEl.innerHTML = `
+                <div class="no-checkins">
+                    <i class="fas fa-calendar-times"></i>
+                    <p>No check-ins yet. Complete your first daily check-in!</p>
+                </div>
+            `;
+            return;
+        }
+
+        const moodEmojis = ['😢', '😔', '😐', '🙂', '😄'];
+
+        listEl.innerHTML = sortedDates.slice(0, 30).map(dateStr => {
+            const checkin = checkins[dateStr];
+            const date = new Date(dateStr);
+            const formattedDate = date.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            return `
+                <div class="checkin-history-item">
+                    <div class="checkin-date-badge">
+                        <span class="date-day">${date.getDate()}</span>
+                        <span class="date-month">${date.toLocaleDateString('en-US', { month: 'short' })}</span>
+                    </div>
+                    <div class="checkin-details">
+                        <div class="checkin-meta">
+                            <span class="checkin-mood">${moodEmojis[checkin.mood - 1] || '😐'}</span>
+                            <span class="checkin-time">${formattedDate}</span>
+                        </div>
+                        ${checkin.reflection ? `<p class="checkin-reflection">"${checkin.reflection}"</p>` : ''}
+                        ${checkin.tomorrowCommitment ? `<p class="checkin-commitment"><i class="fas fa-bullseye"></i> ${checkin.tomorrowCommitment}</p>` : ''}
+                        <div class="checkin-stats-mini">
+                            <span><i class="fas fa-check"></i> ${checkin.goalsWorkedOn?.length || 0} goals</span>
+                            <span><i class="fas fa-clock"></i> ${checkin.focusMinutes || 0}m focus</span>
+                            <span><i class="fas fa-tasks"></i> ${checkin.tasksCompleted || 0} tasks</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Failed to load check-in history:', error);
+    }
+}
+
+// ============================================================================
 // GLOBAL EXPORTS
 // ============================================================================
 window.loadAnalyticsPage = loadAnalyticsPage;
@@ -1621,6 +1841,8 @@ window.loadAnalytics = loadAnalyticsPage; // Alias for app.js compatibility
 window.exportData = exportData;
 window.importData = importData;
 window.refreshAnalytics = refreshAnalytics;
+window.showCheckinHistoryModal = showCheckinHistoryModal;
+window.renderCommitmentStats = renderCommitmentStats;
 
 // ============================================================================
 // INITIALIZATION
@@ -1630,7 +1852,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('export-json-btn')?.addEventListener('click', () => exportData('json'));
     document.getElementById('export-csv-btn')?.addEventListener('click', () => exportData('csv'));
     document.getElementById('export-report-btn')?.addEventListener('click', () => generatePDFReport());
-    
+
+    // Check-in history button
+    document.getElementById('view-checkin-history-btn')?.addEventListener('click', () => showCheckinHistoryModal());
+
     // Import button handled by app.js to avoid double trigger
 });
 

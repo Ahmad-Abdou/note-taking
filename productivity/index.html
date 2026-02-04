@@ -28,6 +28,7 @@
     <link rel="stylesheet" href="styles/_idle.css">
     <link rel="stylesheet" href="styles/_revisions.css">
     <link rel="stylesheet" href="styles/_day_review.css?v=1">
+    <link rel="stylesheet" href="styles/_commitment.css?v=1">
 </head>
 
 <body>
@@ -1011,6 +1012,51 @@
                             <div class="insights-list" id="insights-list">
                                 <!-- Insights injected here -->
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Commitment Statistics -->
+                    <div class="card commitment-stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-handshake"></i> Commitment Score</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="commitment-score-display">
+                                <div class="score-circle" id="commitment-score-circle">
+                                    <svg viewBox="0 0 100 100">
+                                        <circle cx="50" cy="50" r="45" class="score-bg"></circle>
+                                        <circle cx="50" cy="50" r="45" class="score-fill" id="commitment-score-fill"></circle>
+                                    </svg>
+                                    <div class="score-value">
+                                        <span id="commitment-score-value">--</span>
+                                        <span class="score-label">%</span>
+                                    </div>
+                                </div>
+                                <div class="score-description" id="commitment-score-description">
+                                    Complete goals to build your commitment score
+                                </div>
+                            </div>
+                            <div class="commitment-stats-grid">
+                                <div class="commitment-stat">
+                                    <span class="stat-value success" id="goals-completed-count">0</span>
+                                    <span class="stat-label">Goals Completed</span>
+                                </div>
+                                <div class="commitment-stat">
+                                    <span class="stat-value danger" id="goals-abandoned-count">0</span>
+                                    <span class="stat-label">Goals Abandoned</span>
+                                </div>
+                                <div class="commitment-stat">
+                                    <span class="stat-value warning" id="xp-lost-total">0</span>
+                                    <span class="stat-label">XP Lost (Total)</span>
+                                </div>
+                                <div class="commitment-stat">
+                                    <span class="stat-value primary" id="checkin-streak-count">0</span>
+                                    <span class="stat-label">Check-in Streak</span>
+                                </div>
+                            </div>
+                            <button class="btn-ghost full-width" id="view-checkin-history-btn">
+                                <i class="fas fa-history"></i> View Check-in History
+                            </button>
                         </div>
                     </div>
                 </div>

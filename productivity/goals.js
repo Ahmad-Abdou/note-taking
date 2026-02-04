@@ -90,6 +90,9 @@ function setupGoalEventDelegation() {
             case 'open-goal-modal':
                 openGoalModal();
                 break;
+            case 'cancel-abandonment':
+                cancelGoalAbandonment(goalId);
+                break;
         }
     });
 }
@@ -187,6 +190,11 @@ function renderGoalCard(goal) {
     const isOverdue = daysLeft !== null && daysLeft < 0 && !isCompleted;
     const isUrgent = daysLeft !== null && daysLeft >= 0 && daysLeft < 7 && !isCompleted;
 
+    // Commitment indicators
+    const hasStakes = goal.stakes?.enabled && goal.stakes?.xpAtStake > 0;
+    const isPendingAbandonment = goal.abandonmentRequest?.cooldownEndsAt &&
+        new Date(goal.abandonmentRequest.cooldownEndsAt) > new Date();
+
     const categoryColors = {
         academic: '#6366f1',
         skill: '#10b981',
@@ -204,11 +212,37 @@ function renderGoalCard(goal) {
     const color = categoryColors[goal.category] || '#6366f1';
     const icon = categoryIcons[goal.category] || 'fa-bullseye';
 
+    // Build CSS classes for card
+    const cardClasses = [
+        'goal-card',
+        isCompleted ? 'completed' : '',
+        isOverdue ? 'overdue' : '',
+        hasStakes ? 'staked' : '',
+        isPendingAbandonment ? 'pending-abandonment' : ''
+    ].filter(Boolean).join(' ');
+
     return `
-        <div class="goal-card ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}" 
+        <div class="${cardClasses}"
              data-goal-id="${goal.id}"
              style="--goal-color: ${color}">
-            
+
+            ${hasStakes ? `
+                <div class="stakes-indicator" title="${goal.stakes.xpAtStake} XP at stake">
+                    <i class="fas fa-fire-alt"></i>
+                    <span>${goal.stakes.xpAtStake} XP</span>
+                </div>
+            ` : ''}
+
+            ${isPendingAbandonment ? `
+                <div class="abandonment-indicator">
+                    <i class="fas fa-clock"></i>
+                    <span>Abandonment pending</span>
+                    <button class="btn-ghost small" data-action="cancel-abandonment" data-goal-id="${goal.id}">
+                        Cancel
+                    </button>
+                </div>
+            ` : ''}
+
             <div class="goal-header">
                 <div class="goal-category-badge" style="background: ${color}20; color: ${color}">
                     <i class="fas ${icon}"></i>
@@ -233,7 +267,9 @@ function renderGoalCard(goal) {
             </h3>
             
             ${goal.description ? `<p class="goal-description">${escapeHtml(truncateText(goal.description, 100))}</p>` : ''}
-            
+
+            ${goal.visionImageUrl ? `<img src="${goal.visionImageUrl}" alt="Vision" class="goal-vision-image">` : ''}
+
             <!-- Progress Ring -->
             <div class="goal-progress-ring">
                 <svg viewBox="0 0 100 100">
@@ -557,6 +593,56 @@ function openGoalModal(goal = null) {
     if (priorityInput) priorityInput.value = goal?.priority || 'medium';
     if (dateInput) dateInput.value = goal?.targetDate || '';
 
+    // Populate commitment fields (Why & Stakes)
+    const whyInput = document.getElementById('goal-why-input');
+    const consequencesInput = document.getElementById('goal-consequences-input');
+    const stakesEnabled = document.getElementById('goal-stakes-enabled');
+    const stakesAmount = document.getElementById('goal-stakes-amount');
+    const stakesDescription = document.getElementById('goal-stakes-description');
+    const stakesOptions = document.getElementById('stakes-options');
+    const whyCharCount = document.getElementById('why-char-count');
+    const stakesPreview = document.getElementById('stakes-preview-amount');
+
+    if (whyInput) {
+        whyInput.value = goal?.why || '';
+        if (whyCharCount) {
+            const count = (goal?.why || '').trim().length;
+            whyCharCount.textContent = count;
+            whyCharCount.classList.toggle('valid', count >= 50);
+        }
+    }
+    if (consequencesInput) consequencesInput.value = goal?.consequences || '';
+
+    if (stakesEnabled) {
+        stakesEnabled.checked = goal?.stakes?.enabled || false;
+        if (stakesOptions) {
+            stakesOptions.classList.toggle('hidden', !stakesEnabled.checked);
+        }
+    }
+    if (stakesAmount) {
+        stakesAmount.value = goal?.stakes?.xpAtStake || 100;
+        if (stakesPreview) stakesPreview.textContent = stakesAmount.value;
+    }
+    if (stakesDescription) stakesDescription.value = goal?.stakes?.description || '';
+
+    // Populate vision image
+    const visionPreview = document.getElementById('vision-image-preview');
+    const removeVisionBtn = document.getElementById('remove-vision-image');
+    if (goal?.visionImageUrl && visionPreview) {
+        visionPreview.innerHTML = `<img src="${goal.visionImageUrl}" alt="Vision Image">`;
+        visionPreview.classList.add('has-image');
+        visionPreview.dataset.imageData = goal.visionImageUrl;
+        if (removeVisionBtn) removeVisionBtn.classList.remove('hidden');
+    } else if (visionPreview) {
+        visionPreview.innerHTML = `
+            <i class="fas fa-image"></i>
+            <span>Click or drag image to upload</span>
+        `;
+        visionPreview.classList.remove('has-image');
+        delete visionPreview.dataset.imageData;
+        if (removeVisionBtn) removeVisionBtn.classList.add('hidden');
+    }
+
     // Render milestones
     renderMilestoneInputs(goal?.milestones || []);
 
@@ -638,8 +724,84 @@ function createGoalModal() {
                             <i class="fas fa-plus"></i> Add Milestone
                         </button>
                     </div>
+
+                    <!-- Commitment: Why Section -->
+                    <div class="commitment-section why-section">
+                        <div class="section-header collapsible" data-action="toggle-why-section">
+                            <h4><i class="fas fa-heart"></i> Your "Why" <span class="optional-badge">Recommended</span></h4>
+                            <i class="fas fa-chevron-down toggle-icon" id="why-toggle-icon"></i>
+                        </div>
+                        <div id="why-section-content" class="collapsible-content expanded">
+                            <div class="form-group">
+                                <label for="goal-why-input">Why is this goal important to you?</label>
+                                <textarea id="goal-why-input" rows="3"
+                                          placeholder="This goal matters to me because..."
+                                          maxlength="500"></textarea>
+                                <div class="char-counter">
+                                    <span id="why-char-count">0</span>/50 minimum for staked goals
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-consequences-input">What happens if you don't achieve this?</label>
+                                <textarea id="goal-consequences-input" rows="2"
+                                          placeholder="If I fail to complete this goal..."
+                                          maxlength="300"></textarea>
+                            </div>
+                            <div class="form-group vision-image-group">
+                                <label>Vision Image <span class="helper-text">(Visualize your success)</span></label>
+                                <div class="vision-image-upload" id="vision-image-upload">
+                                    <div class="vision-image-preview" id="vision-image-preview">
+                                        <i class="fas fa-image"></i>
+                                        <span>Click or drag image to upload</span>
+                                    </div>
+                                    <input type="file" id="goal-vision-image" accept="image/*" hidden>
+                                    <button type="button" class="btn-ghost btn-remove-image hidden" id="remove-vision-image">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Commitment: Stakes Section -->
+                    <div class="commitment-section stakes-section">
+                        <div class="section-header">
+                            <h4><i class="fas fa-fire-alt"></i> Commitment Stakes</h4>
+                            <label class="toggle-switch small">
+                                <input type="checkbox" id="goal-stakes-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div id="stakes-options" class="stakes-options hidden">
+                            <div class="stakes-warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <span>You will lose XP if you abandon this goal or miss the deadline!</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-stakes-amount">XP at Stake</label>
+                                <div class="stakes-amount-input">
+                                    <button type="button" class="btn-icon small" data-action="stake-decrease">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                    <input type="number" id="goal-stakes-amount" value="100" min="50" max="500" step="50">
+                                    <button type="button" class="btn-icon small" data-action="stake-increase">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="stakes-preview">
+                                    Losing <strong id="stakes-preview-amount">100</strong> XP is at stake
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-stakes-description">Personal Commitment (optional)</label>
+                                <input type="text" id="goal-stakes-description"
+                                       placeholder="e.g., I will donate $20 to charity if I fail"
+                                       maxlength="150">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
+
                 <div class="modal-footer">
                     <div id="goal-delete-btn-container"></div>
                     <button type="button" class="btn-secondary" data-action="close-goal-modal">Cancel</button>
@@ -667,6 +829,140 @@ function setupGoalModalListeners(modal) {
     modal.querySelector('[data-action="add-milestone-input"]')?.addEventListener('click', addMilestoneInput);
 
     document.getElementById('goal-form')?.addEventListener('submit', saveGoal);
+
+    // Stakes toggle
+    const stakesToggle = document.getElementById('goal-stakes-enabled');
+    const stakesOptions = document.getElementById('stakes-options');
+    if (stakesToggle && stakesOptions) {
+        stakesToggle.addEventListener('change', () => {
+            stakesOptions.classList.toggle('hidden', !stakesToggle.checked);
+        });
+    }
+
+    // Stakes amount buttons
+    modal.querySelector('[data-action="stake-decrease"]')?.addEventListener('click', () => adjustStakeAmount(-50));
+    modal.querySelector('[data-action="stake-increase"]')?.addEventListener('click', () => adjustStakeAmount(50));
+
+    // Stakes amount input sync
+    const stakesAmountInput = document.getElementById('goal-stakes-amount');
+    const stakesPreview = document.getElementById('stakes-preview-amount');
+    if (stakesAmountInput && stakesPreview) {
+        stakesAmountInput.addEventListener('input', () => {
+            stakesPreview.textContent = stakesAmountInput.value || '0';
+        });
+    }
+
+    // Why section collapsible
+    modal.querySelector('[data-action="toggle-why-section"]')?.addEventListener('click', () => {
+        const content = document.getElementById('why-section-content');
+        const icon = document.getElementById('why-toggle-icon');
+        if (content && icon) {
+            content.classList.toggle('expanded');
+            icon.classList.toggle('rotated');
+        }
+    });
+
+    // Why character counter
+    const whyInput = document.getElementById('goal-why-input');
+    const whyCharCount = document.getElementById('why-char-count');
+    if (whyInput && whyCharCount) {
+        whyInput.addEventListener('input', () => {
+            const count = whyInput.value.trim().length;
+            whyCharCount.textContent = count;
+            whyCharCount.classList.toggle('valid', count >= 50);
+        });
+    }
+
+    // Vision image upload
+    const visionUpload = document.getElementById('vision-image-upload');
+    const visionInput = document.getElementById('goal-vision-image');
+    const visionPreview = document.getElementById('vision-image-preview');
+    const removeVisionBtn = document.getElementById('remove-vision-image');
+
+    if (visionUpload && visionInput && visionPreview) {
+        // Click to upload
+        visionPreview.addEventListener('click', () => visionInput.click());
+
+        // Drag and drop
+        visionUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            visionUpload.classList.add('dragover');
+        });
+        visionUpload.addEventListener('dragleave', () => {
+            visionUpload.classList.remove('dragover');
+        });
+        visionUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            visionUpload.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                handleVisionImageUpload(file);
+            }
+        });
+
+        // File input change
+        visionInput.addEventListener('change', () => {
+            if (visionInput.files[0]) {
+                handleVisionImageUpload(visionInput.files[0]);
+            }
+        });
+
+        // Remove image
+        if (removeVisionBtn) {
+            removeVisionBtn.addEventListener('click', () => {
+                clearVisionImage();
+            });
+        }
+    }
+}
+
+function handleVisionImageUpload(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const preview = document.getElementById('vision-image-preview');
+        const removeBtn = document.getElementById('remove-vision-image');
+        if (preview) {
+            preview.innerHTML = `<img src="${e.target.result}" alt="Vision Image">`;
+            preview.classList.add('has-image');
+            preview.dataset.imageData = e.target.result;
+        }
+        if (removeBtn) {
+            removeBtn.classList.remove('hidden');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearVisionImage() {
+    const preview = document.getElementById('vision-image-preview');
+    const removeBtn = document.getElementById('remove-vision-image');
+    const input = document.getElementById('goal-vision-image');
+
+    if (preview) {
+        preview.innerHTML = `
+            <i class="fas fa-image"></i>
+            <span>Click or drag image to upload</span>
+        `;
+        preview.classList.remove('has-image');
+        delete preview.dataset.imageData;
+    }
+    if (removeBtn) {
+        removeBtn.classList.add('hidden');
+    }
+    if (input) {
+        input.value = '';
+    }
+}
+
+function adjustStakeAmount(delta) {
+    const input = document.getElementById('goal-stakes-amount');
+    const preview = document.getElementById('stakes-preview-amount');
+    if (!input) return;
+
+    let value = parseInt(input.value) || 100;
+    value = Math.max(50, Math.min(500, value + delta));
+    input.value = value;
+    if (preview) preview.textContent = value;
 }
 
 function updateGoalDeleteButton() {
@@ -832,6 +1128,23 @@ async function saveGoal(e) {
         }
     });
 
+    // Collect commitment fields (Why & Stakes)
+    const why = document.getElementById('goal-why-input')?.value.trim() || '';
+    const consequences = document.getElementById('goal-consequences-input')?.value.trim() || '';
+    const stakesEnabled = document.getElementById('goal-stakes-enabled')?.checked || false;
+    const stakesAmount = parseInt(document.getElementById('goal-stakes-amount')?.value) || 100;
+    const stakesDescription = document.getElementById('goal-stakes-description')?.value.trim() || '';
+    const visionImagePreview = document.getElementById('vision-image-preview');
+    const visionImageUrl = visionImagePreview?.dataset.imageData || GoalsState.editingGoal?.visionImageUrl || null;
+
+    // Validation: If stakes enabled, require "why" with min 50 chars
+    if (stakesEnabled && why.length < 50) {
+        showToast('warning', 'Commitment Required',
+            'Please write at least 50 characters explaining why this goal matters to you when stakes are enabled.');
+        document.getElementById('goal-why-input')?.focus();
+        return;
+    }
+
     // Create or update goal
     const goalData = {
         id: GoalsState.editingGoal?.id,
@@ -844,13 +1157,30 @@ async function saveGoal(e) {
         status: GoalsState.editingGoal?.status || 'active',
         progress: GoalsState.editingGoal?.progress || 0,
         linkedTaskIds: GoalsState.editingGoal?.linkedTaskIds || [],
-        reflection: GoalsState.editingGoal?.reflection || ''
+        reflection: GoalsState.editingGoal?.reflection || '',
+        // Commitment fields
+        why,
+        consequences,
+        visionImageUrl,
+        stakes: {
+            enabled: stakesEnabled,
+            xpAtStake: stakesEnabled ? stakesAmount : 0,
+            description: stakesDescription
+        },
+        hoursInvested: GoalsState.editingGoal?.hoursInvested || 0,
+        abandonmentRequest: GoalsState.editingGoal?.abandonmentRequest || null
     };
 
     const goal = new ProductivityData.Goal(goalData);
+    const isNewGoal = !GoalsState.editingGoal;
 
     try {
         await ProductivityData.DataStore.saveGoal(goal);
+
+        // Update commitment stats for new goals
+        if (isNewGoal) {
+            await ProductivityData.DataStore.incrementGoalStat('totalGoalsCreated');
+        }
 
         closeGoalModal();
         await loadGoals();
@@ -870,6 +1200,21 @@ async function saveGoal(e) {
 }
 
 async function deleteGoal(goalId) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    // Check if goal has stakes or significant progress
+    const hasStakes = goal.stakes?.enabled && goal.stakes?.xpAtStake > 0;
+    const hasProgress = goal.progress > 0 || goal.milestones.some(m => m.isCompleted);
+    const invested = goal.getInvestedTime ? goal.getInvestedTime() : { hours: 0, milestonesCompleted: 0, totalMilestones: goal.milestones.length };
+
+    if (hasStakes || hasProgress) {
+        // Show abandonment modal instead of simple delete
+        openAbandonmentModal(goal);
+        return;
+    }
+
+    // Simple delete for empty goals without stakes
     const ok = await confirmDialog('Are you sure you want to delete this goal? This action cannot be undone.', {
         title: 'Delete Goal',
         confirmText: 'Delete',
@@ -889,6 +1234,295 @@ async function deleteGoal(goalId) {
     } catch (error) {
         console.error('Failed to delete goal:', error);
         showToast('error', 'Delete Failed', 'Could not delete the goal.');
+    }
+}
+
+// ============================================================================
+// ABANDONMENT FRICTION SYSTEM
+// ============================================================================
+
+function openAbandonmentModal(goal) {
+    const invested = goal.getInvestedTime ? goal.getInvestedTime() : {
+        hours: goal.hoursInvested || 0,
+        milestonesCompleted: goal.milestones.filter(m => m.isCompleted).length,
+        totalMilestones: goal.milestones.length
+    };
+
+    // Check for existing cooldown
+    if (goal.abandonmentRequest?.cooldownEndsAt) {
+        const cooldownEnd = new Date(goal.abandonmentRequest.cooldownEndsAt);
+        if (cooldownEnd > new Date()) {
+            const hoursLeft = Math.ceil((cooldownEnd - new Date()) / (1000 * 60 * 60));
+            showToast('warning', 'Cooling Off Period',
+                `You requested to abandon this goal. Please wait ${hoursLeft} more hours before confirming.`);
+            showAbandonmentCooldownModal(goal, hoursLeft);
+            return;
+        }
+    }
+
+    // Create abandonment modal
+    let modal = document.getElementById('abandonment-modal');
+    if (!modal) {
+        modal = createAbandonmentModal();
+    }
+
+    // Populate modal
+    document.getElementById('abandonment-goal-title').textContent = goal.title;
+    document.getElementById('abandonment-hours-invested').textContent = invested.hours.toFixed(1);
+    document.getElementById('abandonment-milestones-completed').textContent =
+        `${invested.milestonesCompleted}/${invested.totalMilestones}`;
+    document.getElementById('abandonment-progress').textContent = `${goal.progress}%`;
+
+    const stakesWarning = document.getElementById('abandonment-stakes-warning');
+    if (goal.stakes?.enabled && goal.stakes?.xpAtStake > 0) {
+        stakesWarning.innerHTML = `
+            <div class="stakes-loss-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>You will lose <strong>${goal.stakes.xpAtStake} XP</strong> by abandoning this goal!</span>
+            </div>
+        `;
+        stakesWarning.hidden = false;
+    } else {
+        stakesWarning.hidden = true;
+    }
+
+    // Reset form
+    document.getElementById('abandonment-reason').value = '';
+    document.getElementById('abandonment-char-count').textContent = '0';
+    document.getElementById('abandonment-char-count').classList.remove('valid');
+    document.getElementById('confirm-abandonment-btn').disabled = true;
+
+    modal.dataset.goalId = goal.id;
+    modal.classList.add('active');
+}
+
+function createAbandonmentModal() {
+    const modal = document.createElement('div');
+    modal.id = 'abandonment-modal';
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-abandonment"></div>
+        <div class="modal-content medium abandonment-content">
+            <div class="modal-header abandonment-header">
+                <h2><i class="fas fa-flag-checkered"></i> Abandoning Goal</h2>
+                <button class="btn-icon" data-action="close-abandonment">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="abandonment-summary">
+                    <h3 id="abandonment-goal-title"></h3>
+                    <div class="sunk-cost-display">
+                        <div class="sunk-cost-item">
+                            <span class="sunk-cost-value" id="abandonment-hours-invested">0</span>
+                            <span class="sunk-cost-label">Hours Invested</span>
+                        </div>
+                        <div class="sunk-cost-item">
+                            <span class="sunk-cost-value" id="abandonment-milestones-completed">0/0</span>
+                            <span class="sunk-cost-label">Milestones Done</span>
+                        </div>
+                        <div class="sunk-cost-item">
+                            <span class="sunk-cost-value" id="abandonment-progress">0%</span>
+                            <span class="sunk-cost-label">Progress</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="abandonment-stakes-warning" hidden></div>
+
+                <div class="abandonment-reflection">
+                    <label for="abandonment-reason">
+                        <i class="fas fa-pencil-alt"></i>
+                        Why are you abandoning this goal? <span class="required">*</span>
+                    </label>
+                    <textarea id="abandonment-reason" rows="4"
+                              placeholder="Please explain why you're abandoning this goal. This helps you reflect and learn from the experience..."
+                              minlength="50" required></textarea>
+                    <div class="char-counter">
+                        <span id="abandonment-char-count">0</span>/50 minimum characters
+                    </div>
+                </div>
+
+                <div class="abandonment-notice">
+                    <i class="fas fa-info-circle"></i>
+                    <p>After submitting, there will be a <strong>48-hour cooling off period</strong>
+                    before the goal is permanently removed. You can cancel the abandonment during this time.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-action="close-abandonment">Keep Goal</button>
+                <button class="btn-danger" id="confirm-abandonment-btn" disabled>
+                    <i class="fas fa-times-circle"></i> Request Abandonment
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    setupAbandonmentModalListeners(modal);
+    return modal;
+}
+
+function setupAbandonmentModalListeners(modal) {
+    // Close handlers
+    modal.querySelectorAll('[data-action="close-abandonment"]').forEach(el => {
+        el.addEventListener('click', () => modal.classList.remove('active'));
+    });
+
+    // Character counter
+    const reasonInput = document.getElementById('abandonment-reason');
+    const charCount = document.getElementById('abandonment-char-count');
+    const confirmBtn = document.getElementById('confirm-abandonment-btn');
+
+    reasonInput?.addEventListener('input', () => {
+        const count = reasonInput.value.trim().length;
+        charCount.textContent = count;
+        confirmBtn.disabled = count < 50;
+
+        if (count >= 50) {
+            charCount.classList.add('valid');
+        } else {
+            charCount.classList.remove('valid');
+        }
+    });
+
+    // Confirm abandonment
+    confirmBtn?.addEventListener('click', async () => {
+        const goalId = modal.dataset.goalId;
+        const reason = reasonInput.value.trim();
+
+        if (reason.length < 50) return;
+
+        await requestGoalAbandonment(goalId, reason);
+        modal.classList.remove('active');
+    });
+}
+
+async function requestGoalAbandonment(goalId, reason) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    const settings = await ProductivityData.DataStore.getSettings();
+    const cooldownHours = settings.abandonmentCooldownHours || 48;
+
+    const cooldownEnd = new Date();
+    cooldownEnd.setHours(cooldownEnd.getHours() + cooldownHours);
+
+    goal.abandonmentRequest = {
+        requestedAt: new Date().toISOString(),
+        reason: reason,
+        cooldownEndsAt: cooldownEnd.toISOString()
+    };
+
+    await ProductivityData.DataStore.saveGoal(goal);
+    closeGoalModal();
+    closeGoalDetails();
+    await loadGoals();
+
+    showToast('info', 'Abandonment Requested',
+        `Goal will be removed in ${cooldownHours} hours. You can cancel this during the cooling off period.`);
+}
+
+function showAbandonmentCooldownModal(goal, hoursLeft) {
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'abandonment-cooldown-modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-cooldown"></div>
+        <div class="modal-content small abandonment-cooldown-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-clock"></i> Cooling Off Period</h2>
+                <button class="btn-icon" data-action="close-cooldown">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>You requested to abandon <strong>"${escapeHtml(goal.title)}"</strong>.</p>
+                <p class="cooldown-time">
+                    <i class="fas fa-hourglass-half"></i>
+                    <strong>${hoursLeft} hours</strong> remaining
+                </p>
+                <p class="cooldown-reason">
+                    <strong>Your reason:</strong> "${escapeHtml(goal.abandonmentRequest?.reason || '')}"
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-action="cancel-abandonment-cooldown" data-goal-id="${goal.id}">
+                    <i class="fas fa-undo"></i> Keep Goal
+                </button>
+                <button class="btn-ghost" data-action="close-cooldown">
+                    Wait for Cooldown
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll('[data-action="close-cooldown"]').forEach(el => {
+        el.addEventListener('click', () => modal.remove());
+    });
+
+    modal.querySelector('[data-action="cancel-abandonment-cooldown"]')?.addEventListener('click', async (e) => {
+        await cancelGoalAbandonment(e.currentTarget.dataset.goalId);
+        modal.remove();
+    });
+}
+
+async function cancelGoalAbandonment(goalId) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    goal.abandonmentRequest = null;
+    await ProductivityData.DataStore.saveGoal(goal);
+    await loadGoals();
+
+    showToast('success', 'Abandonment Cancelled', 'Great decision! Keep working towards your goal.');
+}
+
+async function confirmGoalAbandonment(goalId) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    // Apply XP penalty if stakes were enabled
+    if (goal.stakes?.enabled && goal.stakes?.xpAtStake > 0) {
+        if (typeof window.MotivationSystem?.applyXPPenalty === 'function') {
+            window.MotivationSystem.applyXPPenalty(goal.stakes.xpAtStake, `Abandoned goal: ${goal.title}`);
+        }
+    }
+
+    // Update commitment stats
+    const stats = await ProductivityData.DataStore.getCommitmentStats();
+    stats.totalGoalsAbandoned++;
+    if (goal.stakes?.xpAtStake > 0) {
+        stats.totalXPLostToStakes += goal.stakes.xpAtStake;
+    }
+    await ProductivityData.DataStore.saveCommitmentStats(stats);
+
+    // Delete the goal
+    await ProductivityData.DataStore.deleteGoal(goalId);
+    closeGoalModal();
+    closeGoalDetails();
+    await loadGoals();
+
+    showToast('info', 'Goal Abandoned', 'The goal has been removed from your list.');
+}
+
+// Check for expired abandonment cooldowns on load
+async function checkExpiredAbandonments() {
+    const goals = await ProductivityData.DataStore.getGoals();
+    const now = new Date();
+
+    for (const goal of goals) {
+        if (goal.abandonmentRequest?.cooldownEndsAt) {
+            const cooldownEnd = new Date(goal.abandonmentRequest.cooldownEndsAt);
+            if (cooldownEnd <= now) {
+                // Cooldown expired, complete the abandonment
+                await confirmGoalAbandonment(goal.id);
+            }
+        }
     }
 }
 

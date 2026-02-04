@@ -112,6 +112,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             await window.MotivationSystem.init();
             // Render activity heatmap
             window.MotivationSystem.renderActivityHeatmap('activity-heatmap', 12);
+
+            // Check for XP decay (commitment feature)
+            if (typeof window.MotivationSystem.checkXPDecay === 'function') {
+                window.MotivationSystem.checkXPDecay();
+            }
+        }
+
+        // Initialize accountability check-in system
+        if (typeof window.initAccountabilityCheckin === 'function') {
+            window.initAccountabilityCheckin();
+        }
+
+        // Check for expired goal abandonments
+        if (typeof checkExpiredAbandonments === 'function') {
+            checkExpiredAbandonments();
         }
 
         // highlightOverflowElements(); // debug only
