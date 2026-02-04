@@ -90,6 +90,9 @@ function setupGoalEventDelegation() {
             case 'open-goal-modal':
                 openGoalModal();
                 break;
+            case 'cancel-abandonment':
+                cancelGoalAbandonment(goalId);
+                break;
         }
     });
 }
@@ -187,6 +190,11 @@ function renderGoalCard(goal) {
     const isOverdue = daysLeft !== null && daysLeft < 0 && !isCompleted;
     const isUrgent = daysLeft !== null && daysLeft >= 0 && daysLeft < 7 && !isCompleted;
 
+    // Commitment indicators
+    const hasStakes = goal.stakes?.enabled && goal.stakes?.xpAtStake > 0;
+    const isPendingAbandonment = goal.abandonmentRequest?.cooldownEndsAt &&
+        new Date(goal.abandonmentRequest.cooldownEndsAt) > new Date();
+
     const categoryColors = {
         academic: '#6366f1',
         skill: '#10b981',
@@ -204,11 +212,37 @@ function renderGoalCard(goal) {
     const color = categoryColors[goal.category] || '#6366f1';
     const icon = categoryIcons[goal.category] || 'fa-bullseye';
 
+    // Build CSS classes for card
+    const cardClasses = [
+        'goal-card',
+        isCompleted ? 'completed' : '',
+        isOverdue ? 'overdue' : '',
+        hasStakes ? 'staked' : '',
+        isPendingAbandonment ? 'pending-abandonment' : ''
+    ].filter(Boolean).join(' ');
+
     return `
-        <div class="goal-card ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}" 
+        <div class="${cardClasses}"
              data-goal-id="${goal.id}"
              style="--goal-color: ${color}">
-            
+
+            ${hasStakes ? `
+                <div class="stakes-indicator" title="${goal.stakes.xpAtStake} XP at stake">
+                    <i class="fas fa-fire-alt"></i>
+                    <span>${goal.stakes.xpAtStake} XP</span>
+                </div>
+            ` : ''}
+
+            ${isPendingAbandonment ? `
+                <div class="abandonment-indicator">
+                    <i class="fas fa-clock"></i>
+                    <span>Abandonment pending</span>
+                    <button class="btn-ghost small" data-action="cancel-abandonment" data-goal-id="${goal.id}">
+                        Cancel
+                    </button>
+                </div>
+            ` : ''}
+
             <div class="goal-header">
                 <div class="goal-category-badge" style="background: ${color}20; color: ${color}">
                     <i class="fas ${icon}"></i>

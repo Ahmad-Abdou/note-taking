@@ -67,6 +67,7 @@ async function loadAnalyticsPage() {
         renderWeeklyPerformanceRadar().catch(() => void 0);
         renderHeatmap(AnalyticsState.heatmapData);
         generateInsights();
+        renderCommitmentStats().catch(() => void 0);
 
         // Setup period selector
         setupPeriodSelector();

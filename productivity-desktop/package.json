@@ -12,7 +12,10 @@
         "build:clean": "node scripts/clean-dist.js",
         "build": "npm run build:clean && electron-builder --win portable",
         "build:installer": "npm run build:clean && electron-builder --win nsis",
-        "release:publish": "npm run build:clean && electron-builder --win nsis --publish always"
+        "release:publish": "npm run build:clean && electron-builder --win nsis --publish always",
+        "release": "npm version patch && git push && git push --tags",
+        "release:minor": "npm version minor && git push && git push --tags",
+        "release:major": "npm version major && git push && git push --tags"
     },
     "author": "Ahmad",
     "license": "MIT",
