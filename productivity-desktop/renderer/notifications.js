@@ -2081,6 +2081,343 @@ if (!NotificationState.broadcastReminderInterval) {
 }
 
 // ============================================================================
+// DAILY ACCOUNTABILITY CHECK-IN SYSTEM
+// ============================================================================
+
+let accountabilityCheckinInterval = null;
+
+async function initAccountabilityCheckin() {
+    try {
+        const settings = await ProductivityData.DataStore.getSettings();
+        if (!settings.dailyCheckinEnabled) return;
+
+        // Schedule daily check-in
+        scheduleAccountabilityCheckin(settings.dailyCheckinTime);
+    } catch (error) {
+        console.error('Failed to init accountability check-in:', error);
+    }
+}
+
+function scheduleAccountabilityCheckin(time = '21:00') {
+    if (accountabilityCheckinInterval) {
+        clearInterval(accountabilityCheckinInterval);
+    }
+
+    const checkTime = async () => {
+        const now = new Date();
+        const [hours, minutes] = time.split(':').map(Number);
+
+        if (now.getHours() === hours && now.getMinutes() === minutes) {
+            await showAccountabilityCheckinModal();
+        }
+    };
+
+    // Check every minute
+    accountabilityCheckinInterval = setInterval(checkTime, 60000);
+
+    // Also check immediately
+    checkTime();
+}
+
+async function showAccountabilityCheckinModal() {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+
+        // Check if already completed today
+        const existingCheckin = await ProductivityData.DataStore.getCheckinForDate(today);
+        if (existingCheckin) return;
+
+        // Check DND mode
+        if (isDNDActive()) return;
+
+        // Gather today's data
+        const goals = await ProductivityData.DataStore.getGoals();
+        const activeGoals = goals.filter(g => g.status === 'active');
+        const tasks = await ProductivityData.DataStore.getTasks();
+        const todaysTasks = tasks.filter(t =>
+            t.completedAt && t.completedAt.startsWith(today)
+        );
+
+        // Get today's activity from motivation system
+        const todaysActivity = window.MotivationSystem?.state?.activityLog?.[today] ||
+            { tasks: 0, focusSessions: 0, minutes: 0 };
+
+        // Get overdue tasks for "blockers" prompt
+        const overdueTasks = tasks.filter(t => t.isOverdue && t.status !== 'completed');
+
+        // Create modal if doesn't exist
+        let modal = document.getElementById('accountability-checkin-modal');
+        if (modal) modal.remove();
+
+        modal = createAccountabilityCheckinModal();
+
+        // Populate modal
+        populateCheckinModal(modal, {
+            activeGoals,
+            todaysTasks,
+            todaysActivity,
+            overdueTasks
+        });
+
+        modal.classList.add('active');
+
+        // Play notification sound
+        if (NotificationState.preferences.sound) {
+            playNotificationSound('reminder');
+        }
+    } catch (error) {
+        console.error('Failed to show accountability check-in:', error);
+    }
+}
+
+function createAccountabilityCheckinModal() {
+    const modal = document.createElement('div');
+    modal.id = 'accountability-checkin-modal';
+    modal.className = 'modal persistent';
+
+    modal.innerHTML = `
+        <div class="modal-content large checkin-content">
+            <div class="modal-header checkin-header">
+                <div class="checkin-header-content">
+                    <h2><i class="fas fa-clipboard-check"></i> Daily Check-in</h2>
+                    <span class="checkin-date" id="checkin-date"></span>
+                </div>
+            </div>
+            <div class="modal-body checkin-body">
+                <!-- Today's Summary -->
+                <div class="checkin-section">
+                    <h3><i class="fas fa-chart-line"></i> Today's Summary</h3>
+                    <div class="checkin-stats-grid">
+                        <div class="checkin-stat">
+                            <span class="stat-value" id="checkin-tasks-count">0</span>
+                            <span class="stat-label">Tasks Completed</span>
+                        </div>
+                        <div class="checkin-stat">
+                            <span class="stat-value" id="checkin-focus-count">0</span>
+                            <span class="stat-label">Focus Sessions</span>
+                        </div>
+                        <div class="checkin-stat">
+                            <span class="stat-value" id="checkin-minutes-count">0</span>
+                            <span class="stat-label">Minutes Focused</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Goals Progress -->
+                <div class="checkin-section">
+                    <h3><i class="fas fa-bullseye"></i> Goals I Worked On Today</h3>
+                    <div class="checkin-goals-list" id="checkin-goals-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Blockers Section (if overdue tasks) -->
+                <div class="checkin-section" id="blockers-section" hidden>
+                    <h3><i class="fas fa-exclamation-triangle"></i> What's Blocking You?</h3>
+                    <div class="overdue-tasks-list" id="overdue-tasks-list"></div>
+                    <div class="form-group">
+                        <textarea id="checkin-blockers" rows="2"
+                                  placeholder="What's preventing you from completing these tasks?"></textarea>
+                    </div>
+                </div>
+
+                <!-- Reflection -->
+                <div class="checkin-section">
+                    <h3><i class="fas fa-lightbulb"></i> Reflection</h3>
+                    <div class="form-group">
+                        <label>How do you feel about today's progress?</label>
+                        <div class="mood-rating" id="mood-rating">
+                            <button type="button" class="mood-btn" data-mood="1" title="Very Unproductive">
+                                <i class="fas fa-frown"></i>
+                            </button>
+                            <button type="button" class="mood-btn" data-mood="2" title="Could Be Better">
+                                <i class="fas fa-meh"></i>
+                            </button>
+                            <button type="button" class="mood-btn selected" data-mood="3" title="Okay">
+                                <i class="fas fa-smile"></i>
+                            </button>
+                            <button type="button" class="mood-btn" data-mood="4" title="Good">
+                                <i class="fas fa-grin"></i>
+                            </button>
+                            <button type="button" class="mood-btn" data-mood="5" title="Excellent!">
+                                <i class="fas fa-grin-stars"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Any thoughts or reflections?</label>
+                        <textarea id="checkin-reflection" rows="3"
+                                  placeholder="What went well? What could be improved?"></textarea>
+                    </div>
+                </div>
+
+                <!-- Tomorrow's Commitment -->
+                <div class="checkin-section">
+                    <h3><i class="fas fa-calendar-day"></i> Tomorrow's Commitment</h3>
+                    <div class="form-group">
+                        <label>What will you focus on tomorrow?</label>
+                        <input type="text" id="checkin-tomorrow"
+                               placeholder="I will focus on...">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer checkin-footer">
+                <button class="btn-secondary" id="skip-checkin-btn">
+                    <i class="fas fa-forward"></i> Skip Today
+                </button>
+                <button class="btn-primary" id="submit-checkin-btn">
+                    <i class="fas fa-check"></i> Complete Check-in
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    setupCheckinModalListeners(modal);
+    return modal;
+}
+
+function populateCheckinModal(modal, data) {
+    const { activeGoals, todaysTasks, todaysActivity, overdueTasks } = data;
+
+    // Set date
+    const today = new Date();
+    document.getElementById('checkin-date').textContent =
+        today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    // Set stats
+    document.getElementById('checkin-tasks-count').textContent = todaysTasks.length;
+    document.getElementById('checkin-focus-count').textContent = todaysActivity.focusSessions || 0;
+    document.getElementById('checkin-minutes-count').textContent = todaysActivity.minutes || 0;
+
+    // Render goals
+    const goalsList = document.getElementById('checkin-goals-list');
+    if (activeGoals.length > 0) {
+        goalsList.innerHTML = activeGoals.map(goal => `
+            <div class="checkin-goal-item">
+                <label class="checkin-goal-checkbox">
+                    <input type="checkbox" data-goal-id="${goal.id}">
+                    <span class="checkmark"></span>
+                </label>
+                <div class="checkin-goal-info">
+                    <span class="goal-title">${typeof escapeHtml === 'function' ? escapeHtml(goal.title) : goal.title}</span>
+                    <div class="goal-progress-mini">
+                        <div class="progress-bar-mini">
+                            <div class="progress-fill" style="width: ${goal.progress}%"></div>
+                        </div>
+                        <span>${goal.progress}%</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        goalsList.innerHTML = '<p class="no-goals">No active goals. Consider setting a goal!</p>';
+    }
+
+    // Render blockers section if there are overdue tasks
+    const blockersSection = document.getElementById('blockers-section');
+    const overdueList = document.getElementById('overdue-tasks-list');
+
+    if (overdueTasks.length > 0) {
+        blockersSection.hidden = false;
+        overdueList.innerHTML = overdueTasks.slice(0, 5).map(task => `
+            <div class="overdue-task-item">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${typeof escapeHtml === 'function' ? escapeHtml(task.title) : task.title}</span>
+                <span class="overdue-days">${Math.abs(task.daysUntilDue || 0)} days overdue</span>
+            </div>
+        `).join('');
+    } else {
+        blockersSection.hidden = true;
+    }
+}
+
+function setupCheckinModalListeners(modal) {
+    // Mood rating
+    modal.querySelectorAll('.mood-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            modal.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        });
+    });
+
+    // Skip button
+    document.getElementById('skip-checkin-btn')?.addEventListener('click', () => {
+        modal.classList.remove('active');
+        modal.remove();
+    });
+
+    // Submit button
+    document.getElementById('submit-checkin-btn')?.addEventListener('click', async () => {
+        await submitAccountabilityCheckin(modal);
+    });
+}
+
+async function submitAccountabilityCheckin(modal) {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+
+        // Gather checked goals
+        const checkedGoals = Array.from(modal.querySelectorAll('.checkin-goal-checkbox input:checked'))
+            .map(input => input.dataset.goalId);
+
+        // Get mood
+        const selectedMood = modal.querySelector('.mood-btn.selected');
+        const moodRating = parseInt(selectedMood?.dataset.mood) || 3;
+
+        // Get text inputs
+        const reflection = document.getElementById('checkin-reflection')?.value.trim() || '';
+        const blockers = document.getElementById('checkin-blockers')?.value.trim() || '';
+        const tomorrow = document.getElementById('checkin-tomorrow')?.value.trim() || '';
+
+        // Get today's stats
+        const todaysActivity = window.MotivationSystem?.state?.activityLog?.[today] ||
+            { tasks: 0, focusSessions: 0, minutes: 0 };
+
+        // Create checkin record
+        const checkin = new ProductivityData.AccountabilityCheckin({
+            date: today,
+            goalsWorkedOn: checkedGoals,
+            tasksCompleted: todaysActivity.tasks || 0,
+            focusMinutes: todaysActivity.minutes || 0,
+            reflection: reflection,
+            blockers: blockers,
+            mood: moodRating,
+            tomorrowCommitment: tomorrow
+        });
+
+        await ProductivityData.DataStore.saveAccountabilityCheckin(checkin);
+
+        // Update check-in streak
+        const stats = await ProductivityData.DataStore.getCommitmentStats();
+        stats.checkinStreak = (stats.checkinStreak || 0) + 1;
+        if (stats.checkinStreak > (stats.longestCheckinStreak || 0)) {
+            stats.longestCheckinStreak = stats.checkinStreak;
+        }
+        stats.lastUpdated = today;
+        await ProductivityData.DataStore.saveCommitmentStats(stats);
+
+        // Award XP for completing check-in
+        if (typeof window.MotivationSystem?.awardXP === 'function') {
+            window.MotivationSystem.awardXP(15, 'Daily check-in completed');
+        }
+
+        modal.classList.remove('active');
+        modal.remove();
+
+        showToast('success', 'Check-in Complete', 'Great job reflecting on your day! +15 XP');
+    } catch (error) {
+        console.error('Failed to submit check-in:', error);
+        showToast('error', 'Check-in Failed', 'Could not save your check-in. Please try again.');
+    }
+}
+
+// Trigger check-in manually (for testing or settings)
+async function triggerAccountabilityCheckin() {
+    await showAccountabilityCheckinModal();
+}
+
+// ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 // escapeHtml is now provided by utils.js

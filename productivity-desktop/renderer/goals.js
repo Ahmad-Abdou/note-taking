@@ -556,6 +556,56 @@ function openGoalModal(goal = null) {
     if (priorityInput) priorityInput.value = goal?.priority || 'medium';
     if (dateInput) dateInput.value = goal?.targetDate || '';
 
+    // Populate commitment fields (Why & Stakes)
+    const whyInput = document.getElementById('goal-why-input');
+    const consequencesInput = document.getElementById('goal-consequences-input');
+    const stakesEnabled = document.getElementById('goal-stakes-enabled');
+    const stakesAmount = document.getElementById('goal-stakes-amount');
+    const stakesDescription = document.getElementById('goal-stakes-description');
+    const stakesOptions = document.getElementById('stakes-options');
+    const whyCharCount = document.getElementById('why-char-count');
+    const stakesPreview = document.getElementById('stakes-preview-amount');
+
+    if (whyInput) {
+        whyInput.value = goal?.why || '';
+        if (whyCharCount) {
+            const count = (goal?.why || '').trim().length;
+            whyCharCount.textContent = count;
+            whyCharCount.classList.toggle('valid', count >= 50);
+        }
+    }
+    if (consequencesInput) consequencesInput.value = goal?.consequences || '';
+
+    if (stakesEnabled) {
+        stakesEnabled.checked = goal?.stakes?.enabled || false;
+        if (stakesOptions) {
+            stakesOptions.classList.toggle('hidden', !stakesEnabled.checked);
+        }
+    }
+    if (stakesAmount) {
+        stakesAmount.value = goal?.stakes?.xpAtStake || 100;
+        if (stakesPreview) stakesPreview.textContent = stakesAmount.value;
+    }
+    if (stakesDescription) stakesDescription.value = goal?.stakes?.description || '';
+
+    // Populate vision image
+    const visionPreview = document.getElementById('vision-image-preview');
+    const removeVisionBtn = document.getElementById('remove-vision-image');
+    if (goal?.visionImageUrl && visionPreview) {
+        visionPreview.innerHTML = `<img src="${goal.visionImageUrl}" alt="Vision Image">`;
+        visionPreview.classList.add('has-image');
+        visionPreview.dataset.imageData = goal.visionImageUrl;
+        if (removeVisionBtn) removeVisionBtn.classList.remove('hidden');
+    } else if (visionPreview) {
+        visionPreview.innerHTML = `
+            <i class="fas fa-image"></i>
+            <span>Click or drag image to upload</span>
+        `;
+        visionPreview.classList.remove('has-image');
+        delete visionPreview.dataset.imageData;
+        if (removeVisionBtn) removeVisionBtn.classList.add('hidden');
+    }
+
     // Render milestones
     renderMilestoneInputs(goal?.milestones || []);
 
@@ -637,8 +687,84 @@ function createGoalModal() {
                             <i class="fas fa-plus"></i> Add Milestone
                         </button>
                     </div>
+
+                    <!-- Commitment: Why Section -->
+                    <div class="commitment-section why-section">
+                        <div class="section-header collapsible" data-action="toggle-why-section">
+                            <h4><i class="fas fa-heart"></i> Your "Why" <span class="optional-badge">Recommended</span></h4>
+                            <i class="fas fa-chevron-down toggle-icon" id="why-toggle-icon"></i>
+                        </div>
+                        <div id="why-section-content" class="collapsible-content expanded">
+                            <div class="form-group">
+                                <label for="goal-why-input">Why is this goal important to you?</label>
+                                <textarea id="goal-why-input" rows="3"
+                                          placeholder="This goal matters to me because..."
+                                          maxlength="500"></textarea>
+                                <div class="char-counter">
+                                    <span id="why-char-count">0</span>/50 minimum for staked goals
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-consequences-input">What happens if you don't achieve this?</label>
+                                <textarea id="goal-consequences-input" rows="2"
+                                          placeholder="If I fail to complete this goal..."
+                                          maxlength="300"></textarea>
+                            </div>
+                            <div class="form-group vision-image-group">
+                                <label>Vision Image <span class="helper-text">(Visualize your success)</span></label>
+                                <div class="vision-image-upload" id="vision-image-upload">
+                                    <div class="vision-image-preview" id="vision-image-preview">
+                                        <i class="fas fa-image"></i>
+                                        <span>Click or drag image to upload</span>
+                                    </div>
+                                    <input type="file" id="goal-vision-image" accept="image/*" hidden>
+                                    <button type="button" class="btn-ghost btn-remove-image hidden" id="remove-vision-image">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Commitment: Stakes Section -->
+                    <div class="commitment-section stakes-section">
+                        <div class="section-header">
+                            <h4><i class="fas fa-fire-alt"></i> Commitment Stakes</h4>
+                            <label class="toggle-switch small">
+                                <input type="checkbox" id="goal-stakes-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div id="stakes-options" class="stakes-options hidden">
+                            <div class="stakes-warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <span>You will lose XP if you abandon this goal or miss the deadline!</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-stakes-amount">XP at Stake</label>
+                                <div class="stakes-amount-input">
+                                    <button type="button" class="btn-icon small" data-action="stake-decrease">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                    <input type="number" id="goal-stakes-amount" value="100" min="50" max="500" step="50">
+                                    <button type="button" class="btn-icon small" data-action="stake-increase">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="stakes-preview">
+                                    Losing <strong id="stakes-preview-amount">100</strong> XP is at stake
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="goal-stakes-description">Personal Commitment (optional)</label>
+                                <input type="text" id="goal-stakes-description"
+                                       placeholder="e.g., I will donate $20 to charity if I fail"
+                                       maxlength="150">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
+
                 <div class="modal-footer">
                     <div id="goal-delete-btn-container"></div>
                     <button type="button" class="btn-secondary" data-action="close-goal-modal">Cancel</button>
@@ -666,6 +792,140 @@ function setupGoalModalListeners(modal) {
     modal.querySelector('[data-action="add-milestone-input"]')?.addEventListener('click', addMilestoneInput);
 
     document.getElementById('goal-form')?.addEventListener('submit', saveGoal);
+
+    // Stakes toggle
+    const stakesToggle = document.getElementById('goal-stakes-enabled');
+    const stakesOptions = document.getElementById('stakes-options');
+    if (stakesToggle && stakesOptions) {
+        stakesToggle.addEventListener('change', () => {
+            stakesOptions.classList.toggle('hidden', !stakesToggle.checked);
+        });
+    }
+
+    // Stakes amount buttons
+    modal.querySelector('[data-action="stake-decrease"]')?.addEventListener('click', () => adjustStakeAmount(-50));
+    modal.querySelector('[data-action="stake-increase"]')?.addEventListener('click', () => adjustStakeAmount(50));
+
+    // Stakes amount input sync
+    const stakesAmountInput = document.getElementById('goal-stakes-amount');
+    const stakesPreview = document.getElementById('stakes-preview-amount');
+    if (stakesAmountInput && stakesPreview) {
+        stakesAmountInput.addEventListener('input', () => {
+            stakesPreview.textContent = stakesAmountInput.value || '0';
+        });
+    }
+
+    // Why section collapsible
+    modal.querySelector('[data-action="toggle-why-section"]')?.addEventListener('click', () => {
+        const content = document.getElementById('why-section-content');
+        const icon = document.getElementById('why-toggle-icon');
+        if (content && icon) {
+            content.classList.toggle('expanded');
+            icon.classList.toggle('rotated');
+        }
+    });
+
+    // Why character counter
+    const whyInput = document.getElementById('goal-why-input');
+    const whyCharCount = document.getElementById('why-char-count');
+    if (whyInput && whyCharCount) {
+        whyInput.addEventListener('input', () => {
+            const count = whyInput.value.trim().length;
+            whyCharCount.textContent = count;
+            whyCharCount.classList.toggle('valid', count >= 50);
+        });
+    }
+
+    // Vision image upload
+    const visionUpload = document.getElementById('vision-image-upload');
+    const visionInput = document.getElementById('goal-vision-image');
+    const visionPreview = document.getElementById('vision-image-preview');
+    const removeVisionBtn = document.getElementById('remove-vision-image');
+
+    if (visionUpload && visionInput && visionPreview) {
+        // Click to upload
+        visionPreview.addEventListener('click', () => visionInput.click());
+
+        // Drag and drop
+        visionUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            visionUpload.classList.add('dragover');
+        });
+        visionUpload.addEventListener('dragleave', () => {
+            visionUpload.classList.remove('dragover');
+        });
+        visionUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            visionUpload.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                handleVisionImageUpload(file);
+            }
+        });
+
+        // File input change
+        visionInput.addEventListener('change', () => {
+            if (visionInput.files[0]) {
+                handleVisionImageUpload(visionInput.files[0]);
+            }
+        });
+
+        // Remove image
+        if (removeVisionBtn) {
+            removeVisionBtn.addEventListener('click', () => {
+                clearVisionImage();
+            });
+        }
+    }
+}
+
+function adjustStakeAmount(delta) {
+    const input = document.getElementById('goal-stakes-amount');
+    const preview = document.getElementById('stakes-preview-amount');
+    if (!input) return;
+
+    let value = parseInt(input.value) || 100;
+    value = Math.max(50, Math.min(500, value + delta));
+    input.value = value;
+    if (preview) preview.textContent = value;
+}
+
+function handleVisionImageUpload(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const preview = document.getElementById('vision-image-preview');
+        const removeBtn = document.getElementById('remove-vision-image');
+        if (preview) {
+            preview.innerHTML = `<img src="${e.target.result}" alt="Vision Image">`;
+            preview.classList.add('has-image');
+            preview.dataset.imageData = e.target.result;
+        }
+        if (removeBtn) {
+            removeBtn.classList.remove('hidden');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearVisionImage() {
+    const preview = document.getElementById('vision-image-preview');
+    const removeBtn = document.getElementById('remove-vision-image');
+    const input = document.getElementById('goal-vision-image');
+
+    if (preview) {
+        preview.innerHTML = `
+            <i class="fas fa-image"></i>
+            <span>Click or drag image to upload</span>
+        `;
+        preview.classList.remove('has-image');
+        delete preview.dataset.imageData;
+    }
+    if (removeBtn) {
+        removeBtn.classList.add('hidden');
+    }
+    if (input) {
+        input.value = '';
+    }
 }
 
 function updateGoalDeleteButton() {
@@ -831,6 +1091,23 @@ async function saveGoal(e) {
         }
     });
 
+    // Collect commitment fields (Why & Stakes)
+    const why = document.getElementById('goal-why-input')?.value.trim() || '';
+    const consequences = document.getElementById('goal-consequences-input')?.value.trim() || '';
+    const stakesEnabled = document.getElementById('goal-stakes-enabled')?.checked || false;
+    const stakesAmount = parseInt(document.getElementById('goal-stakes-amount')?.value) || 100;
+    const stakesDescription = document.getElementById('goal-stakes-description')?.value.trim() || '';
+    const visionImagePreview = document.getElementById('vision-image-preview');
+    const visionImageUrl = visionImagePreview?.dataset.imageData || GoalsState.editingGoal?.visionImageUrl || null;
+
+    // Validation: If stakes enabled, require "why" with min 50 chars
+    if (stakesEnabled && why.length < 50) {
+        showToast('warning', 'Commitment Required',
+            'Please write at least 50 characters explaining why this goal matters to you when stakes are enabled.');
+        document.getElementById('goal-why-input')?.focus();
+        return;
+    }
+
     // Create or update goal
     const goalData = {
         id: GoalsState.editingGoal?.id,
@@ -843,7 +1120,18 @@ async function saveGoal(e) {
         status: GoalsState.editingGoal?.status || 'active',
         progress: GoalsState.editingGoal?.progress || 0,
         linkedTaskIds: GoalsState.editingGoal?.linkedTaskIds || [],
-        reflection: GoalsState.editingGoal?.reflection || ''
+        reflection: GoalsState.editingGoal?.reflection || '',
+        // Commitment fields
+        why,
+        consequences,
+        visionImageUrl,
+        stakes: {
+            enabled: stakesEnabled,
+            xpAtStake: stakesEnabled ? stakesAmount : 0,
+            description: stakesDescription
+        },
+        hoursInvested: GoalsState.editingGoal?.hoursInvested || 0,
+        abandonmentRequest: GoalsState.editingGoal?.abandonmentRequest || null
     };
 
     const goal = new ProductivityData.Goal(goalData);

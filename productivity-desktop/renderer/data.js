@@ -40,7 +40,11 @@ const STORAGE_KEYS = {
     WEBSITE_TIME_LIMITS: 'productivity_website_time_limits',
     WEBSITE_DAILY_USAGE: 'productivity_website_daily_usage',
     DAY_REVIEW: 'productivity_day_review',
-    DAY_REVIEW_CLOCK_FORMAT: 'productivity_day_review_clock_format'
+    DAY_REVIEW_CLOCK_FORMAT: 'productivity_day_review_clock_format',
+    // Commitment & Accountability
+    ACCOUNTABILITY_CHECKINS: 'productivity_accountability_checkins',
+    COMMITMENT_STATS: 'productivity_commitment_stats',
+    XP_DECAY_LAST_CHECK: 'productivity_xp_decay_last_check'
 };
 
 // ============================================================================
@@ -427,6 +431,24 @@ class Goal {
         this.createdAt = data.createdAt || new Date().toISOString();
         this.updatedAt = data.updatedAt || new Date().toISOString();
         this.completedAt = data.completedAt || null;
+
+        // Commitment & Accountability Fields
+        this.why = data.why || ''; // Why this goal matters
+        this.consequences = data.consequences || ''; // What happens if failed
+        this.visionImageUrl = data.visionImageUrl || null; // Visualization image
+        this.stakes = data.stakes || {
+            enabled: false,
+            xpAtStake: 0,
+            description: ''
+        };
+        this.abandonmentRequest = data.abandonmentRequest || null; // { requestedAt, cooldownEndsAt, reason }
+        this.hoursInvested = data.hoursInvested || 0;
+    }
+
+    // Get total invested time from linked focus sessions
+    getInvestedTime() {
+        // This would be calculated from focus sessions linked to this goal
+        return this.hoursInvested;
     }
 
     // Calculate progress based on milestones
@@ -447,8 +469,27 @@ class Goal {
 
     toJSON() {
         return {
-            ...this,
-            milestones: this.milestones.map(m => m.toJSON())
+            id: this.id,
+            title: this.title,
+            description: this.description,
+            category: this.category,
+            targetDate: this.targetDate,
+            status: this.status,
+            progress: this.progress,
+            milestones: this.milestones.map(m => m.toJSON()),
+            linkedTaskIds: this.linkedTaskIds,
+            priority: this.priority,
+            reflection: this.reflection,
+            createdAt: this.createdAt,
+            updatedAt: this.updatedAt,
+            completedAt: this.completedAt,
+            // Commitment fields
+            why: this.why,
+            consequences: this.consequences,
+            visionImageUrl: this.visionImageUrl,
+            stakes: this.stakes,
+            abandonmentRequest: this.abandonmentRequest,
+            hoursInvested: this.hoursInvested
         };
     }
 }
@@ -466,6 +507,56 @@ class Milestone {
         this.isCompleted = data.isCompleted || false;
         this.completedAt = data.completedAt || null;
         this.order = data.order || 0;
+    }
+
+    toJSON() {
+        return { ...this };
+    }
+}
+
+/**
+ * Accountability Check-in Model
+ * Daily reflection and accountability tracking
+ */
+class AccountabilityCheckin {
+    constructor(data = {}) {
+        this.id = data.id || generateUUID();
+        this.date = data.date || new Date().toISOString().split('T')[0];
+        this.mood = data.mood || 3; // 1-5 scale
+        this.reflection = data.reflection || '';
+        this.tomorrowCommitment = data.tomorrowCommitment || '';
+        this.goalsWorkedOn = data.goalsWorkedOn || []; // Array of goal IDs
+        this.tasksCompleted = data.tasksCompleted || 0;
+        this.focusMinutes = data.focusMinutes || 0;
+        this.createdAt = data.createdAt || new Date().toISOString();
+    }
+
+    toJSON() {
+        return { ...this };
+    }
+}
+
+/**
+ * Commitment Statistics Model
+ * Tracks overall commitment and accountability metrics
+ */
+class CommitmentStats {
+    constructor(data = {}) {
+        this.goalsCompleted = data.goalsCompleted || 0;
+        this.goalsAbandoned = data.goalsAbandoned || 0;
+        this.goalsCreated = data.goalsCreated || 0;
+        this.totalXPLost = data.totalXPLost || 0;
+        this.xpLostToDecay = data.xpLostToDecay || 0;
+        this.xpLostToPenalties = data.xpLostToPenalties || 0;
+        this.checkinStreak = data.checkinStreak || 0;
+        this.longestCheckinStreak = data.longestCheckinStreak || 0;
+        this.lastUpdated = data.lastUpdated || new Date().toISOString();
+    }
+
+    get commitmentScore() {
+        const total = this.goalsCompleted + this.goalsAbandoned;
+        if (total === 0) return 100;
+        return Math.round((this.goalsCompleted / total) * 100);
     }
 
     toJSON() {
@@ -1346,6 +1437,75 @@ const DataStore = {
     async getActiveGoals() {
         const goals = await this.getGoals();
         return goals.filter(g => g.status === 'active');
+    },
+
+    // ========== ACCOUNTABILITY CHECK-INS ==========
+    async getAccountabilityCheckins() {
+        return await this.get(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, {});
+    },
+
+    async saveAccountabilityCheckin(checkin) {
+        const checkins = await this.getAccountabilityCheckins();
+        checkins[checkin.date] = checkin.toJSON ? checkin.toJSON() : checkin;
+        await this.set(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, checkins);
+        return checkin;
+    },
+
+    async getCheckinForDate(date) {
+        const checkins = await this.getAccountabilityCheckins();
+        const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+        return checkins[dateStr] ? new AccountabilityCheckin(checkins[dateStr]) : null;
+    },
+
+    async getCheckinStreak() {
+        const checkins = await this.getAccountabilityCheckins();
+        const dates = Object.keys(checkins).sort().reverse();
+        if (dates.length === 0) return 0;
+
+        let streak = 0;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let i = 0; i < dates.length; i++) {
+            const checkDate = new Date(dates[i]);
+            checkDate.setHours(0, 0, 0, 0);
+            const expectedDate = new Date(today);
+            expectedDate.setDate(expectedDate.getDate() - i);
+
+            if (checkDate.getTime() === expectedDate.getTime()) {
+                streak++;
+            } else if (i === 0 && checkDate.getTime() === expectedDate.getTime() - 86400000) {
+                // Yesterday is OK for first check
+                continue;
+            } else {
+                break;
+            }
+        }
+        return streak;
+    },
+
+    // ========== COMMITMENT STATS ==========
+    async getCommitmentStats() {
+        const data = await this.get(STORAGE_KEYS.COMMITMENT_STATS, {});
+        return new CommitmentStats(data);
+    },
+
+    async saveCommitmentStats(stats) {
+        stats.lastUpdated = new Date().toISOString();
+        await this.set(STORAGE_KEYS.COMMITMENT_STATS, stats.toJSON ? stats.toJSON() : stats);
+        return stats;
+    },
+
+    async incrementGoalStat(statName, amount = 1) {
+        const stats = await this.getCommitmentStats();
+        if (statName in stats) {
+            stats[statName] += amount;
+        }
+        if (statName === 'xpLostToDecay' || statName === 'xpLostToPenalties') {
+            stats.totalXPLost += amount;
+        }
+        await this.saveCommitmentStats(stats);
+        return stats;
     },
 
     // ========== FOCUS SESSIONS ==========
@@ -2306,6 +2466,8 @@ window.ProductivityData = {
     ScheduleEvent,
     Goal,
     Milestone,
+    AccountabilityCheckin,
+    CommitmentStats,
     FocusSession,
     DailyStats,
     StreakData,
