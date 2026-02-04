@@ -52,13 +52,13 @@ const CATEGORY_COLORS = {
 // ============================================================================
 async function loadAnalyticsPage() {
     // Debug removed
-    
+
     try {
         // Load all historical data
         AnalyticsState.weeklyData = await getWeeklyData();
         AnalyticsState.monthlyData = await getMonthlyData();
         AnalyticsState.heatmapData = await getHeatmapData();
-        
+
         // Update all UI components that exist in index.html
         updateAnalyticsSummary();
         renderWeeklyChart(AnalyticsState.weeklyData);
@@ -67,10 +67,10 @@ async function loadAnalyticsPage() {
         renderWeeklyPerformanceRadar().catch(() => void 0);
         renderHeatmap(AnalyticsState.heatmapData);
         generateInsights();
-        
+
         // Setup period selector
         setupPeriodSelector();
-        
+
     } catch (error) {
         console.error('Failed to load analytics:', error);
         showToast('error', 'Analytics Error', 'Failed to load analytics data.');
@@ -80,7 +80,7 @@ async function loadAnalyticsPage() {
 function showAnalyticsLoading(isLoading) {
     const container = document.getElementById('page-analytics');
     if (!container) return;
-    
+
     if (isLoading) {
         container.classList.add('loading');
     } else {
@@ -102,7 +102,7 @@ function setupPeriodSelector() {
             refreshAnalytics();
         });
     }
-    
+
     // Also support button-style selectors if they exist
     document.querySelectorAll('.period-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -115,10 +115,10 @@ function setupPeriodSelector() {
 }
 
 async function refreshAnalytics() {
-    const data = AnalyticsState.currentPeriod === 'week' 
-        ? AnalyticsState.weeklyData 
+    const data = AnalyticsState.currentPeriod === 'week'
+        ? AnalyticsState.weeklyData
         : AnalyticsState.monthlyData;
-    
+
     updateAnalyticsSummary();
     renderWeeklyChart(data);
     renderCategoryBreakdown(data);
@@ -133,12 +133,12 @@ async function refreshAnalytics() {
 async function getWeeklyData() {
     const data = [];
     const today = new Date();
-    
+
     for (let i = 6; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         const stats = await ProductivityData.DataStore.getDailyStats(dateStr);
         data.push({
             date: dateStr,
@@ -154,19 +154,19 @@ async function getWeeklyData() {
             streakDay: stats.streakDay || false
         });
     }
-    
+
     return data;
 }
 
 async function getMonthlyData() {
     const data = [];
     const today = new Date();
-    
+
     for (let i = 29; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         try {
             const stats = await ProductivityData.DataStore.getDailyStats(dateStr);
             data.push({
@@ -193,23 +193,23 @@ async function getMonthlyData() {
             });
         }
     }
-    
+
     return data;
 }
 
 async function getHeatmapData() {
     const heatmap = {};
     const today = new Date();
-    
+
     // Get last 90 days of hourly data
     for (let i = 89; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
         const dayOfWeek = date.getDay();
-        
+
         const stats = await ProductivityData.DataStore.getDailyStats(dateStr);
-        
+
         // Aggregate by day of week and simulate hourly distribution
         if (stats.hourlyFocus) {
             Object.entries(stats.hourlyFocus).forEach(([hour, minutes]) => {
@@ -218,7 +218,7 @@ async function getHeatmapData() {
             });
         }
     }
-    
+
     return heatmap;
 }
 
@@ -226,12 +226,12 @@ async function getPreviousPeriodData() {
     const data = [];
     const today = new Date();
     const offset = AnalyticsState.currentPeriod === 'week' ? 7 : 30;
-    
+
     for (let i = offset * 2 - 1; i >= offset; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         const stats = await ProductivityData.DataStore.getDailyStats(dateStr);
         data.push({
             date: dateStr,
@@ -240,7 +240,7 @@ async function getPreviousPeriodData() {
             productivityScore: stats.productivityScore || 0
         });
     }
-    
+
     return data;
 }
 
@@ -248,36 +248,36 @@ async function getPreviousPeriodData() {
 // ANALYTICS SUMMARY
 // ============================================================================
 function updateAnalyticsSummary() {
-    const data = AnalyticsState.currentPeriod === 'week' 
-        ? AnalyticsState.weeklyData 
+    const data = AnalyticsState.currentPeriod === 'week'
+        ? AnalyticsState.weeklyData
         : AnalyticsState.monthlyData;
-    
+
     // Calculate totals
     const totalFocus = data.reduce((sum, d) => sum + d.focusMinutes, 0);
     const totalSessions = data.reduce((sum, d) => sum + d.focusSessions, 0);
     const totalTasks = data.reduce((sum, d) => sum + d.tasksCompleted, 0);
     const avgScore = Math.round(data.reduce((sum, d) => sum + d.productivityScore, 0) / (data.length || 1));
     const activeDays = data.filter(d => d.focusMinutes > 0).length;
-    
+
     // Calculate hours from minutes
     const totalHours = (totalFocus / 60).toFixed(1);
-    
+
     // Update the existing HTML elements (matching IDs from index.html)
     const studyHoursEl = document.getElementById('total-study-hours');
     if (studyHoursEl) {
         studyHoursEl.textContent = `${totalHours}h`;
     }
-    
+
     const tasksCompletedEl = document.getElementById('total-tasks-completed');
     if (tasksCompletedEl) {
         tasksCompletedEl.textContent = totalTasks;
     }
-    
+
     const avgProductivityEl = document.getElementById('avg-productivity');
     if (avgProductivityEl) {
         avgProductivityEl.textContent = `${avgScore}%`;
     }
-    
+
     // Calculate goals achieved (count tasks completed as goals for now, or use actual goals data)
     const goalsAchievedEl = document.getElementById('goals-achieved');
     if (goalsAchievedEl) {
@@ -293,13 +293,13 @@ function updateAnalyticsSummary() {
 function renderWeeklyChart(data) {
     const container = document.getElementById('study-time-chart');
     if (!container) return;
-    
+
     // Ensure data is an array
     if (!Array.isArray(data)) {
         console.warn('renderWeeklyChart: data is not an array', data);
         data = [];
     }
-    
+
     if (data.length === 0) {
         container.innerHTML = `
             <div class="chart-header">
@@ -312,10 +312,10 @@ function renderWeeklyChart(data) {
         `;
         return;
     }
-    
+
     const maxMinutes = Math.max(...data.map(d => d.focusMinutes), 60);
     const targetMinutes = 120; // 2 hour daily target
-    
+
     container.innerHTML = `
         <div class="chart-header">
             <h4>Focus Time</h4>
@@ -327,17 +327,17 @@ function renderWeeklyChart(data) {
         <div class="bar-chart-container">
             <div class="chart-y-axis">
                 ${[maxMinutes, Math.round(maxMinutes * 0.75), Math.round(maxMinutes * 0.5), Math.round(maxMinutes * 0.25), 0]
-                    .map(v => `<span>${Math.round(v / 60)}h</span>`).join('')}
+            .map(v => `<span>${Math.round(v / 60)}h</span>`).join('')}
             </div>
             <div class="chart-bars">
                 ${data.map((d, i) => {
-                    const height = (d.focusMinutes / maxMinutes) * 100;
-                    const targetHeight = (Math.min(targetMinutes, maxMinutes) / maxMinutes) * 100;
-                    const isToday = i === data.length - 1;
-                    const hitTarget = d.focusMinutes >= targetMinutes;
-                    const showValue = d.focusMinutes > 0 && height >= 14;
-                    
-                    return `
+                const height = (d.focusMinutes / maxMinutes) * 100;
+                const targetHeight = (Math.min(targetMinutes, maxMinutes) / maxMinutes) * 100;
+                const isToday = i === data.length - 1;
+                const hitTarget = d.focusMinutes >= targetMinutes;
+                const showValue = d.focusMinutes > 0 && height >= 14;
+
+                return `
                         <div class="chart-bar-wrapper ${isToday ? 'today' : ''}" data-tooltip="${d.fullDay || d.day}: ${formatMinutesLong(d.focusMinutes)}">
                             <div class="target-line" style="bottom: ${targetHeight}%"></div>
                             <div class="chart-bar ${hitTarget ? 'hit-target' : ''}" style="height: ${Math.max(height, 2)}%">
@@ -347,7 +347,7 @@ function renderWeeklyChart(data) {
                             ${d.focusSessions > 0 ? `<span class="session-count">${d.focusSessions} sessions</span>` : ''}
                         </div>
                     `;
-                }).join('')}
+            }).join('')}
             </div>
         </div>
     `;
@@ -359,7 +359,7 @@ function renderWeeklyChart(data) {
 function renderCategoryBreakdown(data) {
     const container = document.getElementById('subject-breakdown');
     if (!container) return;
-    
+
     // Aggregate subject time
     const subjectTotals = {};
     data.forEach(d => {
@@ -369,7 +369,7 @@ function renderCategoryBreakdown(data) {
             });
         }
     });
-    
+
     if (Object.keys(subjectTotals).length === 0) {
         container.innerHTML = `
             <div class="chart-header">
@@ -383,11 +383,11 @@ function renderCategoryBreakdown(data) {
         `;
         return;
     }
-    
+
     const total = Object.values(subjectTotals).reduce((a, b) => a + b, 0);
     const sortedSubjects = Object.entries(subjectTotals).sort((a, b) => b[1] - a[1]);
     const colors = Object.values(CHART_COLORS).slice(0, sortedSubjects.length);
-    
+
     // Create pie chart segments
     let cumulativePercent = 0;
     const segments = sortedSubjects.map(([subject, minutes], i) => {
@@ -396,7 +396,7 @@ function renderCategoryBreakdown(data) {
         cumulativePercent += percent;
         return { subject, minutes, percent, color: colors[i % colors.length], startAngle };
     });
-    
+
     container.innerHTML = `
         <div class="chart-header">
             <h4>Time by Subject</h4>
@@ -406,9 +406,9 @@ function renderCategoryBreakdown(data) {
             <div class="pie-chart-container">
                 <svg viewBox="0 0 100 100" class="pie-chart">
                     ${segments.map((seg, i) => {
-                        const angle = seg.percent * 3.6;
-                        return createPieSegment(50, 50, 40, seg.startAngle, angle, seg.color);
-                    }).join('')}
+        const angle = seg.percent * 3.6;
+        return createPieSegment(50, 50, 40, seg.startAngle, angle, seg.color);
+    }).join('')}
                     <circle cx="50" cy="50" r="25" fill="var(--surface-color)"/>
                     <text x="50" y="48" text-anchor="middle" class="pie-center-text">${sortedSubjects.length}</text>
                     <text x="50" y="58" text-anchor="middle" class="pie-center-label">subjects</text>
@@ -989,17 +989,17 @@ function createPieSegment(cx, cy, r, startAngle, angle, color) {
     if (angle >= 360) {
         return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`;
     }
-    
+
     const startRad = (startAngle - 90) * Math.PI / 180;
     const endRad = (startAngle + angle - 90) * Math.PI / 180;
-    
+
     const x1 = cx + r * Math.cos(startRad);
     const y1 = cy + r * Math.sin(startRad);
     const x2 = cx + r * Math.cos(endRad);
     const y2 = cy + r * Math.sin(endRad);
-    
+
     const largeArc = angle > 180 ? 1 : 0;
-    
+
     return `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${color}"/>`;
 }
 
@@ -1009,14 +1009,14 @@ function createPieSegment(cx, cy, r, startAngle, angle, color) {
 function renderHeatmap(heatmapData) {
     const container = document.getElementById('productivity-heatmap');
     if (!container) return;
-    
+
     const hours = Array.from({ length: 24 }, (_, i) => i);
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
+
     // Calculate max for normalization
     const values = Object.values(heatmapData);
     const maxValue = Math.max(...values, 1);
-    
+
     container.innerHTML = `
         <div class="chart-header">
             <h4>Activity Heatmap</h4>
@@ -1027,23 +1027,23 @@ function renderHeatmap(heatmapData) {
                 <div class="heatmap-corner"></div>
                 ${days.map(day => `<div class="heatmap-day-header">${day}</div>`).join('')}
                 ${hours.map(h => {
-                    const label = h % 3 === 0 ? `${h.toString().padStart(2, '0')}:00` : '';
-                    return `
+        const label = h % 3 === 0 ? `${h.toString().padStart(2, '0')}:00` : '';
+        return `
                         <div class="heatmap-hour-label">${label}</div>
                         ${days.map((day, dayIndex) => {
-                            const key = `${dayIndex}_${h}`;
-                            const value = heatmapData[key] || 0;
-                            const intensity = value / maxValue;
-                            const level = Math.min(Math.floor(intensity * 5), 4);
-                            return `
+            const key = `${dayIndex}_${h}`;
+            const value = heatmapData[key] || 0;
+            const intensity = value / maxValue;
+            const level = Math.min(Math.floor(intensity * 5), 4);
+            return `
                                 <div class="heatmap-cell level-${level}"
                                      data-tooltip="${day} ${h.toString().padStart(2, '0')}:00 - ${formatMinutesLong(value)}"
                                      style="--intensity: ${intensity}">
                                 </div>
                             `;
-                        }).join('')}
+        }).join('')}
                     `;
-                }).join('')}
+    }).join('')}
             </div>
         </div>
         <div class="heatmap-legend">
@@ -1062,13 +1062,13 @@ function renderHeatmap(heatmapData) {
 function renderProductivityTrend() {
     const container = document.getElementById('productivity-trend');
     if (!container) return;
-    
+
     const data = AnalyticsState.monthlyData;
     if (data.length === 0) {
         container.innerHTML = '<div class="empty-state small"><p>No trend data yet</p></div>';
         return;
     }
-    
+
     // Calculate moving average
     const windowSize = 7;
     const movingAvg = data.map((d, i) => {
@@ -1077,18 +1077,18 @@ function renderProductivityTrend() {
         const avg = window.reduce((sum, w) => sum + w.productivityScore, 0) / window.length;
         return Math.round(avg);
     });
-    
+
     const maxScore = 100;
     const points = movingAvg.map((score, i) => ({
         x: (i / (data.length - 1)) * 100,
         y: 100 - (score / maxScore) * 100
     }));
-    
+
     // Create smooth line path
-    const pathD = points.length > 1 
+    const pathD = points.length > 1
         ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
         : '';
-    
+
     container.innerHTML = `
         <div class="chart-header">
             <h4>Productivity Trend</h4>
@@ -1130,9 +1130,9 @@ function renderProductivityTrend() {
 async function renderGoalProgress() {
     const container = document.getElementById('goal-progress-analytics');
     if (!container) return;
-    
+
     const goals = await ProductivityData.DataStore.getGoals();
-    
+
     if (goals.length === 0) {
         container.innerHTML = `
             <div class="chart-header"><h4>Goal Progress</h4></div>
@@ -1143,20 +1143,20 @@ async function renderGoalProgress() {
         `;
         return;
     }
-    
+
     const stats = {
         total: goals.length,
         completed: goals.filter(g => g.status === 'completed').length,
         active: goals.filter(g => g.status === 'active').length,
         avgProgress: Math.round(goals.reduce((sum, g) => sum + g.calculateProgress(), 0) / goals.length)
     };
-    
+
     // Goals by category
     const byCategory = goals.reduce((acc, g) => {
         acc[g.category] = (acc[g.category] || 0) + 1;
         return acc;
     }, {});
-    
+
     container.innerHTML = `
         <div class="chart-header">
             <h4>Goal Progress</h4>
@@ -1195,14 +1195,14 @@ async function renderGoalProgress() {
 async function renderStreakAnalysis() {
     const container = document.getElementById('streak-analysis');
     if (!container) return;
-    
+
     const streak = await ProductivityData.DataStore.getStreak();
     const monthlyData = AnalyticsState.monthlyData;
-    
+
     // Calculate streak calendar
     const activeDays = monthlyData.filter(d => d.focusMinutes >= 15).length;
     const longestStreak = calculateLongestStreak(monthlyData);
-    
+
     container.innerHTML = `
         <div class="chart-header">
             <h4>Streak & Consistency</h4>
@@ -1238,7 +1238,7 @@ async function renderStreakAnalysis() {
 function calculateLongestStreak(data) {
     let longest = 0;
     let current = 0;
-    
+
     data.forEach(d => {
         if (d.focusMinutes >= 15) {
             current++;
@@ -1247,7 +1247,7 @@ function calculateLongestStreak(data) {
             current = 0;
         }
     });
-    
+
     return longest;
 }
 
@@ -1255,12 +1255,12 @@ function renderMiniCalendar(data) {
     return `
         <div class="mini-calendar-grid">
             ${data.map(d => {
-                const level = d.focusMinutes >= 120 ? 4 :
-                             d.focusMinutes >= 60 ? 3 :
-                             d.focusMinutes >= 30 ? 2 :
-                             d.focusMinutes > 0 ? 1 : 0;
-                return `<div class="calendar-day level-${level}" title="${d.date}: ${formatMinutesLong(d.focusMinutes)}"></div>`;
-            }).join('')}
+        const level = d.focusMinutes >= 120 ? 4 :
+            d.focusMinutes >= 60 ? 3 :
+                d.focusMinutes >= 30 ? 2 :
+                    d.focusMinutes > 0 ? 1 : 0;
+        return `<div class="calendar-day level-${level}" title="${d.date}: ${formatMinutesLong(d.focusMinutes)}"></div>`;
+    }).join('')}
         </div>
     `;
 }
@@ -1271,7 +1271,7 @@ function renderMiniCalendar(data) {
 function generateInsights() {
     const container = document.getElementById('insights-list');
     if (!container) return;
-    
+
     const weeklyData = AnalyticsState.weeklyData;
     const insights = [];
 
@@ -1283,13 +1283,13 @@ function generateInsights() {
             return String(ymd || lastYmd);
         }
     };
-    
+
     // Trend analysis
     const firstHalf = weeklyData.slice(0, 4).reduce((s, d) => s + d.focusMinutes, 0);
     const secondHalf = weeklyData.slice(4).reduce((s, d) => s + d.focusMinutes, 0);
     const totalFocus = weeklyData.reduce((s, d) => s + d.focusMinutes, 0);
     const totalTasks = weeklyData.reduce((s, d) => s + d.tasksCompleted, 0);
-    
+
     if (secondHalf > firstHalf * 1.3) {
         insights.push({
             icon: 'fa-arrow-trend-up',
@@ -1307,11 +1307,11 @@ function generateInsights() {
             dateYmd: lastYmd
         });
     }
-    
+
     // Best day analysis
-    const bestDay = weeklyData.reduce((best, d) => 
+    const bestDay = weeklyData.reduce((best, d) =>
         d.focusMinutes > (best?.focusMinutes || 0) ? d : best, null);
-    
+
     if (bestDay && bestDay.focusMinutes > 120) {
         insights.push({
             icon: 'fa-trophy',
@@ -1321,7 +1321,7 @@ function generateInsights() {
             dateYmd: bestDay.date || lastYmd
         });
     }
-    
+
     // Task efficiency
     if (totalFocus > 0 && totalTasks > 0) {
         const minutesPerTask = Math.round(totalFocus / totalTasks);
@@ -1343,7 +1343,7 @@ function generateInsights() {
             });
         }
     }
-    
+
     // Consistency check
     const activeDays = weeklyData.filter(d => d.focusMinutes > 0).length;
     if (activeDays >= 6) {
@@ -1363,11 +1363,11 @@ function generateInsights() {
             dateYmd: lastYmd
         });
     }
-    
+
     // Time of day suggestion
     const morningFocus = weeklyData.reduce((s, d) => s + (d.subjectTime?.morning || 0), 0);
     const eveningFocus = weeklyData.reduce((s, d) => s + (d.subjectTime?.evening || 0), 0);
-    
+
     // Default insight if none
     if (insights.length === 0) {
         insights.push({
@@ -1378,7 +1378,7 @@ function generateInsights() {
             dateYmd: lastYmd
         });
     }
-    
+
     container.innerHTML = insights.map(insight => `
         <div class="insight-item ${insight.type}">
             <div class="insight-icon">
@@ -1401,10 +1401,10 @@ function generateInsights() {
 async function exportData(format) {
     // Ensure format is a string
     format = typeof format === 'string' ? format : 'json';
-    
+
     try {
         const allData = await chrome.storage.local.get(null);
-        
+
         // Filter relevant data
         const exportData = {
             exportDate: new Date().toISOString(),
@@ -1414,14 +1414,14 @@ async function exportData(format) {
             goals: allData.goals || [],
             settings: allData.settings || {}
         };
-        
+
         // Collect daily stats
         Object.entries(allData)
             .filter(([key]) => key.startsWith('stats_'))
             .forEach(([key, stats]) => {
                 exportData.stats[key.replace('stats_', '')] = stats;
             });
-        
+
         if (format === 'json') {
             const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
             downloadBlob(blob, `productivity-export-${new Date().toISOString().split('T')[0]}.json`);
@@ -1430,7 +1430,7 @@ async function exportData(format) {
             const blob = new Blob([csv], { type: 'text/csv' });
             downloadBlob(blob, `productivity-export-${new Date().toISOString().split('T')[0]}.csv`);
         }
-        
+
         showToast('success', 'Export Complete', `Your data has been exported as ${format.toUpperCase()}.`);
     } catch (error) {
         console.error('Export error:', error);
@@ -1452,7 +1452,7 @@ function downloadBlob(blob, filename) {
 function convertToCSV(statsData) {
     const headers = ['Date', 'Focus Minutes', 'Sessions', 'Tasks Completed', 'Score'];
     const lines = [headers.join(',')];
-    
+
     Object.entries(statsData)
         .sort(([a], [b]) => a.localeCompare(b))
         .forEach(([date, stats]) => {
@@ -1464,18 +1464,18 @@ function convertToCSV(statsData) {
                 stats.productivityScore || 0
             ].join(','));
         });
-    
+
     return lines.join('\n');
 }
 
 async function generatePDFReport() {
     try {
         showToast('info', 'Generating Report', 'Creating your productivity report...');
-        
+
         const period = document.getElementById('analytics-period')?.value || 'week';
         const allData = await ProductivityData.DataStore.exportAllData();
         const data = JSON.parse(allData);
-        
+
         // Create HTML report
         const reportContent = `
 <!DOCTYPE html>
@@ -1546,11 +1546,11 @@ async function generatePDFReport() {
     </div>
 </body>
 </html>`;
-        
+
         // Create download
         const blob = new Blob([reportContent], { type: 'text/html' });
         downloadBlob(blob, `productivity-report-${new Date().toISOString().split('T')[0]}.html`);
-        
+
         showToast('success', 'Report Generated', 'Your report has been downloaded!');
     } catch (error) {
         console.error('Report generation error:', error);
@@ -1562,22 +1562,22 @@ async function importData(file) {
     try {
         const text = await file.text();
         const data = JSON.parse(text);
-        
+
         if (!data.version) {
             throw new Error('Invalid export file format');
         }
-        
+
         // Import stats
         if (data.stats) {
             for (const [date, stats] of Object.entries(data.stats)) {
                 await chrome.storage.local.set({ [`stats_${date}`]: stats });
             }
         }
-        
+
         // Import tasks and goals
         if (data.tasks) await chrome.storage.local.set({ tasks: data.tasks });
         if (data.goals) await chrome.storage.local.set({ goals: data.goals });
-        
+
         showToast('success', 'Import Complete', 'Your data has been imported successfully.');
         loadAnalyticsPage();
     } catch (error) {
@@ -1591,16 +1591,235 @@ async function importData(file) {
 // ============================================================================
 function formatMinutesLong(minutes) {
     if (!minutes || minutes === 0) return '0 min';
-    
+
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    
+
     if (hours === 0) return `${mins} min`;
     if (mins === 0) return `${hours}h`;
     return `${hours}h ${mins}m`;
 }
 
 // capitalizeFirst is now provided by utils.js
+
+// ============================================================================
+// COMMITMENT STATISTICS
+// ============================================================================
+async function renderCommitmentStats() {
+    try {
+        const stats = await ProductivityData.DataStore.getCommitmentStats();
+        const checkinStreak = await ProductivityData.DataStore.getCheckinStreak();
+
+        // Calculate commitment score
+        const totalGoals = stats.goalsCompleted + stats.goalsAbandoned;
+        const commitmentScore = totalGoals > 0
+            ? Math.round((stats.goalsCompleted / totalGoals) * 100)
+            : 100;
+
+        // Update score circle
+        const scoreValue = document.getElementById('commitment-score-value');
+        const scoreFill = document.getElementById('commitment-score-fill');
+        const scoreDesc = document.getElementById('commitment-score-description');
+
+        if (scoreValue) scoreValue.textContent = totalGoals > 0 ? commitmentScore : '--';
+
+        if (scoreFill) {
+            // SVG circle progress (circumference = 2 * PI * 45 ≈ 283)
+            const circumference = 283;
+            const offset = circumference - (circumference * commitmentScore / 100);
+            scoreFill.style.strokeDasharray = circumference;
+            scoreFill.style.strokeDashoffset = totalGoals > 0 ? offset : circumference;
+
+            // Color based on score
+            if (commitmentScore >= 80) {
+                scoreFill.style.stroke = 'var(--success, #10b981)';
+            } else if (commitmentScore >= 50) {
+                scoreFill.style.stroke = 'var(--warning, #f59e0b)';
+            } else {
+                scoreFill.style.stroke = 'var(--danger, #ef4444)';
+            }
+        }
+
+        if (scoreDesc) {
+            if (totalGoals === 0) {
+                scoreDesc.textContent = 'Complete goals to build your commitment score';
+            } else if (commitmentScore >= 80) {
+                scoreDesc.textContent = 'Excellent! You follow through on your commitments';
+            } else if (commitmentScore >= 50) {
+                scoreDesc.textContent = 'Room for improvement. Stay committed!';
+            } else {
+                scoreDesc.textContent = 'Focus on completing what you start';
+            }
+        }
+
+        // Update stats
+        const completedEl = document.getElementById('goals-completed-count');
+        const abandonedEl = document.getElementById('goals-abandoned-count');
+        const xpLostEl = document.getElementById('xp-lost-total');
+        const streakEl = document.getElementById('checkin-streak-count');
+
+        if (completedEl) completedEl.textContent = stats.goalsCompleted;
+        if (abandonedEl) abandonedEl.textContent = stats.goalsAbandoned;
+        if (xpLostEl) xpLostEl.textContent = stats.totalXPLost;
+        if (streakEl) streakEl.textContent = checkinStreak;
+
+    } catch (error) {
+        console.error('Failed to render commitment stats:', error);
+    }
+}
+
+async function showCheckinHistoryModal() {
+    let modal = document.getElementById('checkin-history-modal');
+
+    if (!modal) {
+        modal = createCheckinHistoryModal();
+    }
+
+    await populateCheckinHistory(modal);
+    modal.classList.add('active');
+}
+
+function createCheckinHistoryModal() {
+    const modal = document.createElement('div');
+    modal.id = 'checkin-history-modal';
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-checkin-history"></div>
+        <div class="modal-content medium">
+            <div class="modal-header checkin-history-header">
+                <h2><i class="fas fa-history"></i> Check-in History</h2>
+                <button class="btn-icon" data-action="close-checkin-history">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="checkin-history-summary">
+                    <div class="history-stat">
+                        <span class="stat-value" id="history-total-checkins">0</span>
+                        <span class="stat-label">Total Check-ins</span>
+                    </div>
+                    <div class="history-stat">
+                        <span class="stat-value" id="history-current-streak">0</span>
+                        <span class="stat-label">Current Streak</span>
+                    </div>
+                    <div class="history-stat">
+                        <span class="stat-value" id="history-best-streak">0</span>
+                        <span class="stat-label">Best Streak</span>
+                    </div>
+                </div>
+                <div class="checkin-history-list" id="checkin-history-list">
+                    <!-- History entries populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-action="close-checkin-history">Close</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Setup event listeners
+    modal.querySelectorAll('[data-action="close-checkin-history"]').forEach(el => {
+        el.addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+    });
+
+    return modal;
+}
+
+async function populateCheckinHistory(modal) {
+    try {
+        const checkins = await ProductivityData.DataStore.getAccountabilityCheckins();
+        const streak = await ProductivityData.DataStore.getCheckinStreak();
+
+        // Calculate best streak
+        let bestStreak = 0;
+        let currentStreakCount = 0;
+        let lastDate = null;
+
+        const sortedDates = Object.keys(checkins).sort().reverse();
+
+        for (const dateStr of sortedDates) {
+            const date = new Date(dateStr);
+            if (lastDate === null) {
+                currentStreakCount = 1;
+            } else {
+                const diff = (lastDate - date) / (1000 * 60 * 60 * 24);
+                if (diff === 1) {
+                    currentStreakCount++;
+                } else {
+                    bestStreak = Math.max(bestStreak, currentStreakCount);
+                    currentStreakCount = 1;
+                }
+            }
+            lastDate = date;
+        }
+        bestStreak = Math.max(bestStreak, currentStreakCount);
+
+        // Update summary
+        const totalEl = document.getElementById('history-total-checkins');
+        const currentEl = document.getElementById('history-current-streak');
+        const bestEl = document.getElementById('history-best-streak');
+
+        if (totalEl) totalEl.textContent = sortedDates.length;
+        if (currentEl) currentEl.textContent = streak;
+        if (bestEl) bestEl.textContent = bestStreak;
+
+        // Populate list
+        const listEl = document.getElementById('checkin-history-list');
+        if (!listEl) return;
+
+        if (sortedDates.length === 0) {
+            listEl.innerHTML = `
+                <div class="no-checkins">
+                    <i class="fas fa-calendar-times"></i>
+                    <p>No check-ins yet. Complete your first daily check-in!</p>
+                </div>
+            `;
+            return;
+        }
+
+        const moodEmojis = ['😢', '😔', '😐', '🙂', '😄'];
+
+        listEl.innerHTML = sortedDates.slice(0, 30).map(dateStr => {
+            const checkin = checkins[dateStr];
+            const date = new Date(dateStr);
+            const formattedDate = date.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            return `
+                <div class="checkin-history-item">
+                    <div class="checkin-date-badge">
+                        <span class="date-day">${date.getDate()}</span>
+                        <span class="date-month">${date.toLocaleDateString('en-US', { month: 'short' })}</span>
+                    </div>
+                    <div class="checkin-details">
+                        <div class="checkin-meta">
+                            <span class="checkin-mood">${moodEmojis[checkin.mood - 1] || '😐'}</span>
+                            <span class="checkin-time">${formattedDate}</span>
+                        </div>
+                        ${checkin.reflection ? `<p class="checkin-reflection">"${checkin.reflection}"</p>` : ''}
+                        ${checkin.tomorrowCommitment ? `<p class="checkin-commitment"><i class="fas fa-bullseye"></i> ${checkin.tomorrowCommitment}</p>` : ''}
+                        <div class="checkin-stats-mini">
+                            <span><i class="fas fa-check"></i> ${checkin.goalsWorkedOn?.length || 0} goals</span>
+                            <span><i class="fas fa-clock"></i> ${checkin.focusMinutes || 0}m focus</span>
+                            <span><i class="fas fa-tasks"></i> ${checkin.tasksCompleted || 0} tasks</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Failed to load check-in history:', error);
+    }
+}
 
 // ============================================================================
 // GLOBAL EXPORTS
@@ -1610,6 +1829,8 @@ window.loadAnalytics = loadAnalyticsPage; // Alias for app.js compatibility
 window.exportData = exportData;
 window.importData = importData;
 window.refreshAnalytics = refreshAnalytics;
+window.showCheckinHistoryModal = showCheckinHistoryModal;
+window.renderCommitmentStats = renderCommitmentStats;
 
 // ============================================================================
 // INITIALIZATION
@@ -1619,7 +1840,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('export-json-btn')?.addEventListener('click', () => exportData('json'));
     document.getElementById('export-csv-btn')?.addEventListener('click', () => exportData('csv'));
     document.getElementById('export-report-btn')?.addEventListener('click', () => generatePDFReport());
-    
+
     // Import button handled by app.js to avoid double trigger
 });
 

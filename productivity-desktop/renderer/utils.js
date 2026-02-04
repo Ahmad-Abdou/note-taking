@@ -141,16 +141,16 @@ function formatRelativeDate(dateStr) {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     const dateOnly = dateStr.split('T')[0];
     const todayOnly = today.toISOString().split('T')[0];
     const tomorrowOnly = tomorrow.toISOString().split('T')[0];
     const yesterdayOnly = yesterday.toISOString().split('T')[0];
-    
+
     if (dateOnly === todayOnly) return 'Today';
     if (dateOnly === tomorrowOnly) return 'Tomorrow';
     if (dateOnly === yesterdayOnly) return 'Yesterday';
-    
+
     return formatDate(dateStr);
 }
 
@@ -211,7 +211,7 @@ function debounce(func, wait = 300) {
  */
 function throttle(func, limit = 100) {
     let inThrottle;
-    return function(...args) {
+    return function (...args) {
         if (!inThrottle) {
             func.apply(this, args);
             inThrottle = true;
@@ -231,13 +231,13 @@ function animateNumber(element, start, end, duration = 1000) {
     if (!element) return;
     const startTime = performance.now();
     const diff = end - start;
-    
+
     function update(currentTime) {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
         const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
         element.textContent = Math.round(start + diff * easeProgress);
-        
+
         if (progress < 1) {
             requestAnimationFrame(update);
         }
@@ -278,6 +278,133 @@ function $$(selector, parent = document) {
  */
 function $$$(selector, parent = document) {
     return parent.querySelectorAll(selector);
+}
+
+// ============================================================================
+// DIALOG UTILITIES
+// ============================================================================
+
+let __confirmDialogChain = Promise.resolve();
+let __confirmModalEl = null;
+
+function __ensureConfirmModal() {
+    if (__confirmModalEl) return __confirmModalEl;
+
+    const modal = document.createElement('div');
+    modal.id = 'confirm-modal';
+    modal.className = 'modal';
+    // Ensure this is above focus overlay (which is higher than the default modal z-index).
+    modal.style.zIndex = '3000';
+    modal.innerHTML = `
+        <div class="modal-content small">
+            <div class="modal-header-minimal">
+                <h2 id="confirm-modal-title"><i class="fas fa-circle-question"></i> Confirm</h2>
+                <button class="close-modal-btn" type="button" data-confirm-close>&times;</button>
+            </div>
+            <div class="modal-body-streamlined">
+                <div id="confirm-modal-message" style="line-height: 1.5;"></div>
+            </div>
+            <div class="modal-footer-streamlined">
+                <button type="button" class="btn-ghost" data-confirm-cancel>Cancel</button>
+                <button type="button" class="btn-primary" data-confirm-ok>OK</button>
+            </div>
+        </div>
+    `;
+
+    // Click outside closes (cancel)
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.dispatchEvent(new CustomEvent('confirm:cancel'));
+        }
+    });
+
+    document.body.appendChild(modal);
+    __confirmModalEl = modal;
+    return modal;
+}
+
+/**
+ * In-page confirmation dialog to avoid native window.confirm suppression.
+ *
+ * @param {string} message
+ * @param {{title?: string, confirmText?: string, cancelText?: string, danger?: boolean}} options
+ * @returns {Promise<boolean>}
+ */
+function confirmDialog(message, options = {}) {
+    const opts = {
+        title: typeof options.title === 'string' ? options.title : 'Confirm',
+        confirmText: typeof options.confirmText === 'string' ? options.confirmText : 'OK',
+        cancelText: typeof options.cancelText === 'string' ? options.cancelText : 'Cancel',
+        danger: Boolean(options.danger)
+    };
+
+    __confirmDialogChain = __confirmDialogChain.then(() => new Promise((resolve) => {
+        const modal = __ensureConfirmModal();
+        const titleEl = modal.querySelector('#confirm-modal-title');
+        const messageEl = modal.querySelector('#confirm-modal-message');
+        const okBtn = modal.querySelector('[data-confirm-ok]');
+        const cancelBtn = modal.querySelector('[data-confirm-cancel]');
+        const closeBtn = modal.querySelector('[data-confirm-close]');
+
+        if (titleEl) {
+            titleEl.innerHTML = `<i class="fas fa-circle-question"></i> ${escapeHtml(opts.title)}`;
+        }
+        if (messageEl) {
+            messageEl.textContent = message || '';
+        }
+        if (okBtn) {
+            okBtn.textContent = opts.confirmText;
+            okBtn.className = opts.danger ? 'btn-danger' : 'btn-primary';
+            okBtn.setAttribute('type', 'button');
+        }
+        if (cancelBtn) {
+            cancelBtn.textContent = opts.cancelText;
+            cancelBtn.setAttribute('type', 'button');
+        }
+
+        let finished = false;
+        const finish = (value) => {
+            if (finished) return;
+            finished = true;
+            cleanup();
+            modal.classList.remove('active');
+            resolve(Boolean(value));
+        };
+
+        const onOk = () => finish(true);
+        const onCancel = () => finish(false);
+        const onClose = () => finish(false);
+        const onCancelEvent = () => finish(false);
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                finish(false);
+            }
+        };
+
+        const cleanup = () => {
+            okBtn?.removeEventListener('click', onOk);
+            cancelBtn?.removeEventListener('click', onCancel);
+            closeBtn?.removeEventListener('click', onClose);
+            modal.removeEventListener('confirm:cancel', onCancelEvent);
+            document.removeEventListener('keydown', onKeyDown, true);
+        };
+
+        okBtn?.addEventListener('click', onOk);
+        cancelBtn?.addEventListener('click', onCancel);
+        closeBtn?.addEventListener('click', onClose);
+        modal.addEventListener('confirm:cancel', onCancelEvent);
+        document.addEventListener('keydown', onKeyDown, true);
+
+        modal.classList.add('active');
+
+        // Focus confirm by default for keyboard flow
+        setTimeout(() => {
+            try { okBtn?.focus(); } catch { /* ignore */ }
+        }, 0);
+    }));
+
+    return __confirmDialogChain;
 }
 
 // ============================================================================
@@ -369,7 +496,7 @@ window.Utils = {
     escapeHtml,
     truncate,
     capitalizeFirst,
-    
+
     // Date/Time
     formatTime,
     formatDate,
@@ -379,25 +506,25 @@ window.Utils = {
     isToday,
     isPastDate,
     ensureTimeFormat,
-    
+
     // Functions
     debounce,
     throttle,
-    
+
     // DOM
     animateNumber,
     createToastContainer,
     $,
     $$,
     $$$,
-    
+
     // Validation
     isEmpty,
-    
+
     // Colors
     hexToRgba,
     lightenColor,
-    
+
     // Storage
     getLocalStorage,
     setLocalStorage

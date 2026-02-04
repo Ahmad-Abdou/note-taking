@@ -1135,9 +1135,15 @@ async function saveGoal(e) {
     };
 
     const goal = new ProductivityData.Goal(goalData);
+    const isNewGoal = !GoalsState.editingGoal;
 
     try {
         await ProductivityData.DataStore.saveGoal(goal);
+
+        // Update commitment stats for new goals
+        if (isNewGoal) {
+            await ProductivityData.DataStore.incrementGoalStat('totalGoalsCreated');
+        }
 
         closeGoalModal();
         await loadGoals();
@@ -1157,7 +1163,27 @@ async function saveGoal(e) {
 }
 
 async function deleteGoal(goalId) {
-    if (!confirm('Are you sure you want to delete this goal? This action cannot be undone.')) return;
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    // Check if goal has stakes or significant progress
+    const hasStakes = goal.stakes?.enabled && goal.stakes?.xpAtStake > 0;
+    const hasProgress = goal.progress > 0 || goal.milestones.some(m => m.isCompleted);
+
+    if (hasStakes || hasProgress) {
+        // Show abandonment modal instead of simple delete
+        openAbandonmentModal(goal);
+        return;
+    }
+
+    // Simple delete for empty goals without stakes
+    const ok = await confirmDialog('Are you sure you want to delete this goal? This action cannot be undone.', {
+        title: 'Delete Goal',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        danger: true
+    });
+    if (!ok) return;
 
     try {
         await ProductivityData.DataStore.deleteGoal(goalId);
@@ -1170,6 +1196,295 @@ async function deleteGoal(goalId) {
     } catch (error) {
         console.error('Failed to delete goal:', error);
         showToast('error', 'Delete Failed', 'Could not delete the goal.');
+    }
+}
+
+// ============================================================================
+// ABANDONMENT FRICTION SYSTEM
+// ============================================================================
+
+function openAbandonmentModal(goal) {
+    const invested = goal.getInvestedTime ? goal.getInvestedTime() : {
+        hours: goal.hoursInvested || 0,
+        milestonesCompleted: goal.milestones.filter(m => m.isCompleted).length,
+        totalMilestones: goal.milestones.length
+    };
+
+    // Check for existing cooldown
+    if (goal.abandonmentRequest?.cooldownEndsAt) {
+        const cooldownEnd = new Date(goal.abandonmentRequest.cooldownEndsAt);
+        if (cooldownEnd > new Date()) {
+            const hoursLeft = Math.ceil((cooldownEnd - new Date()) / (1000 * 60 * 60));
+            showToast('warning', 'Cooling Off Period',
+                `You requested to abandon this goal. Please wait ${hoursLeft} more hours before confirming.`);
+            showAbandonmentCooldownModal(goal, hoursLeft);
+            return;
+        }
+    }
+
+    // Create abandonment modal
+    let modal = document.getElementById('abandonment-modal');
+    if (!modal) {
+        modal = createAbandonmentModal();
+    }
+
+    // Populate modal
+    document.getElementById('abandonment-goal-title').textContent = goal.title;
+    document.getElementById('abandonment-hours-invested').textContent = invested.hours.toFixed(1);
+    document.getElementById('abandonment-milestones-completed').textContent =
+        `${invested.milestonesCompleted}/${invested.totalMilestones}`;
+    document.getElementById('abandonment-progress').textContent = `${goal.progress}%`;
+
+    const stakesWarning = document.getElementById('abandonment-stakes-warning');
+    if (goal.stakes?.enabled && goal.stakes?.xpAtStake > 0) {
+        stakesWarning.innerHTML = `
+            <div class="stakes-loss-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>You will lose <strong>${goal.stakes.xpAtStake} XP</strong> by abandoning this goal!</span>
+            </div>
+        `;
+        stakesWarning.hidden = false;
+    } else {
+        stakesWarning.hidden = true;
+    }
+
+    // Reset form
+    document.getElementById('abandonment-reason').value = '';
+    document.getElementById('abandonment-char-count').textContent = '0';
+    document.getElementById('abandonment-char-count').classList.remove('valid');
+    document.getElementById('confirm-abandonment-btn').disabled = true;
+
+    modal.dataset.goalId = goal.id;
+    modal.classList.add('active');
+}
+
+function createAbandonmentModal() {
+    const modal = document.createElement('div');
+    modal.id = 'abandonment-modal';
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-abandonment"></div>
+        <div class="modal-content medium abandonment-content">
+            <div class="modal-header abandonment-header">
+                <h2><i class="fas fa-flag-checkered"></i> Abandoning Goal</h2>
+                <button class="btn-icon" data-action="close-abandonment">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="abandonment-summary">
+                    <h3 id="abandonment-goal-title"></h3>
+                    <div class="sunk-cost-display">
+                        <div class="sunk-cost-item">
+                            <span class="sunk-cost-value" id="abandonment-hours-invested">0</span>
+                            <span class="sunk-cost-label">Hours Invested</span>
+                        </div>
+                        <div class="sunk-cost-item">
+                            <span class="sunk-cost-value" id="abandonment-milestones-completed">0/0</span>
+                            <span class="sunk-cost-label">Milestones Done</span>
+                        </div>
+                        <div class="sunk-cost-item">
+                            <span class="sunk-cost-value" id="abandonment-progress">0%</span>
+                            <span class="sunk-cost-label">Progress</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="abandonment-stakes-warning" hidden></div>
+
+                <div class="abandonment-reflection">
+                    <label for="abandonment-reason">
+                        <i class="fas fa-pencil-alt"></i>
+                        Why are you abandoning this goal? <span class="required">*</span>
+                    </label>
+                    <textarea id="abandonment-reason" rows="4"
+                              placeholder="Please explain why you're abandoning this goal. This helps you reflect and learn from the experience..."
+                              minlength="50" required></textarea>
+                    <div class="char-counter">
+                        <span id="abandonment-char-count">0</span>/50 minimum characters
+                    </div>
+                </div>
+
+                <div class="abandonment-notice">
+                    <i class="fas fa-info-circle"></i>
+                    <p>After submitting, there will be a <strong>48-hour cooling off period</strong>
+                    before the goal is permanently removed. You can cancel the abandonment during this time.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-action="close-abandonment">Keep Goal</button>
+                <button class="btn-danger" id="confirm-abandonment-btn" disabled>
+                    <i class="fas fa-times-circle"></i> Request Abandonment
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    setupAbandonmentModalListeners(modal);
+    return modal;
+}
+
+function setupAbandonmentModalListeners(modal) {
+    // Close handlers
+    modal.querySelectorAll('[data-action="close-abandonment"]').forEach(el => {
+        el.addEventListener('click', () => modal.classList.remove('active'));
+    });
+
+    // Character counter
+    const reasonInput = document.getElementById('abandonment-reason');
+    const charCount = document.getElementById('abandonment-char-count');
+    const confirmBtn = document.getElementById('confirm-abandonment-btn');
+
+    reasonInput?.addEventListener('input', () => {
+        const count = reasonInput.value.trim().length;
+        charCount.textContent = count;
+        confirmBtn.disabled = count < 50;
+
+        if (count >= 50) {
+            charCount.classList.add('valid');
+        } else {
+            charCount.classList.remove('valid');
+        }
+    });
+
+    // Confirm abandonment
+    confirmBtn?.addEventListener('click', async () => {
+        const goalId = modal.dataset.goalId;
+        const reason = reasonInput.value.trim();
+
+        if (reason.length < 50) return;
+
+        await requestGoalAbandonment(goalId, reason);
+        modal.classList.remove('active');
+    });
+}
+
+async function requestGoalAbandonment(goalId, reason) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    const settings = await ProductivityData.DataStore.getSettings();
+    const cooldownHours = settings.abandonmentCooldownHours || 48;
+
+    const cooldownEnd = new Date();
+    cooldownEnd.setHours(cooldownEnd.getHours() + cooldownHours);
+
+    goal.abandonmentRequest = {
+        requestedAt: new Date().toISOString(),
+        reason: reason,
+        cooldownEndsAt: cooldownEnd.toISOString()
+    };
+
+    await ProductivityData.DataStore.saveGoal(goal);
+    closeGoalModal();
+    closeGoalDetails();
+    await loadGoals();
+
+    showToast('info', 'Abandonment Requested',
+        `Goal will be removed in ${cooldownHours} hours. You can cancel this during the cooling off period.`);
+}
+
+function showAbandonmentCooldownModal(goal, hoursLeft) {
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'abandonment-cooldown-modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-cooldown"></div>
+        <div class="modal-content small abandonment-cooldown-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-clock"></i> Cooling Off Period</h2>
+                <button class="btn-icon" data-action="close-cooldown">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>You requested to abandon <strong>"${escapeHtml(goal.title)}"</strong>.</p>
+                <p class="cooldown-time">
+                    <i class="fas fa-hourglass-half"></i>
+                    <strong>${hoursLeft} hours</strong> remaining
+                </p>
+                <p class="cooldown-reason">
+                    <strong>Your reason:</strong> "${escapeHtml(goal.abandonmentRequest?.reason || '')}"
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-action="cancel-abandonment-cooldown" data-goal-id="${goal.id}">
+                    <i class="fas fa-undo"></i> Keep Goal
+                </button>
+                <button class="btn-ghost" data-action="close-cooldown">
+                    Wait for Cooldown
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll('[data-action="close-cooldown"]').forEach(el => {
+        el.addEventListener('click', () => modal.remove());
+    });
+
+    modal.querySelector('[data-action="cancel-abandonment-cooldown"]')?.addEventListener('click', async (e) => {
+        await cancelGoalAbandonment(e.currentTarget.dataset.goalId);
+        modal.remove();
+    });
+}
+
+async function cancelGoalAbandonment(goalId) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    goal.abandonmentRequest = null;
+    await ProductivityData.DataStore.saveGoal(goal);
+    await loadGoals();
+
+    showToast('success', 'Abandonment Cancelled', 'Great decision! Keep working towards your goal.');
+}
+
+async function confirmGoalAbandonment(goalId) {
+    const goal = GoalsState.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    // Apply XP penalty if stakes were enabled
+    if (goal.stakes?.enabled && goal.stakes?.xpAtStake > 0) {
+        if (typeof window.MotivationSystem?.applyXPPenalty === 'function') {
+            window.MotivationSystem.applyXPPenalty(goal.stakes.xpAtStake, `Abandoned goal: ${goal.title}`);
+        }
+    }
+
+    // Update commitment stats
+    const stats = await ProductivityData.DataStore.getCommitmentStats();
+    stats.totalGoalsAbandoned++;
+    if (goal.stakes?.xpAtStake > 0) {
+        stats.totalXPLostToStakes += goal.stakes.xpAtStake;
+    }
+    await ProductivityData.DataStore.saveCommitmentStats(stats);
+
+    // Delete the goal
+    await ProductivityData.DataStore.deleteGoal(goalId);
+    closeGoalModal();
+    closeGoalDetails();
+    await loadGoals();
+
+    showToast('info', 'Goal Abandoned', 'The goal has been removed from your list.');
+}
+
+// Check for expired abandonment cooldowns on load
+async function checkExpiredAbandonments() {
+    const goals = await ProductivityData.DataStore.getGoals();
+    const now = new Date();
+
+    for (const goal of goals) {
+        if (goal.abandonmentRequest?.cooldownEndsAt) {
+            const cooldownEnd = new Date(goal.abandonmentRequest.cooldownEndsAt);
+            if (cooldownEnd <= now) {
+                // Cooldown expired, complete the abandonment
+                await confirmGoalAbandonment(goal.id);
+            }
+        }
     }
 }
 
@@ -1268,7 +1583,12 @@ async function toggleMilestone(goalId, milestoneId) {
 
     // Check if goal is complete
     if (goal.progress === 100 && goal.status !== 'completed') {
-        if (confirm(`All milestones complete! Mark "${goal.title}" as achieved?`)) {
+        const ok = await confirmDialog(`All milestones complete! Mark "${goal.title}" as achieved?`, {
+            title: 'Mark Goal Achieved',
+            confirmText: 'Mark Achieved',
+            cancelText: 'Not yet'
+        });
+        if (ok) {
             goal.status = 'completed';
             goal.completedAt = new Date().toISOString();
         }
@@ -1490,6 +1810,11 @@ window.reopenGoal = reopenGoal;
 window.addMilestoneInput = addMilestoneInput;
 window.removeMilestoneInput = removeMilestoneInput;
 window.saveGoalReflection = saveGoalReflection;
+// Abandonment friction system
+window.openAbandonmentModal = openAbandonmentModal;
+window.cancelGoalAbandonment = cancelGoalAbandonment;
+window.confirmGoalAbandonment = confirmGoalAbandonment;
+window.checkExpiredAbandonments = checkExpiredAbandonments;
 
 // ============================================================================
 // INITIALIZATION
