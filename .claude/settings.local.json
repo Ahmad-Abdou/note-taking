@@ -5,7 +5,10 @@
       "Bash(git commit:*)",
       "Bash(git push)",
       "Bash(grep:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(gh release view:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
