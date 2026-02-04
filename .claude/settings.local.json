@@ -9,7 +9,10 @@
       "Bash(tree:*)",
       "Bash(gh release view:*)",
       "WebFetch(domain:github.com)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Read(//c/Users/ahmad/OneDrive/Desktop/note taking/**)"
     ]
   }
 }
