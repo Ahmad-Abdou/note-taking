@@ -664,7 +664,9 @@
                             <h3>Where did you spend your time?</h3>
                         </div>
                         <div class="card-content">
-                            <p class="dayreview-help">Tap a start time, then an end time on the clock (wrap-around like 22 → 5 is supported). A quick modal will pop up so you can label it (Sleeping, Working, etc.) and pick a color.</p>
+                            <p class="dayreview-help">Tap a start time, then an end time on the clock (wrap-around like
+                                22 → 5 is supported). A quick modal will pop up so you can label it (Sleeping, Working,
+                                etc.) and pick a color.</p>
 
                             <div class="dayreview-top">
                                 <div class="dayreview-clock-panel">
@@ -1062,6 +1064,52 @@
                             <div class="insights-list" id="insights-list">
                                 <!-- Insights injected here -->
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Commitment Statistics -->
+                    <div class="card commitment-stats-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-handshake"></i> Commitment Score</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="commitment-score-display">
+                                <div class="score-circle" id="commitment-score-circle">
+                                    <svg viewBox="0 0 100 100">
+                                        <circle cx="50" cy="50" r="45" class="score-bg"></circle>
+                                        <circle cx="50" cy="50" r="45" class="score-fill" id="commitment-score-fill">
+                                        </circle>
+                                    </svg>
+                                    <div class="score-value">
+                                        <span id="commitment-score-value">--</span>
+                                        <span class="score-label">%</span>
+                                    </div>
+                                </div>
+                                <div class="score-description" id="commitment-score-description">
+                                    Complete goals to build your commitment score
+                                </div>
+                            </div>
+                            <div class="commitment-stats-grid">
+                                <div class="commitment-stat">
+                                    <span class="stat-value success" id="goals-completed-count">0</span>
+                                    <span class="stat-label">Goals Completed</span>
+                                </div>
+                                <div class="commitment-stat">
+                                    <span class="stat-value danger" id="goals-abandoned-count">0</span>
+                                    <span class="stat-label">Goals Abandoned</span>
+                                </div>
+                                <div class="commitment-stat">
+                                    <span class="stat-value warning" id="xp-lost-total">0</span>
+                                    <span class="stat-label">XP Lost (Total)</span>
+                                </div>
+                                <div class="commitment-stat">
+                                    <span class="stat-value primary" id="checkin-streak-count">0</span>
+                                    <span class="stat-label">Check-in Streak</span>
+                                </div>
+                            </div>
+                            <button class="btn-ghost full-width" id="view-checkin-history-btn">
+                                <i class="fas fa-history"></i> View Check-in History
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1637,13 +1685,15 @@
                                         <i class="fas fa-arrow-rotate-right"></i>
                                         <span>App Updates</span>
                                     </div>
-                                    <p class="cloud-sync-description">Check for the latest version, download it, then install and restart.</p>
+                                    <p class="cloud-sync-description">Check for the latest version, download it, then
+                                        install and restart.</p>
                                     <div class="cloud-sync-actions">
                                         <button class="sync-btn neutral" id="app-update-check-btn">
                                             <i class="fas fa-magnifying-glass"></i>
                                             <span>Check for Updates</span>
                                         </button>
-                                        <button class="sync-btn export" id="app-update-now-btn" disabled style="display:none;">
+                                        <button class="sync-btn export" id="app-update-now-btn" disabled
+                                            style="display:none;">
                                             <i class="fas fa-arrow-up"></i>
                                             <span>Update & Restart</span>
                                         </button>
@@ -2089,7 +2139,8 @@
                             <div class="dayreview-time-inline">
                                 <select id="dayreview-block-start-hour" aria-label="Start hour"></select>
                                 <span class="dayreview-time-sep">:</span>
-                                <input type="number" id="dayreview-block-start-minute" min="0" max="59" value="0" inputmode="numeric" aria-label="Start minute">
+                                <input type="number" id="dayreview-block-start-minute" min="0" max="59" value="0"
+                                    inputmode="numeric" aria-label="Start minute">
                             </div>
                         </div>
                         <div class="form-group">
@@ -2097,7 +2148,8 @@
                             <div class="dayreview-time-inline">
                                 <select id="dayreview-block-end-hour" aria-label="End hour"></select>
                                 <span class="dayreview-time-sep">:</span>
-                                <input type="number" id="dayreview-block-end-minute" min="0" max="59" value="0" inputmode="numeric" aria-label="End minute">
+                                <input type="number" id="dayreview-block-end-minute" min="0" max="59" value="0"
+                                    inputmode="numeric" aria-label="End minute">
                             </div>
                         </div>
                     </div>
@@ -2107,11 +2159,13 @@
                     </div>
                     <div class="form-group">
                         <label for="dayreview-block-label">What did you do?</label>
-                        <input type="text" id="dayreview-block-label" placeholder="Sleeping, Working, Studying..." maxlength="60" required>
+                        <input type="text" id="dayreview-block-label" placeholder="Sleeping, Working, Studying..."
+                            maxlength="60" required>
                     </div>
                     <div class="form-group">
                         <label>Color</label>
-                        <div class="color-options" id="dayreview-block-color-options" aria-label="Day review color"></div>
+                        <div class="color-options" id="dayreview-block-color-options" aria-label="Day review color">
+                        </div>
                         <input type="hidden" id="dayreview-block-color" value="#6366f1">
                     </div>
                 </div>
