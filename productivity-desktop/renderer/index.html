@@ -27,6 +27,7 @@
     <link rel="stylesheet" href="styles/_motivation.css">
     <link rel="stylesheet" href="styles/_idle.css">
     <link rel="stylesheet" href="styles/_revisions.css">
+    <link rel="stylesheet" href="styles/_day_review.css">
 </head>
 
 <body>
@@ -115,6 +116,10 @@
                 <li class="nav-item" data-page="analytics">
                     <i class="fas fa-chart-line"></i>
                     <span>Analytics</span>
+                </li>
+                <li class="nav-item" data-page="day-review">
+                    <i class="fas fa-clock"></i>
+                    <span>Day Review</span>
                 </li>
                 <li class="nav-item" data-page="focus">
                     <i class="fas fa-brain"></i>
@@ -626,6 +631,56 @@
                     <h2><i class="fas fa-medal"></i> Achievements</h2>
                     <div class="achievements-grid" id="achievements-grid">
                         <!-- Achievements injected here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Day Review Page -->
+            <section id="page-day-review" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-clock"></i> Day Review</h1>
+                    <div class="header-actions dayreview-header-actions">
+                        <label class="dayreview-format">
+                            <span>Clock</span>
+                            <select id="dayreview-format" aria-label="Clock format">
+                                <option value="24">24h</option>
+                                <option value="12">12h</option>
+                            </select>
+                        </label>
+                        <label class="dayreview-date">
+                            <span>Date</span>
+                            <input type="date" id="dayreview-date" />
+                        </label>
+                        <button class="btn-secondary" id="dayreview-yesterday-btn" type="button">
+                            <i class="fas fa-rotate-left"></i> Yesterday
+                        </button>
+                    </div>
+                </header>
+
+                <div class="dayreview-layout">
+                    <div class="card dayreview-card">
+                        <div class="card-header">
+                            <h3>Where did you spend your time?</h3>
+                        </div>
+                        <div class="card-content">
+                            <p class="dayreview-help">Tap a start time, then an end time on the clock (wrap-around like 22 → 5 is supported). A quick modal will pop up so you can label it (Sleeping, Working, etc.) and pick a color.</p>
+
+                            <div class="dayreview-top">
+                                <div class="dayreview-clock-panel">
+                                    <div id="dayreview-clock" class="dayreview-clock" aria-label="24 hour clock"></div>
+                                    <div class="dayreview-selection" id="dayreview-selection" aria-live="polite"></div>
+                                    <div class="dayreview-actions">
+                                        <button class="btn-secondary" id="dayreview-clear-selection-btn" type="button">
+                                            <i class="fas fa-eraser"></i> Clear Selection
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="dayreview-timeline" id="dayreview-timeline" aria-label="Day timeline"></div>
+
+                            <div class="dayreview-entries" id="dayreview-entries" aria-label="Saved time blocks"></div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -2019,6 +2074,53 @@
             </div>
         </div>
 
+        <!-- Day Review Block Modal -->
+        <div class="modal" id="dayreview-block-modal">
+            <div class="modal-content small">
+                <div class="modal-header">
+                    <h2 id="dayreview-block-modal-title"><i class="fas fa-clock"></i> Add Time Block</h2>
+                    <button class="close-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row dayreview-time-row">
+                        <div class="form-group">
+                            <label>Start</label>
+                            <div class="dayreview-time-inline">
+                                <select id="dayreview-block-start-hour" aria-label="Start hour"></select>
+                                <span class="dayreview-time-sep">:</span>
+                                <input type="number" id="dayreview-block-start-minute" min="0" max="59" value="0" inputmode="numeric" aria-label="Start minute">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>End</label>
+                            <div class="dayreview-time-inline">
+                                <select id="dayreview-block-end-hour" aria-label="End hour"></select>
+                                <span class="dayreview-time-sep">:</span>
+                                <input type="number" id="dayreview-block-end-minute" min="0" max="59" value="0" inputmode="numeric" aria-label="End minute">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Selected Range</label>
+                        <div id="dayreview-block-range" style="opacity:0.85"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dayreview-block-label">What did you do?</label>
+                        <input type="text" id="dayreview-block-label" placeholder="Sleeping, Working, Studying..." maxlength="60" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Color</label>
+                        <div class="color-options" id="dayreview-block-color-options" aria-label="Day review color"></div>
+                        <input type="hidden" id="dayreview-block-color" value="#6366f1">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary cancel-modal" type="button">Cancel</button>
+                    <button class="btn-primary" id="dayreview-block-save" type="button">Save</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Scripts - logger and utils must load first as other scripts depend on them -->
         <script src="storage-polyfill.js"></script>
         <script src="logger.js"></script>
@@ -2038,6 +2140,7 @@
         <script src="goals.js"></script>
         <script src="focus.js"></script>
         <script src="analytics.js"></script>
+        <script src="day-review.js"></script>
         <script src="time-tracker.js"></script>
         <script src="blocker.js"></script>
         <script src="motivation.js"></script>
