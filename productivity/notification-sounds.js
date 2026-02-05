@@ -10,6 +10,7 @@ class NotificationSounds {
         this.audioBuffers = {}; // Cache for decoded audio
         this.basePath = this.getBasePath();
         this._missingLogged = new Set();
+        this._fileLoadingDisabled = false;
         this.soundTypes = [
             'default', 'reminder', 'success', 'warning',
             'focusStart', 'focusEnd', 'break', 'achievement',
@@ -49,6 +50,12 @@ class NotificationSounds {
         }
 
         try {
+            if (this._fileLoadingDisabled) {
+                const fallback = this.createFallbackBuffer(type);
+                this.audioBuffers[type] = fallback;
+                return fallback;
+            }
+
             // Try MP3 first, fallback to OGG
             let response;
             let url;
@@ -66,13 +73,24 @@ class NotificationSounds {
                     throw new Error('MP3 not found');
                 }
             } catch (e) {
-                // Fallback to OGG
+                // If the MP3 fetch threw (common when files aren't packaged), stop trying to fetch files.
+                // This avoids noisy repeated net::ERR_FILE_NOT_FOUND errors.
+                if (e instanceof TypeError) {
+                    this._fileLoadingDisabled = true;
+                    throw e;
+                }
+
+                // Fallback to OGG (only if MP3 request succeeded but 404'd)
                 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
                     url = chrome.runtime.getURL(`productivity/sounds/${type}.ogg`);
                 } else {
                     url = `${this.basePath}${type}.ogg`;
                 }
                 response = await fetch(url);
+                if (!response.ok) {
+                    this._fileLoadingDisabled = true;
+                    throw new Error('OGG not found');
+                }
             }
 
             if (!response.ok) {
@@ -86,6 +104,7 @@ class NotificationSounds {
             this.audioBuffers[type] = audioBuffer;
             return audioBuffer;
         } catch (error) {
+            this._fileLoadingDisabled = true;
             // If audio files are missing (common in dev builds), fall back to a simple generated tone.
             if (!this._missingLogged.has(type)) {
                 this._missingLogged.add(type);

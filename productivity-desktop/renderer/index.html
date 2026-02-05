@@ -567,7 +567,7 @@
             <!-- Goals Page -->
             <section id="page-goals" class="page">
                 <header class="page-header">
-                    <h1><i class="fas fa-bullseye"></i> Goals & Challenges</h1>
+                    <h1><i class="fas fa-bullseye"></i> Goals & Milestones</h1>
                     <div class="header-actions">
                         <button class="btn-primary" id="add-goal-btn">
                             <i class="fas fa-plus"></i> New Goal
@@ -575,94 +575,107 @@
                     </div>
                 </header>
 
-                <!-- Tab Navigation -->
-                <div class="goals-tabs">
-                    <button class="goals-tab active" data-tab="goals-content">
-                        <i class="fas fa-bullseye"></i> Goals
-                    </button>
-                    <button class="goals-tab" data-tab="challenges-content">
-                        <i class="fas fa-trophy"></i> Challenges
+                <!-- Daily Targets Card -->
+                <div class="daily-targets-card">
+                    <h3><i class="fas fa-chart-line"></i> Daily Targets</h3>
+                    <div class="targets-grid">
+                        <div class="target-item">
+                            <div class="target-icon"><i class="fas fa-clock"></i></div>
+                            <div class="target-info">
+                                <label>Study Hours</label>
+                                <div class="target-input">
+                                    <input type="number" id="goals-daily-study" min="1" max="16" value="8">
+                                    <span>hours/day</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="target-item">
+                            <div class="target-icon"><i class="fas fa-tasks"></i></div>
+                            <div class="target-info">
+                                <label>Tasks Complete</label>
+                                <div class="target-input">
+                                    <input type="number" id="goals-daily-tasks" min="1" max="20" value="5">
+                                    <span>tasks/day</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="target-item">
+                            <div class="target-icon"><i class="fas fa-calendar-week"></i></div>
+                            <div class="target-info">
+                                <label>Weekly Study</label>
+                                <div class="target-input">
+                                    <input type="number" id="goals-weekly-study" min="1" max="100" value="40">
+                                    <span>hours/week</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-secondary btn-sm" id="save-daily-targets-btn">
+                        <i class="fas fa-save"></i> Save Targets
                     </button>
                 </div>
 
-                <!-- Goals Tab Content -->
-                <div id="goals-content" class="goals-tab-content active">
-                    <!-- Daily Targets Card -->
-                    <div class="daily-targets-card">
-                        <h3><i class="fas fa-chart-line"></i> Daily Targets</h3>
-                        <div class="targets-grid">
-                            <div class="target-item">
-                                <div class="target-icon"><i class="fas fa-clock"></i></div>
-                                <div class="target-info">
-                                    <label>Study Hours</label>
-                                    <div class="target-input">
-                                        <input type="number" id="goals-daily-study" min="1" max="16" value="8">
-                                        <span>hours/day</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="target-item">
-                                <div class="target-icon"><i class="fas fa-tasks"></i></div>
-                                <div class="target-info">
-                                    <label>Tasks Complete</label>
-                                    <div class="target-input">
-                                        <input type="number" id="goals-daily-tasks" min="1" max="20" value="5">
-                                        <span>tasks/day</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="target-item">
-                                <div class="target-icon"><i class="fas fa-calendar-week"></i></div>
-                                <div class="target-info">
-                                    <label>Weekly Study</label>
-                                    <div class="target-input">
-                                        <input type="number" id="goals-weekly-study" min="1" max="100" value="40">
-                                        <span>hours/week</span>
-                                    </div>
-                                </div>
-                            </div>
+                <!-- Goal Categories -->
+                <div class="goal-categories">
+                    <button class="category-btn active" data-category="all">All Goals</button>
+                    <button class="category-btn" data-category="academic">Academic</button>
+                    <button class="category-btn" data-category="skill">Skills</button>
+                    <button class="category-btn" data-category="project">Projects</button>
+                    <button class="category-btn" data-category="career">Career</button>
+                </div>
+
+                <!-- Goals Grid -->
+                <div class="goals-grid" id="goals-grid">
+                    <!-- Goals injected here -->
+                </div>
+            </section>
+
+            <!-- Challenges Page -->
+            <section id="page-challenges" class="page">
+                <header class="page-header">
+                    <h1><i class="fas fa-trophy"></i> Challenges</h1>
+                    <button class="btn-primary" id="create-challenge-btn">
+                        <i class="fas fa-plus"></i> New Challenge
+                    </button>
+                </header>
+
+                <!-- Challenge Stats -->
+                <div class="challenge-stats-row">
+                    <div class="challenge-stat-card">
+                        <div class="stat-icon"><i class="fas fa-fire"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="active-challenges-count">0</span>
+                            <span class="stat-label">Active Challenges</span>
                         </div>
-                        <button class="btn-secondary btn-sm" id="save-daily-targets-btn">
-                            <i class="fas fa-save"></i> Save Targets
-                        </button>
                     </div>
-
-                    <!-- Goal Categories -->
-                    <div class="goal-categories">
-                        <button class="category-btn active" data-category="all">All Goals</button>
-                        <button class="category-btn" data-category="academic">Academic</button>
-                        <button class="category-btn" data-category="skill">Skills</button>
-                        <button class="category-btn" data-category="project">Projects</button>
-                        <button class="category-btn" data-category="career">Career</button>
+                    <div class="challenge-stat-card">
+                        <div class="stat-icon success"><i class="fas fa-check-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="completed-challenges-count">0</span>
+                            <span class="stat-label">Completed</span>
+                        </div>
                     </div>
-
-                    <!-- Goals Grid -->
-                    <div class="goals-grid" id="goals-grid">
-                        <!-- Goals injected here -->
+                    <div class="challenge-stat-card">
+                        <div class="stat-icon warning"><i class="fas fa-medal"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="best-streak-count">0</span>
+                            <span class="stat-label">Best Streak</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Challenges Tab Content -->
-                <div id="challenges-content" class="goals-tab-content">
-                    <div class="challenges-section">
-                        <div class="challenges-header">
-                            <h3><i class="fas fa-trophy"></i> Active Challenges</h3>
-                            <button class="btn-primary" onclick="ChallengeManager.openCreateModal()">
-                                <i class="fas fa-plus"></i> New Challenge
-                            </button>
-                        </div>
+                <!-- Challenge Categories -->
+                <div class="challenge-categories">
+                    <button class="category-btn active" data-filter="all">All</button>
+                    <button class="category-btn" data-filter="active">Active</button>
+                    <button class="category-btn" data-filter="completed">Completed</button>
+                    <button class="category-btn" data-filter="daily">Daily</button>
+                    <button class="category-btn" data-filter="weekly">Weekly</button>
+                </div>
 
-                        <div id="challenges-container">
-                            <!-- Challenges injected by JS -->
-                        </div>
-
-                        <div class="challenges-history-section" style="margin-top: 32px;">
-                            <h3><i class="fas fa-history"></i> Challenge History</h3>
-                            <div id="challenges-history">
-                                <!-- History injected by JS -->
-                            </div>
-                        </div>
-                    </div>
+                <!-- Challenges Grid -->
+                <div class="challenges-grid" id="challenges-grid">
+                    <!-- Challenges injected here -->
                 </div>
             </section>
 
@@ -2202,66 +2215,6 @@
                 <div class="modal-footer">
                     <button class="btn-secondary cancel-modal" type="button">Cancel</button>
                     <button class="btn-primary" id="dayreview-block-save" type="button">Save</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Create Challenge Modal -->
-        <div id="create-challenge-modal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2><i class="fas fa-trophy"></i> New Challenge</h2>
-                    <button class="btn-icon" onclick="ChallengeManager.closeCreateModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="challenge-form">
-                        <div class="form-group">
-                            <label for="challenge-title">Challenge Name (optional)</label>
-                            <input type="text" id="challenge-title" placeholder="e.g., Morning Focus Sprint">
-                        </div>
-
-                        <div class="form-group">
-                            <label>Challenge Type</label>
-                            <select id="challenge-type" onchange="ChallengeManager.updateConfigFields()">
-                                <option value="focus_sessions">🧠 Focus Sessions</option>
-                                <option value="focus_time">⏱️ Focus Time (minutes)</option>
-                                <option value="tasks">✅ Complete Tasks</option>
-                                <option value="reviews">📚 Spaced Repetition Reviews</option>
-                                <option value="habits">📋 Check Habits</option>
-                            </select>
-                        </div>
-
-                        <div class="challenge-form-row">
-                            <div class="form-group">
-                                <label for="challenge-target">Target</label>
-                                <input type="number" id="challenge-target" min="1" max="100" value="5">
-                            </div>
-                            <div class="form-group">
-                                <label for="challenge-frequency">Frequency</label>
-                                <select id="challenge-frequency">
-                                    <option value="daily">Daily (resets at midnight)</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="once">One-time</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group" id="challenge-duration-config" style="display: block;">
-                            <label for="challenge-min-duration">Minimum Session Duration (optional)</label>
-                            <input type="number" id="challenge-min-duration" min="0" max="180"
-                                placeholder="e.g., 25 minutes">
-                            <small style="color: var(--text-muted);">Only count sessions longer than this</small>
-                        </div>
-
-                        <div class="challenge-form-actions">
-                            <button class="btn-secondary" onclick="ChallengeManager.closeCreateModal()">Cancel</button>
-                            <button class="btn-primary" onclick="ChallengeManager.submitCreateForm()">
-                                <i class="fas fa-plus"></i> Create Challenge
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

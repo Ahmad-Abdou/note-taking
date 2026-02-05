@@ -2033,6 +2033,14 @@ async function saveTask(e) {
     const tagsValue = document.getElementById('task-tags')?.value || '';
     const tags = tagsValue ? tagsValue.split(',').filter(t => t.trim()) : [];
 
+    // Optional link
+    const linkUrlRaw = document.getElementById('task-link-url')?.value || '';
+    const linkUrl = linkUrlRaw.trim() ? normalizeTaskLinkUrl(linkUrlRaw) : null;
+    if (linkUrlRaw.trim() && !linkUrl) {
+        showToast('error', 'Validation Error', 'Please enter a valid link (http/https/mailto).');
+        return;
+    }
+
     if (!title) {
         showToast('error', 'Validation Error', 'Please enter a task title.');
         return;
@@ -2042,6 +2050,7 @@ async function saveTask(e) {
         id: TaskState.editingTask?.id,
         title,
         description,
+        linkUrl,
         startDate,
         startTime,
         dueDate,

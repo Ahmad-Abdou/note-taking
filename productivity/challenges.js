@@ -34,6 +34,15 @@ function setupChallengeListeners() {
         openChallengeModal();
     });
 
+    // Delegate clicks for empty-state "Create Challenge" button (no inline onclick; CSP-safe)
+    document.getElementById('challenges-grid')?.addEventListener('click', (e) => {
+        const btn = e.target?.closest?.('[data-action="create-challenge"]');
+        if (btn) {
+            e.preventDefault?.();
+            openChallengeModal();
+        }
+    });
+
     // Category filter buttons
     document.querySelectorAll('.challenge-categories .category-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -74,7 +83,7 @@ function renderChallenges() {
                 <i class="fas fa-trophy"></i>
                 <h3>No challenges yet</h3>
                 <p>Create your first challenge to start tracking progress!</p>
-                <button class="btn-primary" onclick="openChallengeModal()">
+                <button class="btn-primary" type="button" data-action="create-challenge">
                     <i class="fas fa-plus"></i> Create Challenge
                 </button>
             </div>

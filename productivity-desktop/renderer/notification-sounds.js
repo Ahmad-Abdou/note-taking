@@ -9,6 +9,8 @@ class NotificationSounds {
         this.audioContext = null;
         this.audioBuffers = {}; // Cache for decoded audio
         this.basePath = this.getBasePath();
+        this._missingLogged = new Set();
+        this._fileLoadingDisabled = false;
         this.soundTypes = [
             'default', 'reminder', 'success', 'warning',
             'focusStart', 'focusEnd', 'break', 'achievement',
@@ -42,6 +44,17 @@ class NotificationSounds {
             return this.audioBuffers[type];
         }
 
+        // Ensure we have an AudioContext for decoding/fallback generation
+        if (!this.audioContext) {
+            await this.init();
+        }
+
+        if (this._fileLoadingDisabled) {
+            const fallback = this.createFallbackBuffer(type);
+            this.audioBuffers[type] = fallback;
+            return fallback;
+        }
+
         try {
             // Try MP3 first, fallback to OGG
             let response;
@@ -60,6 +73,12 @@ class NotificationSounds {
                     throw new Error('MP3 not found');
                 }
             } catch (e) {
+                // If the MP3 fetch threw (common when sound files aren't packaged), stop trying to fetch files.
+                if (e instanceof TypeError) {
+                    this._fileLoadingDisabled = true;
+                    throw e;
+                }
+
                 // Fallback to OGG
                 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
                     url = chrome.runtime.getURL(`productivity/sounds/${type}.ogg`);
@@ -67,6 +86,10 @@ class NotificationSounds {
                     url = `${this.basePath}${type}.ogg`;
                 }
                 response = await fetch(url);
+                if (!response.ok) {
+                    this._fileLoadingDisabled = true;
+                    throw new Error('OGG not found');
+                }
             }
 
             if (!response.ok) {
@@ -80,9 +103,69 @@ class NotificationSounds {
             this.audioBuffers[type] = audioBuffer;
             return audioBuffer;
         } catch (error) {
-            console.error(`Error loading sound ${type}:`, error);
-            return null;
+            this._fileLoadingDisabled = true;
+            if (!this._missingLogged.has(type)) {
+                this._missingLogged.add(type);
+                console.warn(`Notification sound files missing for '${type}'. Using fallback tone.`);
+            }
+            const fallback = this.createFallbackBuffer(type);
+            this.audioBuffers[type] = fallback;
+            return fallback;
         }
+    }
+
+    createFallbackBuffer(type) {
+        const sr = this.audioContext?.sampleRate || 44100;
+
+        const patterns = {
+            success: [{ f: 880, d: 0.07 }, { f: 1175, d: 0.09 }],
+            warning: [{ f: 440, d: 0.09 }, { f: 392, d: 0.10 }],
+            reminder: [{ f: 660, d: 0.08 }, { f: 660, d: 0.08 }],
+            focusStart: [{ f: 523, d: 0.10 }, { f: 784, d: 0.10 }],
+            focusEnd: [{ f: 784, d: 0.10 }, { f: 523, d: 0.10 }],
+            break: [{ f: 330, d: 0.12 }],
+            achievement: [{ f: 659, d: 0.08 }, { f: 784, d: 0.08 }, { f: 988, d: 0.10 }],
+            streak: [{ f: 740, d: 0.08 }, { f: 932, d: 0.10 }],
+            ping: [{ f: 988, d: 0.06 }],
+            message: [{ f: 880, d: 0.06 }],
+            ding: [{ f: 1046, d: 0.09 }],
+            chime: [{ f: 784, d: 0.08 }, { f: 1046, d: 0.10 }],
+            default: [{ f: 880, d: 0.06 }],
+        };
+
+        const seq = patterns[type] || patterns.default;
+        const totalDur = seq.reduce((sum, p) => sum + p.d, 0) + 0.05;
+        const length = Math.max(1, Math.floor(totalDur * sr));
+        const buffer = this.audioContext.createBuffer(1, length, sr);
+        const data = buffer.getChannelData(0);
+
+        let cursor = 0;
+        for (const p of seq) {
+            const segLen = Math.floor(p.d * sr);
+            const attack = Math.floor(segLen * 0.12);
+            const release = Math.floor(segLen * 0.25);
+            const sustainLen = Math.max(0, segLen - attack - release);
+
+            for (let i = 0; i < segLen && (cursor + i) < data.length; i++) {
+                const t = i / sr;
+                const phase = 2 * Math.PI * p.f * t;
+                let env = 1;
+                if (i < attack) env = i / Math.max(1, attack);
+                else if (i < attack + sustainLen) env = 1;
+                else {
+                    const r = (i - attack - sustainLen) / Math.max(1, release);
+                    env = 1 - r;
+                }
+                data[cursor + i] += Math.sin(phase) * env * 0.25;
+            }
+            cursor += segLen + Math.floor(0.015 * sr);
+        }
+
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.tanh(data[i]);
+        }
+
+        return buffer;
     }
 
     async play(type = 'default', volume = 0.7) {

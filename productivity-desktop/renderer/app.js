@@ -513,34 +513,124 @@ function renderTodayTasksCard(allTasks) {
         return;
     }
 
+    // Get task lists for display
+    const getListInfo = (listId) => {
+        if (!listId || !window.TaskState?.taskLists) return null;
+        return window.TaskState.taskLists.find(l => l.id === listId);
+    };
+
+    // Get focus time for task
+    const getFocusTime = (taskId) => {
+        if (!taskId || !window.TaskState?.focusTimeByTaskId) return 0;
+        return window.TaskState.focusTimeByTaskId[taskId] || 0;
+    };
+
+    // Format focus time
+    const formatFocusTime = (minutes) => {
+        if (!minutes || minutes <= 0) return '';
+        if (minutes < 60) return `${Math.round(minutes)}m`;
+        const hours = Math.floor(minutes / 60);
+        const mins = Math.round(minutes % 60);
+        return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    };
+
     list.innerHTML = todayTasks.map(task => {
         const time = task.dueTime || task.startTime || '';
+        const listInfo = getListInfo(task.listId);
+        const focusMinutes = getFocusTime(task.id);
+        const focusTimeStr = formatFocusTime(focusMinutes);
+
         const metaParts = [];
         if (time) metaParts.push(`<span><i class="fas fa-clock"></i> ${escapeHtml(time)}</span>`);
         if (task.subject) metaParts.push(`<span><i class="fas fa-book"></i> ${escapeHtml(task.subject)}</span>`);
+        if (listInfo) metaParts.push(`<span style="color: ${listInfo.color}"><i class="fas ${listInfo.icon || 'fa-folder'}"></i> ${escapeHtml(listInfo.name)}</span>`);
+        if (task.tags && task.tags.length > 0) {
+            metaParts.push(`<span><i class="fas fa-tag"></i> ${task.tags.slice(0, 2).map(t => escapeHtml(t)).join(', ')}</span>`);
+        }
+        if (focusTimeStr) metaParts.push(`<span class="task-focus-time"><i class="fas fa-stopwatch"></i> ${focusTimeStr}</span>`);
+
         const meta = metaParts.length ? `<div class="task-meta">${metaParts.join('')}</div>` : '<div class="task-meta"></div>';
+
         return `
-            <li class="task-item ${task.status === 'completed' ? 'completed' : ''}" data-task-id="${task.id}" style="cursor: pointer;">
-                <div class="task-checkbox ${task.status === 'completed' ? 'checked' : ''}">
+            <li class="task-item ${task.status === 'completed' ? 'completed' : ''}" data-task-id="${task.id}">
+                <div class="task-checkbox ${task.status === 'completed' ? 'checked' : ''}" data-action="toggle">
                     ${task.status === 'completed' ? '<i class="fas fa-check"></i>' : ''}
                 </div>
-                <div class="task-info">
+                <div class="task-info" data-action="view">
                     <div class="task-title ${task.status === 'completed' ? 'strikethrough' : ''}">${escapeHtml(task.title)}</div>
                     ${meta}
                 </div>
                 <div class="task-priority ${task.priority || 'medium'}"></div>
+                <div class="task-item-actions">
+                    <button class="btn-icon tiny" data-action="focus" data-task-id="${task.id}" title="Start Focus">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn-icon tiny" data-action="edit" data-task-id="${task.id}" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon tiny highlight-green" data-action="review" data-task-id="${task.id}" title="Send to Review">
+                        <i class="fas fa-graduation-cap"></i>
+                    </button>
+                    <button class="btn-icon tiny danger" data-action="delete" data-task-id="${task.id}" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </li>
         `;
     }).join('');
 
-    // Toggle completion on click (same feel as Priority Tasks)
+    // Event delegation for task actions
     list.onclick = async (e) => {
         const item = e.target.closest('.task-item');
         if (!item) return;
-        e.stopPropagation();
+
         const taskId = item.dataset.taskId;
         if (!taskId) return;
 
+        const actionEl = e.target.closest('[data-action]');
+        const action = actionEl?.dataset.action;
+
+        if (action === 'focus') {
+            e.stopPropagation();
+            if (typeof startFocusOnTask === 'function') {
+                startFocusOnTask(taskId);
+            } else {
+                navigateTo('focus');
+            }
+            return;
+        }
+
+        if (action === 'edit') {
+            e.stopPropagation();
+            if (typeof editTask === 'function') {
+                editTask(taskId);
+            } else if (typeof window.openTaskModal === 'function') {
+                const task = await ProductivityData.DataStore.getTask(taskId);
+                window.openTaskModal(task);
+            }
+            return;
+        }
+
+        if (action === 'review') {
+            e.stopPropagation();
+            if (typeof finishAndSendToReview === 'function') {
+                finishAndSendToReview(taskId);
+            }
+            return;
+        }
+
+        if (action === 'delete') {
+            e.stopPropagation();
+            if (confirm('Delete this task?')) {
+                await ProductivityData.DataStore.deleteTask(taskId);
+                await loadDashboard();
+                showToast('success', 'Deleted', 'Task deleted successfully');
+            }
+            return;
+        }
+
+        // Default: toggle completion
+        e.stopPropagation();
         const checkbox = item.querySelector('.task-checkbox');
         const title = item.querySelector('.task-title');
         const isCurrentlyCompleted = item.classList.contains('completed');
