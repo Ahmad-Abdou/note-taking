@@ -40,6 +40,12 @@
     font-weight: 500;
 }
 
+.task-meta .task-focus-time,
+.grid-card-focus-time {
+    color: var(--primary);
+    font-weight: 500;
+}
+
 .task-priority-badge {
     display: flex;
     align-items: center;

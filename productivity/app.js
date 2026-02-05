@@ -310,6 +310,10 @@ async function loadDashboard() {
         const todayAgenda = buildTodayAgendaItems(ProductivityData.getTodayDate(), todayEvents, allTasks);
         renderTodaySchedule(todayAgenda);
 
+        // Update today's tasks (quick list card)
+        setupTodayTasksCardHandlers();
+        renderTodayTasksCard(allTasks);
+
         // Update priority tasks
         renderPriorityTasks(priorityTasks);
 
@@ -346,6 +350,171 @@ async function loadDashboard() {
     } catch (error) {
         console.error('Failed to load dashboard:', error);
     }
+}
+
+function getDashboardTodayYMD() {
+    try {
+        if (typeof ProductivityData?.getTodayDate === 'function') return ProductivityData.getTodayDate();
+    } catch (e) {
+        // ignore
+    }
+    return new Date().toISOString().split('T')[0];
+}
+
+function normalizeYMD(value) {
+    if (!value) return '';
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+}
+
+function renderTodayTasksCard(allTasks) {
+    const list = document.getElementById('today-tasks-list');
+    if (!list) return;
+
+    const today = getDashboardTodayYMD();
+    const tasks = Array.isArray(allTasks) ? allTasks : [];
+
+    const todayTasks = tasks
+        .filter(t => {
+            if (!t) return false;
+            if (t.status === 'completed') return false;
+            const due = normalizeYMD(t.dueDate);
+            const start = normalizeYMD(t.startDate);
+            return due === today || start === today;
+        })
+        .sort((a, b) => {
+            const pa = (a.priorityWeight ?? 0);
+            const pb = (b.priorityWeight ?? 0);
+            if (pb !== pa) return pb - pa;
+            const ta = (a.dueTime || a.startTime || '99:99');
+            const tb = (b.dueTime || b.startTime || '99:99');
+            if (ta !== tb) return String(ta).localeCompare(String(tb));
+            return String(a.title || '').localeCompare(String(b.title || ''));
+        })
+        .slice(0, 8);
+
+    if (todayTasks.length === 0) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-list-check"></i>
+                <p>No tasks planned for today</p>
+                <button class="btn-secondary" id="today-tasks-open-modal-btn" style="margin-top:10px;">Add a task</button>
+            </div>
+        `;
+        list.querySelector('#today-tasks-open-modal-btn')?.addEventListener('click', () => {
+            const input = document.getElementById('today-tasks-input');
+            if (input) {
+                input.focus();
+                return;
+            }
+            window.openTaskModal?.(null, 'not-started', { dueDate: today });
+        });
+        return;
+    }
+
+    list.innerHTML = todayTasks.map(task => {
+        const time = task.dueTime || task.startTime || '';
+        const metaParts = [];
+        if (time) metaParts.push(`<span><i class="fas fa-clock"></i> ${escapeHtml(time)}</span>`);
+        if (task.subject) metaParts.push(`<span><i class="fas fa-book"></i> ${escapeHtml(task.subject)}</span>`);
+        const meta = metaParts.length ? `<div class="task-meta">${metaParts.join('')}</div>` : '<div class="task-meta"></div>';
+        return `
+            <li class="task-item ${task.status === 'completed' ? 'completed' : ''}" data-task-id="${task.id}" style="cursor: pointer;">
+                <div class="task-checkbox ${task.status === 'completed' ? 'checked' : ''}">
+                    ${task.status === 'completed' ? '<i class="fas fa-check"></i>' : ''}
+                </div>
+                <div class="task-info">
+                    <div class="task-title ${task.status === 'completed' ? 'strikethrough' : ''}">${escapeHtml(task.title)}</div>
+                    ${meta}
+                </div>
+                <div class="task-priority ${task.priority || 'medium'}"></div>
+            </li>
+        `;
+    }).join('');
+
+    // Toggle completion on click (same feel as Priority Tasks)
+    list.onclick = async (e) => {
+        const item = e.target.closest('.task-item');
+        if (!item) return;
+        e.stopPropagation();
+        const taskId = item.dataset.taskId;
+        if (!taskId) return;
+
+        const checkbox = item.querySelector('.task-checkbox');
+        const title = item.querySelector('.task-title');
+        const isCurrentlyCompleted = item.classList.contains('completed');
+
+        if (isCurrentlyCompleted) {
+            item.classList.remove('completed');
+            checkbox?.classList.remove('checked');
+            if (checkbox) checkbox.innerHTML = '';
+            title?.classList.remove('strikethrough');
+        } else {
+            item.classList.add('completed');
+            checkbox?.classList.add('checked');
+            if (checkbox) checkbox.innerHTML = '<i class="fas fa-check"></i>';
+            title?.classList.add('strikethrough');
+        }
+
+        await toggleTask(taskId);
+    };
+}
+
+function setupTodayTasksCardHandlers() {
+    const input = document.getElementById('today-tasks-input');
+    const btn = document.getElementById('today-tasks-add-btn');
+    if (!input || !btn) return;
+
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+
+    const submit = async () => {
+        const title = input.value?.trim();
+        if (!title) return;
+
+        const today = getDashboardTodayYMD();
+        input.value = '';
+
+        input.disabled = true;
+        btn.disabled = true;
+        try {
+            const task = new ProductivityData.Task({
+                title,
+                dueDate: today,
+                priority: 'medium',
+                category: 'personal',
+                status: 'not-started'
+            });
+
+            await ProductivityData.DataStore.saveTask(task);
+            try {
+                await ProductivityData.ProductivityCalculator.updateDailyStats('task_created');
+            } catch (e) {
+                // ignore
+            }
+
+            if (App.currentPage === 'dashboard') {
+                await loadDashboard();
+            }
+        } catch (error) {
+            console.error('[App] Failed to quick add today task:', error);
+            showToast('error', 'Save Failed', 'Could not add the task.');
+        } finally {
+            input.disabled = false;
+            btn.disabled = false;
+            input.focus();
+        }
+    };
+
+    btn.addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+        }
+    });
 }
 
 async function updateNotificationCount() {

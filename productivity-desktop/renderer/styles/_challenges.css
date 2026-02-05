@@ -1,0 +1,511 @@
+/**
+ * Challenges System Styles
+ */
+
+/* ============================================================================
+   CHALLENGE TAB IN GOALS PAGE
+   ============================================================================ */
+
+.goals-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.goals-tab {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.goals-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.goals-tab.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.goals-tab-content {
+    display: none;
+}
+
+.goals-tab-content.active {
+    display: block;
+}
+
+/* ============================================================================
+   CHALLENGES CONTAINER
+   ============================================================================ */
+
+.challenges-section {
+    padding: 0;
+}
+
+.challenges-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.challenges-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#challenges-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+/* ============================================================================
+   CHALLENGE CARD
+   ============================================================================ */
+
+.challenge-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.challenge-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent-primary);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.challenge-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    border-color: var(--accent-primary);
+}
+
+.challenge-card:hover::before {
+    opacity: 1;
+}
+
+.challenge-card.completed {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+    border-color: var(--success-color, #10b981);
+}
+
+.challenge-card.completed::before {
+    background: var(--success-color, #10b981);
+    opacity: 1;
+}
+
+/* ============================================================================
+   PROGRESS RING
+   ============================================================================ */
+
+.challenge-progress-ring {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+}
+
+.challenge-progress-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.challenge-progress-ring .progress-bg {
+    fill: none;
+    stroke: var(--bg-tertiary);
+    stroke-width: 6;
+}
+
+.challenge-progress-ring .progress-fill {
+    fill: none;
+    stroke: var(--accent-primary);
+    stroke-width: 6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.challenge-card.completed .progress-fill {
+    stroke: var(--success-color, #10b981);
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    font-weight: 600;
+}
+
+.progress-current {
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.progress-divider {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 1px;
+}
+
+.progress-target {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* ============================================================================
+   CHALLENGE INFO
+   ============================================================================ */
+
+.challenge-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.challenge-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.challenge-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--accent-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.challenge-title {
+    flex: 1;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.challenge-delete {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.challenge-card:hover .challenge-delete {
+    opacity: 1;
+}
+
+.challenge-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.challenge-meta span {
+    padding: 3px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--text-secondary);
+}
+
+.challenge-frequency {
+    text-transform: capitalize;
+}
+
+.challenge-time {
+    color: var(--warning-color, #f59e0b) !important;
+}
+
+.challenge-streak {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--warning-color, #f59e0b);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.challenge-streak i {
+    color: #ef4444;
+}
+
+.challenge-complete-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 24px;
+    height: 24px;
+    background: var(--success-color, #10b981);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.challenges-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.challenges-empty i {
+    font-size: 48px;
+    opacity: 0.3;
+    margin-bottom: 16px;
+}
+
+.challenges-empty p {
+    margin: 0 0 20px 0;
+    font-size: 16px;
+}
+
+/* ============================================================================
+   COMPLETED SECTION
+   ============================================================================ */
+
+.challenges-completed-section {
+    grid-column: 1 / -1;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.challenges-completed-section h4 {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.challenges-completed-section h4 i {
+    color: var(--success-color, #10b981);
+}
+
+.challenges-completed-section .challenge-card {
+    opacity: 0.8;
+}
+
+/* ============================================================================
+   CREATE CHALLENGE MODAL
+   ============================================================================ */
+
+#create-challenge-modal .modal-content {
+    max-width: 480px;
+}
+
+.challenge-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.challenge-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.challenge-form label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.challenge-form input,
+.challenge-form select {
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.challenge-form input:focus,
+.challenge-form select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.challenge-type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.challenge-type-option {
+    padding: 16px 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.challenge-type-option:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-tertiary);
+}
+
+.challenge-type-option.selected {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.challenge-type-option i {
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: var(--accent-primary);
+}
+
+.challenge-type-option span {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.challenge-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+#challenge-duration-config {
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+}
+
+#challenge-duration-config label {
+    font-size: 12px;
+}
+
+.challenge-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.challenge-form-actions button {
+    flex: 1;
+}
+
+/* ============================================================================
+   HISTORY VIEW
+   ============================================================================ */
+
+#challenges-history {
+    margin-top: 24px;
+}
+
+.history-date-group {
+    margin-bottom: 20px;
+}
+
+.history-date-group h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+
+.history-item.completed i {
+    color: var(--success-color, #10b981);
+}
+
+.history-item.failed i {
+    color: var(--danger-color, #ef4444);
+}
+
+.history-title {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.history-progress {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    #challenges-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .challenge-type-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .challenge-form-row {
+        grid-template-columns: 1fr;
+    }
+}

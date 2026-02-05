@@ -178,8 +178,25 @@
                     </div>
                 </header>
 
-                <!-- Habit Tracker Calendar (primary widget) -->
-                <section id="habit-tracker-root" aria-label="Habit tracker calendar"></section>
+                <!-- Today's Tasks (Primary Widget) -->
+                <div class="dash-card today-tasks-card" style="margin-bottom: 20px;">
+                    <div class="dash-card-header">
+                        <h3><i class="fas fa-list-check"></i> Today's Tasks</h3>
+                        <a href="#" class="view-link" data-page="tasks">View All <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                    <div class="dash-card-content">
+                        <div class="today-tasks-quick-add" id="today-tasks-quick-add">
+                            <input type="text" id="today-tasks-input" placeholder="Add a task for today..."
+                                autocomplete="off">
+                            <button class="btn-icon small" id="today-tasks-add-btn" title="Add">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <ul class="task-list-compact" id="today-tasks-list">
+                            <!-- Today's tasks injected here -->
+                        </ul>
+                    </div>
+                </div>
 
                 <!-- Hero Section with Productivity Score -->
                 <div class="dashboard-hero">
@@ -248,6 +265,9 @@
 
                 <!-- Main Dashboard Grid -->
                 <div class="dashboard-grid-modern">
+                    <!-- Habit Tracker Calendar -->
+                    <section id="habit-tracker-root" aria-label="Habit tracker calendar" class="dash-card"></section>
+
                     <!-- Today's Schedule - Compact -->
                     <div class="dash-card schedule-card">
                         <div class="dash-card-header">
@@ -1025,7 +1045,8 @@
                                 <div class="score-circle" id="commitment-score-circle">
                                     <svg viewBox="0 0 100 100">
                                         <circle cx="50" cy="50" r="45" class="score-bg"></circle>
-                                        <circle cx="50" cy="50" r="45" class="score-fill" id="commitment-score-fill"></circle>
+                                        <circle cx="50" cy="50" r="45" class="score-fill" id="commitment-score-fill">
+                                        </circle>
                                     </svg>
                                     <div class="score-value">
                                         <span id="commitment-score-value">--</span>
@@ -1241,7 +1262,9 @@
                             <h3>Where did you spend your time?</h3>
                         </div>
                         <div class="card-content">
-                            <p class="dayreview-help">Tap a start time, then an end time on the clock (wrap-around like 22 → 5 is supported). A quick modal will pop up so you can label it (Sleeping, Working, etc.) and pick a color.</p>
+                            <p class="dayreview-help">Tap a start time, then an end time on the clock (wrap-around like
+                                22 → 5 is supported). A quick modal will pop up so you can label it (Sleeping, Working,
+                                etc.) and pick a color.</p>
 
                             <div class="dayreview-top">
                                 <div class="dayreview-clock-panel">
@@ -1925,7 +1948,8 @@
                         <div class="dayreview-time-inline">
                             <select id="dayreview-block-start-hour" aria-label="Start hour"></select>
                             <span class="dayreview-time-sep">:</span>
-                            <input type="number" id="dayreview-block-start-minute" min="0" max="59" value="0" inputmode="numeric" aria-label="Start minute">
+                            <input type="number" id="dayreview-block-start-minute" min="0" max="59" value="0"
+                                inputmode="numeric" aria-label="Start minute">
                         </div>
                     </div>
                     <div class="form-group">
@@ -1933,7 +1957,8 @@
                         <div class="dayreview-time-inline">
                             <select id="dayreview-block-end-hour" aria-label="End hour"></select>
                             <span class="dayreview-time-sep">:</span>
-                            <input type="number" id="dayreview-block-end-minute" min="0" max="59" value="0" inputmode="numeric" aria-label="End minute">
+                            <input type="number" id="dayreview-block-end-minute" min="0" max="59" value="0"
+                                inputmode="numeric" aria-label="End minute">
                         </div>
                     </div>
                 </div>
@@ -1943,7 +1968,8 @@
                 </div>
                 <div class="form-group">
                     <label for="dayreview-block-label">What did you do?</label>
-                    <input type="text" id="dayreview-block-label" placeholder="Sleeping, Working, Studying..." maxlength="60" required>
+                    <input type="text" id="dayreview-block-label" placeholder="Sleeping, Working, Studying..."
+                        maxlength="60" required>
                 </div>
                 <div class="form-group">
                     <label>Color</label>

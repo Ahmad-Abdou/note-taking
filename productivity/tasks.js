@@ -23,6 +23,7 @@
 const TaskState = {
     tasks: [],
     taskLists: [], // Cached task lists for display and sorting
+    focusTimeByTaskId: {}, // Cache of total focus minutes per task ID
     currentView: 'list', // 'list' or 'board'
     editingTask: null,
     selectedTasks: new Set(),
@@ -42,6 +43,36 @@ function getTaskListInfo(listId) {
     if (!listId) return null;
     const list = TaskState.taskLists.find(l => l.id === listId);
     return list ? { name: list.name, color: list.color, icon: list.icon } : null;
+}
+
+// Load and aggregate focus time per task from all focus sessions
+async function loadTaskFocusTime() {
+    try {
+        const sessions = await ProductivityData.DataStore.getFocusSessions();
+        const timeByTask = {};
+
+        for (const session of sessions) {
+            if (session.linkedTaskId && session.actualDurationMinutes > 0) {
+                timeByTask[session.linkedTaskId] = (timeByTask[session.linkedTaskId] || 0) + session.actualDurationMinutes;
+            }
+        }
+
+        TaskState.focusTimeByTaskId = timeByTask;
+    } catch (error) {
+        console.error('Failed to load task focus time:', error);
+        TaskState.focusTimeByTaskId = {};
+    }
+}
+
+// Format focus time for display (e.g., "45m" or "2h 15m")
+function formatFocusTimeForTask(minutes) {
+    if (!minutes || minutes <= 0) return '';
+    if (minutes < 60) {
+        return `${Math.round(minutes)}m`;
+    }
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
 // Task categories with colors
@@ -105,6 +136,8 @@ async function loadTasks() {
         TaskState.tasks = await ProductivityData.DataStore.getTasks();
         // Load task lists for display and sorting
         TaskState.taskLists = await ProductivityData.DataStore.getTaskLists();
+        // Load focus time per task
+        await loadTaskFocusTime();
 
         // Load saved view preference
         const savedView = await new Promise(resolve => {
@@ -506,6 +539,11 @@ function renderTaskItem(task, isOverdue = false) {
                             <i class="fas fa-hourglass-half"></i> ${task.estimatedTime}min
                         </span>
                     ` : ''}
+                    ${TaskState.focusTimeByTaskId[task.id] ? `
+                        <span class="task-focus-time" title="Total focus time on this task">
+                            <i class="fas fa-stopwatch"></i> ${formatFocusTimeForTask(TaskState.focusTimeByTaskId[task.id])}
+                        </span>
+                    ` : ''}
                 </div>
             </div>
             <div class="task-priority-badge" style="background: ${priorityConfig.color}" title="${priorityConfig.label}">
@@ -655,6 +693,7 @@ function renderGridCard(task) {
                     ${task.isRecurring ? '<i class="fas fa-redo" title="Recurring"></i>' : ''}
                     ${task.linkedGoalId ? '<i class="fas fa-bullseye" title="Linked to goal"></i>' : ''}
                     ${task.estimatedTime ? `<span title="Estimated time"><i class="fas fa-clock"></i> ${task.estimatedTime}m</span>` : ''}
+                    ${TaskState.focusTimeByTaskId[task.id] ? `<span class="grid-card-focus-time" title="Total focus time"><i class="fas fa-stopwatch"></i> ${formatFocusTimeForTask(TaskState.focusTimeByTaskId[task.id])}</span>` : ''}
                 </div>
                 <div class="grid-card-actions">
                     <button class="btn-icon tiny" data-action="edit-task" data-task-id="${task.id}" title="Edit">
@@ -1361,7 +1400,7 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
 
         // Re-sync after async list load selects an option
         if (listsPromise && typeof listsPromise.then === 'function') {
-            listsPromise.then(syncListButtons).catch(() => {});
+            listsPromise.then(syncListButtons).catch(() => { });
         }
     }
 

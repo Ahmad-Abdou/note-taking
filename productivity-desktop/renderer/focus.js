@@ -1967,6 +1967,12 @@ async function completeFocusSession() {
 
         // Check for achievements
         await checkFocusAchievements();
+
+        // Record progress for challenges
+        if (window.ChallengeManager) {
+            window.ChallengeManager.recordProgress('focus_sessions', 1, { duration: FocusState.selectedMinutes });
+            window.ChallengeManager.recordProgress('focus_time', FocusState.selectedMinutes);
+        }
     }
 
     FocusState.completedPomodoros++;

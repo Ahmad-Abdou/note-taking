@@ -136,8 +136,30 @@
 
         _ensureGoalDefaults() {
             const today = this._isoToday();
-            const defaultStart = this._addDaysIso(today, -30);
-            const defaultEnd = today;
+            const todayDate = new Date();
+
+            // Calculate date range based on activeView
+            let defaultStart, defaultEnd;
+            if (this.state.activeView === 'weekly') {
+                const weekStart = this._alignToWeekStart(todayDate);
+                const weekEnd = this._alignToWeekEnd(todayDate);
+                defaultStart = this._toIso(weekStart);
+                defaultEnd = this._toIso(weekEnd);
+            } else if (this.state.activeView === 'monthly') {
+                const monthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+                const monthEnd = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0);
+                defaultStart = this._toIso(monthStart);
+                defaultEnd = this._toIso(monthEnd);
+            } else if (this.state.activeView === 'yearly') {
+                const yearStart = new Date(todayDate.getFullYear(), 0, 1);
+                const yearEnd = new Date(todayDate.getFullYear(), 11, 31);
+                defaultStart = this._toIso(yearStart);
+                defaultEnd = this._toIso(yearEnd);
+            } else {
+                // 'custom' or default fallback
+                defaultStart = this._addDaysIso(today, -30);
+                defaultEnd = today;
+            }
 
             // Upgrade legacy storage (v1) and/or seed goalsMeta.
             const storedGoals = this.state.data.goals && typeof this.state.data.goals === 'object' ? this.state.data.goals : {};
