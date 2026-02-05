@@ -4,6 +4,18 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const fs = require('fs');
 
+// In development, use an isolated userData directory so running the dev app
+// doesn't fight the installed build for the single-instance lock.
+// This must happen before electron-store (and anything else) touches userData.
+try {
+    if (!app.isPackaged) {
+        const devUserData = path.join(app.getPath('appData'), 'productivity-hub-desktop-dev');
+        app.setPath('userData', devUserData);
+    }
+} catch (_) {
+    // ignore
+}
+
 // ===== Diagnostics logging (disk-backed) =====
 
 let diagnosticsLogFilePath = null;
@@ -93,11 +105,119 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // Initialize persistent storage
 const store = new Store();
 
+// Safe mode (auto-enable after a renderer crash): disable GPU acceleration.
+// This mitigates common Windows black-screen/render crashes caused by GPU driver issues.
+let safeModeGpuDisabled = false;
+try {
+    safeModeGpuDisabled = store.get('safeModeDisableGpu') === true;
+} catch (_) {
+    safeModeGpuDisabled = false;
+}
+
+if (safeModeGpuDisabled) {
+    try {
+        // Must be called before app is ready.
+        app.disableHardwareAcceleration();
+        app.commandLine.appendSwitch('disable-gpu');
+
+        // Extra mitigations for common Windows black-screen issues.
+        // Only enabled in safe mode to avoid changing default behavior for everyone.
+        app.commandLine.appendSwitch('disable-gpu-compositing');
+        app.commandLine.appendSwitch('disable-direct-composition');
+        app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
+        // Force software rendering via SwiftShader (helps with access-violation crashes on some drivers).
+        // Mirrors Chromium flags often seen when SwiftShader is used.
+        app.commandLine.appendSwitch('use-gl', 'angle');
+        app.commandLine.appendSwitch('use-angle', 'swiftshader-webgl');
+
+        // Last-resort stability toggle: disable Chromium sandbox in safe mode only.
+        // (Keeps default behavior unchanged unless we've already observed crashes.)
+        app.commandLine.appendSwitch('no-sandbox');
+        app.commandLine.appendSwitch('disable-setuid-sandbox');
+    } catch (_) {
+        // ignore
+    }
+}
+
+// Early boot diagnostics (helps confirm whether we reached app ready/window creation)
+try {
+    diag('info', 'app boot', {
+        isPackaged: app.isPackaged,
+        version: app.getVersion?.(),
+        userData: (() => {
+            try {
+                return app.getPath('userData');
+            } catch {
+                return null;
+            }
+        })(),
+        safeModeDisableGpu: safeModeGpuDisabled
+    });
+} catch (_) {
+    // ignore
+}
+
 let mainWindow;
 let tray;
 let isQuitting = false;
 
+// Prevent infinite relaunch loops if the renderer is repeatedly crashing.
+let rendererCrashRelaunchInProgress = false;
+let rendererCrashRelaunchCount = 0;
+let lastRendererCrashRelaunchAt = 0;
+
+const RENDERER_CRASH_RELAUNCH_COOLDOWN_MS = 60_000;
+const STORE_KEY_LAST_CRASH_RELAUNCH_AT = 'lastRendererCrashRelaunchAtMs';
+
 let didStartApp = false;
+
+function safeModeCleanupCachesOnce() {
+    if (!safeModeGpuDisabled) return;
+
+    // Only run once per user profile to avoid unnecessary disk churn.
+    try {
+        if (store.get('safeModeDidCleanupCaches') === true) return;
+    } catch (_) {
+        // ignore
+    }
+
+    let userData = null;
+    try {
+        userData = app.getPath('userData');
+    } catch (_) {
+        userData = null;
+    }
+    if (!userData) return;
+
+    const targets = [
+        'GPUCache',
+        'Code Cache',
+        'Cache',
+        'DawnCache',
+        'ShaderCache'
+    ];
+
+    const deleted = [];
+    for (const name of targets) {
+        try {
+            const p = path.join(userData, name);
+            if (fs.existsSync(p)) {
+                fs.rmSync(p, { recursive: true, force: true });
+                deleted.push(name);
+            }
+        } catch (_) {
+            // ignore
+        }
+    }
+
+    diag('info', 'safeMode cache cleanup', { deleted });
+    try {
+        store.set('safeModeDidCleanupCaches', true);
+    } catch (_) {
+        // ignore
+    }
+}
 
 function wireSecondInstanceHandler() {
     // Focus existing instance when user tries to open a second one.
@@ -117,6 +237,16 @@ function wireSecondInstanceHandler() {
 function startApp() {
     if (didStartApp) return;
     didStartApp = true;
+
+    diag('info', 'startApp');
+
+    // If we've entered safe mode due to crashes, do a one-time cleanup of Chromium caches.
+    // This often resolves persistent renderer crash loops without wiping user data.
+    try {
+        safeModeCleanupCachesOnce();
+    } catch (_) {
+        // ignore
+    }
 
     createWindow();
     createTray();
@@ -218,6 +348,8 @@ function initAutoUpdater() {
     if (updaterInitialized) return;
     updaterInitialized = true;
 
+    diag('info', 'initAutoUpdater', { isPackaged: app.isPackaged, isPortable: isPortableBuild() });
+
     // Only meaningful for packaged apps (installed/portable).
     // In development, this will typically error due to missing update config.
     autoUpdater.autoDownload = false;
@@ -306,6 +438,7 @@ function initAutoUpdater() {
 
 // Create main application window
 function createWindow() {
+    diag('info', 'createWindow');
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -346,6 +479,107 @@ function createWindow() {
 
         mainWindow.webContents.on('render-process-gone', (event, details) => {
             diag('error', 'webContents render-process-gone', details);
+
+            // If the renderer crashed, enable safe-mode GPU disable for the next launch.
+            try {
+                if (details?.reason === 'crashed' || typeof details?.exitCode === 'number') {
+                    store.set('safeModeDisableGpu', true);
+                    diag('warn', 'safeModeDisableGpu enabled', {
+                        reason: details?.reason,
+                        exitCode: details?.exitCode
+                    });
+                }
+            } catch (_) {
+                // ignore
+            }
+
+            // Important: if the renderer crashes, the main process can stay alive (tray/lock held),
+            // which makes the app appear "won't open" on the next launch.
+            // Relaunch once so safe-mode (GPU disabled) can take effect immediately and the lock is released.
+            try {
+                const now = Date.now();
+                const isCrash = details?.reason === 'crashed' || typeof details?.exitCode === 'number';
+                const inMemoryCooldownOk = (now - lastRendererCrashRelaunchAt) > 15000;
+
+                // Allow only one automatic relaunch per invocation.
+                // This avoids stacking relaunch args and prevents endless relaunch loops.
+                const alreadyRelaunchedThisInvocation = process.argv.includes('--relaunch-after-renderer-crash');
+
+                let persistentCooldownOk = true;
+                try {
+                    const last = Number(store.get(STORE_KEY_LAST_CRASH_RELAUNCH_AT) || 0);
+                    persistentCooldownOk = !Number.isFinite(last) || (now - last) > RENDERER_CRASH_RELAUNCH_COOLDOWN_MS;
+                } catch (_) {
+                    persistentCooldownOk = true;
+                }
+
+                const allowRelaunch = isCrash && !rendererCrashRelaunchInProgress && inMemoryCooldownOk && persistentCooldownOk;
+
+                if (allowRelaunch && !alreadyRelaunchedThisInvocation) {
+                    rendererCrashRelaunchInProgress = true;
+                    rendererCrashRelaunchCount += 1;
+                    lastRendererCrashRelaunchAt = now;
+
+                    try {
+                        store.set(STORE_KEY_LAST_CRASH_RELAUNCH_AT, now);
+                    } catch (_) {
+                        // ignore
+                    }
+
+                    diag('warn', 'renderer crashed; relaunching app', {
+                        count: rendererCrashRelaunchCount,
+                        safeModeDisableGpu: true
+                    });
+
+                    // Delay slightly to let diagnostics flush.
+                    setTimeout(() => {
+                        try {
+                            const baseArgs = process.argv.slice(1).filter((a) => a !== '--relaunch-after-renderer-crash');
+                            app.relaunch({ args: baseArgs.concat(['--relaunch-after-renderer-crash']) });
+                        } catch (e) {
+                            diagError('app.relaunch failed after renderer crash', e);
+                        }
+
+                        try {
+                            // Exit hard to ensure the single-instance lock is released.
+                            app.exit(0);
+                        } catch (_) {
+                            app.quit();
+                        }
+                    }, 700);
+                } else if (isCrash && alreadyRelaunchedThisInvocation) {
+                    // We already tried an automatic relaunch and still crashed: quit cleanly so we don't
+                    // sit headless holding the single-instance lock.
+                    diag('error', 'renderer crashed after relaunch; quitting');
+                    try {
+                        prepareToQuit('renderer_crash_after_relaunch');
+                    } catch (_) {
+                        // ignore
+                    }
+                    try {
+                        app.quit();
+                    } catch (_) {
+                        // ignore
+                    }
+                } else if (isCrash && !persistentCooldownOk) {
+                    // If we're crashing in a tight loop across relaunches, stop trying.
+                    diag('error', 'renderer crash relaunch suppressed (cooldown)', {
+                        cooldownMs: RENDERER_CRASH_RELAUNCH_COOLDOWN_MS
+                    });
+                    try {
+                        prepareToQuit('renderer_crash_loop');
+                    } catch (_) {
+                        // ignore
+                    }
+                    try {
+                        app.quit();
+                    } catch (_) {
+                        // ignore
+                    }
+                }
+            } catch (_) {
+                // ignore
+            }
         });
 
         mainWindow.webContents.on('unresponsive', () => {
@@ -516,6 +750,10 @@ if (acquireSingleInstanceLockWithRetry()) {
     wireSecondInstanceHandler();
     app.whenReady().then(startApp);
 }
+
+app.on('ready', () => {
+    diag('info', 'app ready');
+});
 
 // Quit when all windows closed (except on macOS)
 app.on('window-all-closed', () => {
