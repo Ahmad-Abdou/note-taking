@@ -465,7 +465,8 @@ function showToast(type, title, message, options = {}) {
 
     // Play sound if enabled
     if (NotificationState.preferences.sound && !options.silent) {
-        playNotificationSound(options.soundType || type);
+        const mappedSoundType = options.soundType || mapToastTypeToSoundType(type);
+        playNotificationSound(mappedSoundType);
     }
 
     // Auto remove
@@ -480,6 +481,28 @@ function showToast(type, title, message, options = {}) {
     addToHistory(type, title, message);
 
     return toast;
+}
+
+function mapToastTypeToSoundType(toastType) {
+    switch (toastType) {
+        case 'success':
+            return 'success';
+        case 'warning':
+            return 'warning';
+        case 'error':
+            return 'warning';
+        case 'focus':
+            return 'focusStart';
+        case 'break':
+            return 'break';
+        case 'achievement':
+            return 'achievement';
+        case 'streak':
+            return 'streak';
+        case 'info':
+        default:
+            return 'default';
+    }
 }
 
 function createToastContainer() {

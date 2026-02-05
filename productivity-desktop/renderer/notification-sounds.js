@@ -10,6 +10,7 @@ class NotificationSounds {
         this.audioBuffers = {}; // Cache for decoded audio
         this.basePath = this.getBasePath();
         this._missingLogged = new Set();
+        this._unknownLogged = new Set();
         this._fileLoadingDisabled = false;
         this.soundTypes = [
             'default', 'reminder', 'success', 'warning',
@@ -146,9 +147,22 @@ class NotificationSounds {
         try {
             await this.init();
 
+            // Common aliases from UI/toast layers.
+            const aliases = {
+                info: 'default',
+                error: 'warning',
+                focus: 'focusStart',
+                breakStart: 'break',
+                breakEnd: 'break'
+            };
+            if (aliases[type]) type = aliases[type];
+
             // Validate and normalize type
             if (!this.soundTypes.includes(type)) {
-                console.warn(`Unknown sound type: ${type}, using default`);
+                if (!this._unknownLogged.has(type)) {
+                    this._unknownLogged.add(type);
+                    console.warn(`Unknown sound type: ${type}, using default`);
+                }
                 type = 'default';
             }
 

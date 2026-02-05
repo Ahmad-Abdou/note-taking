@@ -611,19 +611,19 @@ function renderTodayTasksCard(allTasks) {
                 <div class="task-priority ${task.priority || 'medium'}"></div>
                 <div class="task-item-actions">
                     ${task.linkUrl ? `
-                    <button class="btn-icon tiny" data-action="open-link" data-task-id="${task.id}" title="Open link">
+                    <button type="button" class="btn-icon tiny" data-action="open-link" data-task-id="${task.id}" title="Open link">
                         <i class="fas fa-link"></i>
                     </button>` : ''}
-                    <button class="btn-icon tiny" data-action="focus" data-task-id="${task.id}" title="Start Focus">
+                    <button type="button" class="btn-icon tiny" data-action="focus" data-task-id="${task.id}" title="Start Focus">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button class="btn-icon tiny" data-action="edit" data-task-id="${task.id}" title="Edit">
+                    <button type="button" class="btn-icon tiny" data-action="edit" data-task-id="${task.id}" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-icon tiny highlight-green" data-action="review" data-task-id="${task.id}" title="Send to Review">
+                    <button type="button" class="btn-icon tiny highlight-green" data-action="review" data-task-id="${task.id}" title="Send to Review">
                         <i class="fas fa-graduation-cap"></i>
                     </button>
-                    <button class="btn-icon tiny danger" data-action="delete" data-task-id="${task.id}" title="Delete">
+                    <button type="button" class="btn-icon tiny danger" data-action="delete" data-task-id="${task.id}" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -633,98 +633,114 @@ function renderTodayTasksCard(allTasks) {
 
     // Event delegation for task actions
     list.onclick = async (e) => {
-        const item = e.target.closest('.task-item');
-        if (!item) return;
+        try {
+            const item = e.target.closest('.task-item');
+            if (!item) return;
 
-        const taskId = item.dataset.taskId;
-        if (!taskId) return;
+            const taskId = item.dataset.taskId;
+            if (!taskId) return;
 
-        const actionEl = e.target.closest('[data-action]');
-        const action = actionEl?.dataset.action;
+            const actionEl = e.target.closest('[data-action]');
+            const action = actionEl?.dataset.action;
 
-        if (action === 'open-link') {
-            e.stopPropagation();
-            const task = window.TaskState?.tasks?.find?.(t => t.id === taskId);
-            if (!task?.linkUrl) {
-                showToast('info', 'No Link', 'This task has no link.');
+            if (action === 'open-link') {
+                e.preventDefault();
+                e.stopPropagation();
+                const task = await ProductivityData?.DataStore?.getTask?.(taskId);
+                if (!task?.linkUrl) {
+                    showToast('info', 'No Link', 'This task has no link.');
+                    return;
+                }
+                await openExternalUrlFromDashboard(task.linkUrl);
                 return;
             }
-            await openExternalUrlFromDashboard(task.linkUrl);
-            return;
-        }
 
-        if (action === 'focus') {
+            if (action === 'focus') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof startFocusOnTask === 'function') {
+                    startFocusOnTask(taskId);
+                } else if (typeof navigateTo === 'function') {
+                    navigateTo('focus');
+                }
+                return;
+            }
+
+            if (action === 'edit') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof editTask === 'function') {
+                    editTask(taskId);
+                } else if (typeof window.openTaskModal === 'function') {
+                    const task = await ProductivityData.DataStore.getTask(taskId);
+                    window.openTaskModal(task);
+                }
+                return;
+            }
+
+            if (action === 'review') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof finishAndSendToReview === 'function') {
+                    finishAndSendToReview(taskId);
+                }
+                return;
+            }
+
+            if (action === 'delete') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!confirm('Delete this task?')) return;
+                try {
+                    await ProductivityData.DataStore.deleteTask(taskId);
+                    await loadDashboard();
+                    showToast('success', 'Deleted', 'Task deleted successfully');
+                } catch (err) {
+                    console.error('[Dashboard] Failed to delete today task:', err);
+                    showToast('error', 'Delete Failed', 'Could not delete the task.');
+                }
+                return;
+            }
+
+            // Click on task text/info should NOT complete it.
+            if (action === 'view' || !action) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof editTask === 'function') {
+                    editTask(taskId);
+                } else if (typeof window.openTaskModal === 'function') {
+                    const task = await ProductivityData.DataStore.getTask(taskId);
+                    window.openTaskModal(task);
+                }
+                return;
+            }
+
+            // Only toggle completion when user clicks the checkbox.
+            if (action !== 'toggle') return;
+
+            e.preventDefault();
             e.stopPropagation();
-            if (typeof startFocusOnTask === 'function') {
-                startFocusOnTask(taskId);
+            const checkbox = item.querySelector('.task-checkbox');
+            const title = item.querySelector('.task-title');
+            const isCurrentlyCompleted = item.classList.contains('completed');
+
+            if (isCurrentlyCompleted) {
+                item.classList.remove('completed');
+                checkbox?.classList.remove('checked');
+                if (checkbox) checkbox.innerHTML = '';
+                title?.classList.remove('strikethrough');
             } else {
-                navigateTo('focus');
+                item.classList.add('completed');
+                checkbox?.classList.add('checked');
+                if (checkbox) checkbox.innerHTML = '<i class="fas fa-check"></i>';
+                title?.classList.add('strikethrough');
             }
-            return;
+
+            await toggleTask(taskId);
+        } catch (err) {
+            console.error('[Dashboard] Today tasks click handler failed:', err);
+            showToast('error', 'Action Failed', 'Something went wrong with this task action.');
         }
-
-        if (action === 'edit') {
-            e.stopPropagation();
-            if (typeof editTask === 'function') {
-                editTask(taskId);
-            } else if (typeof window.openTaskModal === 'function') {
-                const task = await ProductivityData.DataStore.getTask(taskId);
-                window.openTaskModal(task);
-            }
-            return;
-        }
-
-        if (action === 'review') {
-            e.stopPropagation();
-            if (typeof finishAndSendToReview === 'function') {
-                finishAndSendToReview(taskId);
-            }
-            return;
-        }
-
-        if (action === 'delete') {
-            e.stopPropagation();
-            if (confirm('Delete this task?')) {
-                await ProductivityData.DataStore.deleteTask(taskId);
-                await loadDashboard();
-                showToast('success', 'Deleted', 'Task deleted successfully');
-            }
-            return;
-        }
-
-        // Click on task text/info should NOT complete it.
-        if (action === 'view' || !action) {
-            e.stopPropagation();
-            if (typeof editTask === 'function') {
-                editTask(taskId);
-            } else if (typeof window.openTaskModal === 'function') {
-                const task = await ProductivityData.DataStore.getTask(taskId);
-                window.openTaskModal(task);
-            }
-            return;
-        }
-
-        // Only toggle completion when user clicks the checkbox.
-        if (action !== 'toggle') return;
-
-        e.stopPropagation();
-        const checkbox = item.querySelector('.task-checkbox');
-        const title = item.querySelector('.task-title');
-        const isCurrentlyCompleted = item.classList.contains('completed');
-
-        if (isCurrentlyCompleted) {
-            item.classList.remove('completed');
-            checkbox?.classList.remove('checked');
-            if (checkbox) checkbox.innerHTML = '';
-            title?.classList.remove('strikethrough');
-        } else {
-            item.classList.add('completed');
-            checkbox?.classList.add('checked');
-            if (checkbox) checkbox.innerHTML = '<i class="fas fa-check"></i>';
-            title?.classList.add('strikethrough');
-        }
-
-        await toggleTask(taskId);
     };
 }
 

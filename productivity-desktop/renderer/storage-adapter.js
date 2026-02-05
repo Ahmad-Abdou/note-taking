@@ -62,21 +62,68 @@ if (typeof chromeStorageCompat !== 'undefined') {
 // Add chrome.notifications compatibility
 if (typeof chrome.notifications === 'undefined') {
     window.chrome.notifications = {
-        create: (notificationId, options, callback) => {
-            if (typeof electronAPI !== 'undefined') {
-                electronAPI.notifications.show(options.title || 'Notification', {
-                    body: options.message || '',
-                    silent: false
-                });
-            } else if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(options.title || 'Notification', {
-                    body: options.message || ''
-                });
+        create: (...args) => {
+            // Support both Chrome signatures:
+            // - create(options, callback?)  (MV3 style in our code)
+            // - create(notificationId, options, callback?)
+            let notificationId;
+            let options;
+            let callback;
+
+            if (args.length >= 1 && typeof args[0] === 'object') {
+                options = args[0];
+                callback = typeof args[1] === 'function' ? args[1] : undefined;
+            } else {
+                notificationId = typeof args[0] === 'string' ? args[0] : undefined;
+                options = args[1];
+                callback = typeof args[2] === 'function' ? args[2] : undefined;
             }
-            if (callback) callback(notificationId);
+
+            const resolvedId =
+                notificationId ||
+                options?.id ||
+                options?.tag ||
+                `desktop_${Date.now()}`;
+
+            try {
+                if (typeof electronAPI !== 'undefined' && electronAPI?.notifications?.show) {
+                    electronAPI.notifications.show(options?.title || 'Notification', {
+                        body: options?.message || options?.body || '',
+                        silent: false
+                    });
+                } else if ('Notification' in window) {
+                    // Best-effort web notification fallback (should not throw / crash).
+                    if (Notification.permission === 'granted') {
+                        new Notification(options?.title || 'Notification', {
+                            body: options?.message || options?.body || ''
+                        });
+                    } else if (Notification.permission !== 'denied') {
+                        // Request permission asynchronously; don't block/create sync.
+                        Notification.requestPermission().catch(() => { });
+                    }
+                }
+            } catch (e) {
+                console.error('[storage-adapter] Failed to show notification:', e);
+            }
+
+            try {
+                callback?.(resolvedId);
+            } catch (_) {
+                // ignore
+            }
+
+            return Promise.resolve(resolvedId);
         },
         clear: (notificationId, callback) => {
-            if (callback) callback(true);
+            try {
+                callback?.(true);
+            } catch (_) {
+                // ignore
+            }
+            return Promise.resolve(true);
+        },
+        onClicked: {
+            addListener: () => { }
         }
     };
 }
