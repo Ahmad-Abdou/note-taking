@@ -90,7 +90,7 @@ if (typeof chrome.notifications === 'undefined') {
                     electronAPI.notifications.show(options?.title || 'Notification', {
                         body: options?.message || options?.body || '',
                         silent: false
-                    });
+                    }).catch(() => { });
                 } else if ('Notification' in window) {
                     // Best-effort web notification fallback (should not throw / crash).
                     if (Notification.permission === 'granted') {

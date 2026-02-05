@@ -405,14 +405,34 @@ ipcMain.handle('store-clear', () => {
 // ===== IPC Handlers for Notifications =====
 
 ipcMain.handle('show-notification', (event, title, options) => {
-    const notification = new Notification({
-        title: title,
-        body: options.body || '',
-        icon: path.join(__dirname, 'assets', 'icon.png'),
-        silent: options.silent || false
-    });
-    notification.show();
-    return true;
+    try {
+        const safeTitle = typeof title === 'string' && title.trim() ? title.trim() : 'Notification';
+        const safeOptions = options && typeof options === 'object' ? options : {};
+        const body =
+            typeof safeOptions.body === 'string'
+                ? safeOptions.body
+                : (safeOptions.body == null ? '' : String(safeOptions.body));
+        const silent = !!safeOptions.silent;
+
+        const iconPath = path.join(__dirname, 'assets', 'icon.png');
+        const icon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : undefined;
+
+        const notification = new Notification({
+            title: safeTitle,
+            body,
+            icon,
+            silent
+        });
+        notification.show();
+        return true;
+    } catch (e) {
+        try {
+            console.error('[main] Failed to show notification:', e);
+        } catch (_) {
+            // ignore
+        }
+        return false;
+    }
 });
 
 // ===== IPC Handlers for Window Control =====
