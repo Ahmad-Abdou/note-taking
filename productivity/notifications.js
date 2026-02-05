@@ -555,9 +555,12 @@ async function showDesktopNotification(title, options = {}) {
                 const granted = await requestNotificationPermission();
                 if (!granted) return null;
             }
+            const defaultIcon = (typeof chrome !== 'undefined' && chrome?.runtime?.getURL)
+                ? chrome.runtime.getURL('icons/icon48.png')
+                : '../icons/icon48.png';
             const notification = new Notification('📌 ' + title, {
                 body: options.body,
-                icon: options.icon || '/icons/icon48.png',
+                icon: options.icon || defaultIcon,
                 badge: options.badge,
                 tag: options.tag,
                 requireInteraction: options.requireInteraction,

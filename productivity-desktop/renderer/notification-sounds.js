@@ -56,44 +56,18 @@ class NotificationSounds {
         }
 
         try {
-            // Try MP3 first, fallback to OGG
-            let response;
+            // Prefer WAV (generated in-repo) to avoid missing mp3/ogg.
             let url;
-
-            try {
-                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-                    // Browser extension - use chrome.runtime.getURL
-                    url = chrome.runtime.getURL(`productivity/sounds/${type}.mp3`);
-                } else {
-                    url = `${this.basePath}${type}.mp3`;
-                }
-                response = await fetch(url);
-
-                if (!response.ok) {
-                    throw new Error('MP3 not found');
-                }
-            } catch (e) {
-                // If the MP3 fetch threw (common when sound files aren't packaged), stop trying to fetch files.
-                if (e instanceof TypeError) {
-                    this._fileLoadingDisabled = true;
-                    throw e;
-                }
-
-                // Fallback to OGG
-                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-                    url = chrome.runtime.getURL(`productivity/sounds/${type}.ogg`);
-                } else {
-                    url = `${this.basePath}${type}.ogg`;
-                }
-                response = await fetch(url);
-                if (!response.ok) {
-                    this._fileLoadingDisabled = true;
-                    throw new Error('OGG not found');
-                }
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+                url = chrome.runtime.getURL(`productivity/sounds/${type}.wav`);
+            } else {
+                url = `${this.basePath}${type}.wav`;
             }
 
+            const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Failed to load sound: ${type}`);
+                this._fileLoadingDisabled = true;
+                throw new Error('WAV not found');
             }
 
             const arrayBuffer = await response.arrayBuffer();

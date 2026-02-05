@@ -2488,10 +2488,13 @@ function showNotification(title, body) {
 function showWebNotification(title, body) {
     // Fallback: use standard web Notification API
     if (Notification.permission === 'granted') {
+        const iconUrl = (typeof chrome !== 'undefined' && chrome?.runtime?.getURL)
+            ? chrome.runtime.getURL('icons/icon48.png')
+            : '../icons/icon48.png';
         new Notification(title, {
             body,
-            icon: '/icons/icon48.png',
-            badge: '/icons/icon48.png',
+            icon: iconUrl,
+            badge: iconUrl,
             silent: false
         });
     } else if (Notification.permission !== 'denied') {

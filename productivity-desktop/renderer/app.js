@@ -468,6 +468,54 @@ function normalizeYMD(value) {
     return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
 }
 
+function normalizeTaskLinkUrlInDashboard(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    let value = raw.trim();
+    if (!value) return null;
+
+    // If user pastes a bare domain, assume https.
+    if (value.startsWith('www.')) value = `https://${value}`;
+
+    // Add scheme if missing.
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) {
+        value = `https://${value}`;
+    }
+
+    try {
+        const url = new URL(value);
+        const protocol = (url.protocol || '').toLowerCase();
+        if (!['http:', 'https:', 'mailto:'].includes(protocol)) return null;
+        return url.href;
+    } catch {
+        return null;
+    }
+}
+
+async function openExternalUrlFromDashboard(url) {
+    const normalized = normalizeTaskLinkUrlInDashboard(url);
+    if (!normalized) {
+        showToast('error', 'Invalid Link', 'Please enter a valid http(s) or mailto link.');
+        return false;
+    }
+
+    try {
+        if (window.electronAPI?.openExternal) {
+            const ok = await window.electronAPI.openExternal(normalized);
+            if (ok) return true;
+        }
+    } catch (_) {
+        // ignore
+    }
+
+    try {
+        window.open(normalized, '_blank', 'noopener,noreferrer');
+        return true;
+    } catch (_) {
+        showToast('error', 'Open Failed', 'Could not open the link.');
+        return false;
+    }
+}
+
 function renderTodayTasksCard(allTasks) {
     const list = document.getElementById('today-tasks-list');
     if (!list) return;
@@ -562,6 +610,10 @@ function renderTodayTasksCard(allTasks) {
                 </div>
                 <div class="task-priority ${task.priority || 'medium'}"></div>
                 <div class="task-item-actions">
+                    ${task.linkUrl ? `
+                    <button class="btn-icon tiny" data-action="open-link" data-task-id="${task.id}" title="Open link">
+                        <i class="fas fa-link"></i>
+                    </button>` : ''}
                     <button class="btn-icon tiny" data-action="focus" data-task-id="${task.id}" title="Start Focus">
                         <i class="fas fa-play"></i>
                     </button>
@@ -589,6 +641,17 @@ function renderTodayTasksCard(allTasks) {
 
         const actionEl = e.target.closest('[data-action]');
         const action = actionEl?.dataset.action;
+
+        if (action === 'open-link') {
+            e.stopPropagation();
+            const task = window.TaskState?.tasks?.find?.(t => t.id === taskId);
+            if (!task?.linkUrl) {
+                showToast('info', 'No Link', 'This task has no link.');
+                return;
+            }
+            await openExternalUrlFromDashboard(task.linkUrl);
+            return;
+        }
 
         if (action === 'focus') {
             e.stopPropagation();
@@ -629,7 +692,21 @@ function renderTodayTasksCard(allTasks) {
             return;
         }
 
-        // Default: toggle completion
+        // Click on task text/info should NOT complete it.
+        if (action === 'view' || !action) {
+            e.stopPropagation();
+            if (typeof editTask === 'function') {
+                editTask(taskId);
+            } else if (typeof window.openTaskModal === 'function') {
+                const task = await ProductivityData.DataStore.getTask(taskId);
+                window.openTaskModal(task);
+            }
+            return;
+        }
+
+        // Only toggle completion when user clicks the checkbox.
+        if (action !== 'toggle') return;
+
         e.stopPropagation();
         const checkbox = item.querySelector('.task-checkbox');
         const title = item.querySelector('.task-title');
@@ -660,17 +737,34 @@ function setupTodayTasksCardHandlers() {
     btn.dataset.bound = '1';
 
     const submit = async () => {
-        const title = input.value?.trim();
-        if (!title) return;
+        const raw = input.value?.trim();
+        if (!raw) return;
 
         const today = getDashboardTodayYMD();
         input.value = '';
+
+        // If user pastes a link in the dashboard quick-add, store it as linkUrl.
+        let title = raw;
+        let linkUrl = null;
+        const urlMatch = raw.match(/\bhttps?:\/\/[^\s]+/i);
+        if (urlMatch && urlMatch[0]) {
+            linkUrl = normalizeTaskLinkUrlInDashboard(urlMatch[0]);
+            title = title.replace(urlMatch[0], '').trim() || urlMatch[0];
+        } else {
+            // Also support bare domains like www.example.com
+            const maybeBare = raw.match(/\bwww\.[^\s]+/i);
+            if (maybeBare && maybeBare[0]) {
+                linkUrl = normalizeTaskLinkUrlInDashboard(maybeBare[0]);
+                title = title.replace(maybeBare[0], '').trim() || maybeBare[0];
+            }
+        }
 
         input.disabled = true;
         btn.disabled = true;
         try {
             const task = new ProductivityData.Task({
                 title,
+                linkUrl,
                 dueDate: today,
                 priority: 'medium',
                 category: 'personal',
