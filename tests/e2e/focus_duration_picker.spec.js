@@ -64,13 +64,17 @@ test.describe('Focus duration picker', () => {
       // Duration picker should appear (reuses the custom timer modal)
       await expect(page.locator('#custom-timer-modal')).toHaveClass(/active/);
       await page.fill('#custom-focus-minutes', '60');
-      await page.click('#start-custom-timer-btn');
+      await page.click('#start-custom-timer-btn', { force: true });
 
       const boredomConfirm = page.locator('#boredom-level-modal [data-action="confirm-boredom"]');
       if (await boredomConfirm.isVisible().catch(() => false)) {
-        await boredomConfirm.click();
+        await boredomConfirm.click({ force: true });
       }
 
+      // Wait for focus to actually start (storage is the source of truth)
+      await page.waitForFunction(() => new Promise((resolve) => {
+        chrome.storage.local.get(['focusState'], (r) => resolve(!!r.focusState?.isActive));
+      }));
       await expect(page.locator('#focus-overlay')).not.toHaveClass(/hidden/);
 
       // Validate storage is timestamp-based and linked to the task

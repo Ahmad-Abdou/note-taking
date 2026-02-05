@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, globalShortcut, net } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, globalShortcut, net, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
@@ -445,6 +445,26 @@ ipcMain.handle('set-auto-start', (event, enable) => {
 
 ipcMain.handle('get-auto-start', () => {
     return app.getLoginItemSettings().openAtLogin;
+});
+
+// ===== IPC Handler: Open External URLs =====
+
+ipcMain.handle('open-external', async (event, url) => {
+    try {
+        if (!url || typeof url !== 'string') return false;
+        const trimmed = url.trim();
+        if (!trimmed) return false;
+
+        // Basic protocol allowlist for safety.
+        const parsed = new URL(trimmed);
+        const protocol = (parsed.protocol || '').toLowerCase();
+        if (!['http:', 'https:', 'mailto:'].includes(protocol)) return false;
+
+        await shell.openExternal(parsed.href);
+        return true;
+    } catch (e) {
+        return false;
+    }
 });
 
 // ===== IPC Handlers for Auto Updates =====

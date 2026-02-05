@@ -115,6 +115,10 @@
                     <i class="fas fa-bullseye"></i>
                     <span>Goals</span>
                 </li>
+                <li class="nav-item" data-page="challenges">
+                    <i class="fas fa-trophy"></i>
+                    <span>Challenges</span>
+                </li>
                 <li class="nav-item" data-page="analytics">
                     <i class="fas fa-chart-line"></i>
                     <span>Analytics</span>
@@ -199,38 +203,11 @@
                     </div>
                 </div>
 
-                <!-- Hero Section with Productivity Score -->
+                <!-- Hero Section with Habit Tracker -->
                 <div class="dashboard-hero">
-                    <div class="hero-score-card">
-                        <div class="score-visual">
-                            <svg viewBox="0 0 100 100" class="score-ring">
-                                <circle class="score-bg" cx="50" cy="50" r="42" />
-                                <circle class="score-fill" id="score-circle" cx="50" cy="50" r="42"
-                                    stroke-dasharray="264" stroke-dashoffset="264" />
-                            </svg>
-                            <div class="score-center">
-                                <span class="score-number" id="productivity-score">0</span>
-                                <span class="score-percent">%</span>
-                            </div>
-                        </div>
-                        <div class="score-info">
-                            <h3>Today's Score</h3>
-                            <div class="score-stats">
-                                <div class="score-stat">
-                                    <i class="fas fa-check-circle"></i>
-                                    <span><strong id="tasks-completed">0</strong> tasks</span>
-                                </div>
-                                <div class="score-stat">
-                                    <i class="fas fa-clock"></i>
-                                    <span><strong id="focus-hours">0</strong>h focused</span>
-                                </div>
-                                <div class="score-stat">
-                                    <i class="fas fa-fire"></i>
-                                    <span><strong id="current-streak">0</strong> day streak</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Habit Tracker Calendar (Primary Widget) -->
+                    <section id="habit-tracker-root" aria-label="Habit tracker calendar" class="hero-habit-tracker">
+                    </section>
 
                     <!-- Quick Actions in Hero -->
                     <div class="hero-actions">
@@ -266,8 +243,6 @@
 
                 <!-- Main Dashboard Grid -->
                 <div class="dashboard-grid-modern">
-                    <!-- Habit Tracker Calendar -->
-                    <section id="habit-tracker-root" aria-label="Habit tracker calendar" class="dash-card"></section>
 
                     <!-- Today's Schedule - Compact -->
                     <div class="dash-card schedule-card">
@@ -476,6 +451,12 @@
                             <option value="reading">Reading</option>
                             <option value="personal">Personal</option>
                         </select>
+                        <select id="task-filter-list">
+                            <option value="all">All Lists</option>
+                        </select>
+                        <select id="task-filter-tag">
+                            <option value="all">All Tags</option>
+                        </select>
                     </div>
                     <div class="search-group">
                         <input type="text" id="task-search" placeholder="Search tasks...">
@@ -658,14 +639,6 @@
                     <!-- Goals Grid -->
                     <div class="goals-grid" id="goals-grid">
                         <!-- Goals injected here -->
-                    </div>
-
-                    <!-- Achievement Showcase -->
-                    <div class="achievements-section">
-                        <h2><i class="fas fa-medal"></i> Achievements</h2>
-                        <div class="achievements-grid" id="achievements-grid">
-                            <!-- Achievements injected here -->
-                        </div>
                     </div>
                 </div>
 

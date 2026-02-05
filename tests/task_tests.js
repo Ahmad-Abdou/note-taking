@@ -93,6 +93,38 @@ const taskManagementTests = {
                 }
             },
             {
+                name: 'DataStore can save and retrieve a task hyperlink',
+                fn: async () => {
+                    if (!window.ProductivityData?.DataStore?.saveTask || !window.ProductivityData?.DataStore?.getTasks) {
+                        throw new Error('ProductivityData.DataStore task APIs are not available');
+                    }
+
+                    const id = 'ds-task-link-test-' + Date.now();
+                    const linkUrl = 'https://example.com/docs';
+                    const task = new window.ProductivityData.Task({
+                        id,
+                        title: 'Task With Link',
+                        status: 'not-started',
+                        priority: 'medium',
+                        linkUrl
+                    });
+
+                    await window.ProductivityData.DataStore.saveTask(task);
+                    const tasks = await window.ProductivityData.DataStore.getTasks();
+                    const found = (tasks || []).find(t => t.id === id);
+
+                    if (!found) {
+                        throw new Error('Saved task not found via DataStore');
+                    }
+                    if (found.linkUrl !== linkUrl) {
+                        throw new Error(`Expected linkUrl to be preserved (${linkUrl}), got: ${found.linkUrl}`);
+                    }
+
+                    await window.ProductivityData.DataStore.deleteTask(id);
+                    return true;
+                }
+            },
+            {
                 name: 'DataStore can save a task list',
                 fn: async () => {
                     if (!window.ProductivityData?.DataStore?.saveTaskList || !window.ProductivityData?.DataStore?.getTaskLists) {

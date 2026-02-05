@@ -220,8 +220,13 @@ function navigateTo(page) {
         case 'goals':
             if (typeof loadGoals === 'function') loadGoals();
             break;
+        case 'challenges':
+            if (typeof loadChallengesPage === 'function') loadChallengesPage();
+            break;
         case 'focus':
             if (typeof loadFocusPage === 'function') loadFocusPage();
+            // Smart focus start: auto-start with first incomplete task
+            handleSmartFocusStart();
             break;
         case 'analytics':
             if (typeof loadAnalyticsPage === 'function') loadAnalyticsPage();
@@ -245,6 +250,115 @@ function navigateTo(page) {
             loadSettingsPage();
             break;
     }
+}
+
+// Smart focus start: auto-start session with first incomplete task or prompt to create one
+async function handleSmartFocusStart() {
+    try {
+        // Check if there's already an active focus session
+        if (window.FocusState && window.FocusState.isActive) {
+            return; // Don't interrupt an active session
+        }
+
+        const tasks = await ProductivityData.DataStore.getTasks();
+        const today = new Date().toISOString().split('T')[0];
+
+        // Find first incomplete task prioritizing today's tasks
+        const todayTasks = tasks.filter(t =>
+            t.status !== 'completed' &&
+            (t.dueDate === today || t.startDate === today)
+        ).sort((a, b) => (b.priorityWeight || 0) - (a.priorityWeight || 0));
+
+        const incompleteTasks = tasks.filter(t => t.status !== 'completed')
+            .sort((a, b) => (b.priorityWeight || 0) - (a.priorityWeight || 0));
+
+        const firstTask = todayTasks[0] || incompleteTasks[0];
+
+        if (firstTask) {
+            // Auto-start focus session with the first task
+            setTimeout(() => {
+                if (typeof startFocusOnTask === 'function') {
+                    startFocusOnTask(firstTask.id);
+                } else if (typeof window.startFocusSession === 'function') {
+                    window.startFocusSession(firstTask.id, firstTask.title);
+                }
+            }, 300); // Small delay to let the page render first
+        } else {
+            // No tasks - show prompt to create one
+            showSmartFocusCreateTaskPrompt();
+        }
+    } catch (error) {
+        console.error('Smart focus start error:', error);
+    }
+}
+
+// Show prompt to create a task when no tasks exist
+function showSmartFocusCreateTaskPrompt() {
+    const focusPage = document.getElementById('page-focus');
+    if (!focusPage) return;
+
+    // Check if prompt already exists
+    if (document.getElementById('smart-focus-prompt')) return;
+
+    const prompt = document.createElement('div');
+    prompt.id = 'smart-focus-prompt';
+    prompt.className = 'smart-focus-prompt';
+    prompt.innerHTML = `
+        <div class="smart-focus-prompt-content">
+            <i class="fas fa-tasks"></i>
+            <h3>No tasks to focus on</h3>
+            <p>Create a task to get started with your focus session</p>
+            <div class="smart-focus-quick-add">
+                <input type="text" id="smart-focus-task-input" placeholder="What do you want to work on?" autocomplete="off">
+                <button class="btn-primary" id="smart-focus-create-btn">
+                    <i class="fas fa-plus"></i> Create & Start
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Insert at top of focus page
+    focusPage.insertBefore(prompt, focusPage.firstChild);
+
+    // Handle create task
+    const input = document.getElementById('smart-focus-task-input');
+    const btn = document.getElementById('smart-focus-create-btn');
+
+    const createAndStart = async () => {
+        const title = input.value.trim();
+        if (!title) return;
+
+        btn.disabled = true;
+        try {
+            const task = new ProductivityData.Task({
+                title,
+                dueDate: new Date().toISOString().split('T')[0],
+                priority: 'medium',
+                status: 'not-started'
+            });
+            await ProductivityData.DataStore.saveTask(task);
+
+            // Remove prompt
+            prompt.remove();
+
+            // Start focus session with new task
+            if (typeof startFocusOnTask === 'function') {
+                startFocusOnTask(task.id);
+            } else if (typeof window.startFocusSession === 'function') {
+                window.startFocusSession(task.id, task.title);
+            }
+        } catch (error) {
+            console.error('Failed to create task for focus:', error);
+            showToast('error', 'Error', 'Failed to create task');
+            btn.disabled = false;
+        }
+    };
+
+    btn.addEventListener('click', createAndStart);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') createAndStart();
+    });
+    input.focus();
 }
 
 // Clear badge when user visits a tab
@@ -414,34 +528,124 @@ function renderTodayTasksCard(allTasks) {
         return;
     }
 
+    // Get task lists for display
+    const getListInfo = (listId) => {
+        if (!listId || !window.TaskState?.taskLists) return null;
+        return window.TaskState.taskLists.find(l => l.id === listId);
+    };
+
+    // Get focus time for task
+    const getFocusTime = (taskId) => {
+        if (!taskId || !window.TaskState?.focusTimeByTaskId) return 0;
+        return window.TaskState.focusTimeByTaskId[taskId] || 0;
+    };
+
+    // Format focus time
+    const formatFocusTime = (minutes) => {
+        if (!minutes || minutes <= 0) return '';
+        if (minutes < 60) return `${Math.round(minutes)}m`;
+        const hours = Math.floor(minutes / 60);
+        const mins = Math.round(minutes % 60);
+        return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    };
+
     list.innerHTML = todayTasks.map(task => {
         const time = task.dueTime || task.startTime || '';
+        const listInfo = getListInfo(task.listId);
+        const focusMinutes = getFocusTime(task.id);
+        const focusTimeStr = formatFocusTime(focusMinutes);
+
         const metaParts = [];
         if (time) metaParts.push(`<span><i class="fas fa-clock"></i> ${escapeHtml(time)}</span>`);
         if (task.subject) metaParts.push(`<span><i class="fas fa-book"></i> ${escapeHtml(task.subject)}</span>`);
+        if (listInfo) metaParts.push(`<span style="color: ${listInfo.color}"><i class="fas ${listInfo.icon || 'fa-folder'}"></i> ${escapeHtml(listInfo.name)}</span>`);
+        if (task.tags && task.tags.length > 0) {
+            metaParts.push(`<span><i class="fas fa-tag"></i> ${task.tags.slice(0, 2).map(t => escapeHtml(t)).join(', ')}</span>`);
+        }
+        if (focusTimeStr) metaParts.push(`<span class="task-focus-time"><i class="fas fa-stopwatch"></i> ${focusTimeStr}</span>`);
+
         const meta = metaParts.length ? `<div class="task-meta">${metaParts.join('')}</div>` : '<div class="task-meta"></div>';
+
         return `
-            <li class="task-item ${task.status === 'completed' ? 'completed' : ''}" data-task-id="${task.id}" style="cursor: pointer;">
-                <div class="task-checkbox ${task.status === 'completed' ? 'checked' : ''}">
+            <li class="task-item ${task.status === 'completed' ? 'completed' : ''}" data-task-id="${task.id}">
+                <div class="task-checkbox ${task.status === 'completed' ? 'checked' : ''}" data-action="toggle">
                     ${task.status === 'completed' ? '<i class="fas fa-check"></i>' : ''}
                 </div>
-                <div class="task-info">
+                <div class="task-info" data-action="view">
                     <div class="task-title ${task.status === 'completed' ? 'strikethrough' : ''}">${escapeHtml(task.title)}</div>
                     ${meta}
                 </div>
                 <div class="task-priority ${task.priority || 'medium'}"></div>
+                <div class="task-item-actions">
+                    <button class="btn-icon tiny" data-action="focus" data-task-id="${task.id}" title="Start Focus">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn-icon tiny" data-action="edit" data-task-id="${task.id}" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon tiny highlight-green" data-action="review" data-task-id="${task.id}" title="Send to Review">
+                        <i class="fas fa-graduation-cap"></i>
+                    </button>
+                    <button class="btn-icon tiny danger" data-action="delete" data-task-id="${task.id}" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </li>
         `;
     }).join('');
 
-    // Toggle completion on click (same feel as Priority Tasks)
+    // Event delegation for task actions
     list.onclick = async (e) => {
         const item = e.target.closest('.task-item');
         if (!item) return;
-        e.stopPropagation();
+
         const taskId = item.dataset.taskId;
         if (!taskId) return;
 
+        const actionEl = e.target.closest('[data-action]');
+        const action = actionEl?.dataset.action;
+
+        if (action === 'focus') {
+            e.stopPropagation();
+            if (typeof startFocusOnTask === 'function') {
+                startFocusOnTask(taskId);
+            } else {
+                navigateTo('focus');
+            }
+            return;
+        }
+
+        if (action === 'edit') {
+            e.stopPropagation();
+            if (typeof editTask === 'function') {
+                editTask(taskId);
+            } else if (typeof window.openTaskModal === 'function') {
+                const task = await ProductivityData.DataStore.getTask(taskId);
+                window.openTaskModal(task);
+            }
+            return;
+        }
+
+        if (action === 'review') {
+            e.stopPropagation();
+            if (typeof finishAndSendToReview === 'function') {
+                finishAndSendToReview(taskId);
+            }
+            return;
+        }
+
+        if (action === 'delete') {
+            e.stopPropagation();
+            if (confirm('Delete this task?')) {
+                await ProductivityData.DataStore.deleteTask(taskId);
+                await loadDashboard();
+                showToast('success', 'Deleted', 'Task deleted successfully');
+            }
+            return;
+        }
+
+        // Default: toggle completion
+        e.stopPropagation();
         const checkbox = item.querySelector('.task-checkbox');
         const title = item.querySelector('.task-title');
         const isCurrentlyCompleted = item.classList.contains('completed');

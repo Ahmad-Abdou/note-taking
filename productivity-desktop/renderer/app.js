@@ -205,8 +205,13 @@ function navigateTo(page) {
         case 'goals':
             if (typeof loadGoals === 'function') loadGoals();
             break;
+        case 'challenges':
+            if (typeof loadChallengesPage === 'function') loadChallengesPage();
+            break;
         case 'focus':
             if (typeof loadFocusPage === 'function') loadFocusPage();
+            // Smart focus start: auto-start with first incomplete task
+            handleSmartFocusStart();
             break;
         case 'analytics':
             if (typeof loadAnalyticsPage === 'function') loadAnalyticsPage();
@@ -230,6 +235,115 @@ function navigateTo(page) {
             loadSettingsPage();
             break;
     }
+}
+
+// Smart focus start: auto-start session with first incomplete task or prompt to create one
+async function handleSmartFocusStart() {
+    try {
+        // Check if there's already an active focus session
+        if (window.FocusState && window.FocusState.isActive) {
+            return; // Don't interrupt an active session
+        }
+
+        const tasks = await ProductivityData.DataStore.getTasks();
+        const today = new Date().toISOString().split('T')[0];
+
+        // Find first incomplete task prioritizing today's tasks
+        const todayTasks = tasks.filter(t =>
+            t.status !== 'completed' &&
+            (t.dueDate === today || t.startDate === today)
+        ).sort((a, b) => (b.priorityWeight || 0) - (a.priorityWeight || 0));
+
+        const incompleteTasks = tasks.filter(t => t.status !== 'completed')
+            .sort((a, b) => (b.priorityWeight || 0) - (a.priorityWeight || 0));
+
+        const firstTask = todayTasks[0] || incompleteTasks[0];
+
+        if (firstTask) {
+            // Auto-start focus session with the first task
+            setTimeout(() => {
+                if (typeof startFocusOnTask === 'function') {
+                    startFocusOnTask(firstTask.id);
+                } else if (typeof window.startFocusSession === 'function') {
+                    window.startFocusSession(firstTask.id, firstTask.title);
+                }
+            }, 300); // Small delay to let the page render first
+        } else {
+            // No tasks - show prompt to create one
+            showSmartFocusCreateTaskPrompt();
+        }
+    } catch (error) {
+        console.error('Smart focus start error:', error);
+    }
+}
+
+// Show prompt to create a task when no tasks exist
+function showSmartFocusCreateTaskPrompt() {
+    const focusPage = document.getElementById('page-focus');
+    if (!focusPage) return;
+
+    // Check if prompt already exists
+    if (document.getElementById('smart-focus-prompt')) return;
+
+    const prompt = document.createElement('div');
+    prompt.id = 'smart-focus-prompt';
+    prompt.className = 'smart-focus-prompt';
+    prompt.innerHTML = `
+        <div class="smart-focus-prompt-content">
+            <i class="fas fa-tasks"></i>
+            <h3>No tasks to focus on</h3>
+            <p>Create a task to get started with your focus session</p>
+            <div class="smart-focus-quick-add">
+                <input type="text" id="smart-focus-task-input" placeholder="What do you want to work on?" autocomplete="off">
+                <button class="btn-primary" id="smart-focus-create-btn">
+                    <i class="fas fa-plus"></i> Create & Start
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Insert at top of focus page
+    focusPage.insertBefore(prompt, focusPage.firstChild);
+
+    // Handle create task
+    const input = document.getElementById('smart-focus-task-input');
+    const btn = document.getElementById('smart-focus-create-btn');
+
+    const createAndStart = async () => {
+        const title = input.value.trim();
+        if (!title) return;
+
+        btn.disabled = true;
+        try {
+            const task = new ProductivityData.Task({
+                title,
+                dueDate: new Date().toISOString().split('T')[0],
+                priority: 'medium',
+                status: 'not-started'
+            });
+            await ProductivityData.DataStore.saveTask(task);
+
+            // Remove prompt
+            prompt.remove();
+
+            // Start focus session with new task
+            if (typeof startFocusOnTask === 'function') {
+                startFocusOnTask(task.id);
+            } else if (typeof window.startFocusSession === 'function') {
+                window.startFocusSession(task.id, task.title);
+            }
+        } catch (error) {
+            console.error('Failed to create task for focus:', error);
+            showToast('error', 'Error', 'Failed to create task');
+            btn.disabled = false;
+        }
+    };
+
+    btn.addEventListener('click', createAndStart);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') createAndStart();
+    });
+    input.focus();
 }
 
 // Clear badge when user visits a tab

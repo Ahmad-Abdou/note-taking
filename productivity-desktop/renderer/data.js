@@ -107,6 +107,9 @@ class Task {
         this.id = data.id || generateUUID();
         this.title = data.title || '';
         this.description = data.description || '';
+        // Optional hyperlink associated with the task (e.g., docs, meeting link)
+        // Accept a few legacy aliases for backward compatibility.
+        this.linkUrl = data.linkUrl || data.url || data.link || null;
         this.startDate = data.startDate || null; // ISO date string for when task starts
         this.startTime = data.startTime || null; // HH:MM format for when task starts
         this.dueDate = data.dueDate || null; // ISO date string

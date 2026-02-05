@@ -31,6 +31,8 @@ const TaskState = {
         status: 'all',
         priority: 'all',
         category: 'all',
+        list: 'all',
+        tag: 'all',
         search: '',
         dateRange: 'all'
     },
@@ -127,6 +129,68 @@ function normalizeTaskDate(value) {
 }
 
 // ============================================================================
+// TASK LINK (HYPERLINK) SUPPORT
+// ============================================================================
+
+function normalizeTaskLinkUrl(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    let value = raw.trim();
+    if (!value) return null;
+
+    // If user pastes a bare domain, assume https.
+    if (value.startsWith('www.')) value = `https://${value}`;
+
+    // Add scheme if missing.
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) {
+        value = `https://${value}`;
+    }
+
+    try {
+        const url = new URL(value);
+        const protocol = (url.protocol || '').toLowerCase();
+        if (!['http:', 'https:', 'mailto:'].includes(protocol)) return null;
+        return url.href;
+    } catch {
+        return null;
+    }
+}
+
+async function openExternalUrl(url) {
+    const normalized = normalizeTaskLinkUrl(url);
+    if (!normalized) {
+        showToast('error', 'Invalid Link', 'Please enter a valid http(s) or mailto link.');
+        return false;
+    }
+
+    // Extension environment: open in a new tab when possible.
+    try {
+        if (typeof chrome !== 'undefined' && chrome?.tabs?.create) {
+            chrome.tabs.create({ url: normalized });
+            return true;
+        }
+    } catch (_) {
+        // ignore
+    }
+
+    try {
+        window.open(normalized, '_blank', 'noopener,noreferrer');
+        return true;
+    } catch (_) {
+        showToast('error', 'Open Failed', 'Could not open the link.');
+        return false;
+    }
+}
+
+async function openTaskLink(taskId) {
+    const task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task || !task.linkUrl) {
+        showToast('info', 'No Link', 'This task has no link.');
+        return;
+    }
+    await openExternalUrl(task.linkUrl);
+}
+
+// ============================================================================
 // TASK INITIALIZATION
 // ============================================================================
 async function loadTasks() {
@@ -138,6 +202,9 @@ async function loadTasks() {
         TaskState.taskLists = await ProductivityData.DataStore.getTaskLists();
         // Load focus time per task
         await loadTaskFocusTime();
+
+        // Populate list and tag filter dropdowns
+        populateListTagFilters();
 
         // Load saved view preference
         const savedView = await new Promise(resolve => {
@@ -170,6 +237,45 @@ async function loadTasks() {
     } catch (error) {
         console.error('Failed to load tasks:', error);
         showToast('error', 'Error', 'Failed to load tasks.');
+    }
+}
+
+// Populate list and tag filter dropdowns dynamically
+function populateListTagFilters() {
+    const listSelect = document.getElementById('task-filter-list');
+    const tagSelect = document.getElementById('task-filter-tag');
+
+    // Populate list filter
+    if (listSelect) {
+        const currentList = TaskState.filters.list;
+        listSelect.innerHTML = '<option value="all">All Lists</option>';
+        TaskState.taskLists.forEach(list => {
+            const option = document.createElement('option');
+            option.value = list.id;
+            option.textContent = list.name;
+            listSelect.appendChild(option);
+        });
+        listSelect.value = currentList;
+    }
+
+    // Populate tag filter - collect all unique tags from tasks
+    if (tagSelect) {
+        const currentTag = TaskState.filters.tag;
+        const allTags = new Set();
+        TaskState.tasks.forEach(task => {
+            if (task.tags && Array.isArray(task.tags)) {
+                task.tags.forEach(tag => allTags.add(tag));
+            }
+        });
+
+        tagSelect.innerHTML = '<option value="all">All Tags</option>';
+        [...allTags].sort().forEach(tag => {
+            const option = document.createElement('option');
+            option.value = tag;
+            option.textContent = tag;
+            tagSelect.appendChild(option);
+        });
+        tagSelect.value = currentTag;
     }
 }
 
@@ -223,6 +329,16 @@ function setupTaskListeners() {
 
     document.getElementById('task-filter-category')?.addEventListener('change', (e) => {
         TaskState.filters.category = e.target.value;
+        refreshTaskView();
+    });
+
+    document.getElementById('task-filter-list')?.addEventListener('change', (e) => {
+        TaskState.filters.list = e.target.value;
+        refreshTaskView();
+    });
+
+    document.getElementById('task-filter-tag')?.addEventListener('change', (e) => {
+        TaskState.filters.tag = e.target.value;
         refreshTaskView();
     });
 
@@ -321,6 +437,9 @@ function handleTaskAction(e) {
         case 'focus-task':
             startFocusOnTask(taskId);
             break;
+        case 'open-link':
+            openTaskLink(taskId);
+            break;
         case 'delete-task':
             deleteTask(taskId);
             break;
@@ -378,6 +497,16 @@ function getFilteredTasks() {
     // Apply category filter
     if (TaskState.filters.category !== 'all') {
         filtered = filtered.filter(task => task.category === TaskState.filters.category);
+    }
+
+    // Apply list filter
+    if (TaskState.filters.list !== 'all') {
+        filtered = filtered.filter(task => task.listId === TaskState.filters.list);
+    }
+
+    // Apply tag filter
+    if (TaskState.filters.tag !== 'all') {
+        filtered = filtered.filter(task => task.tags && task.tags.includes(TaskState.filters.tag));
     }
 
     // Apply date range filter
@@ -555,6 +684,11 @@ function renderTaskItem(task, isOverdue = false) {
                     <i class="fas fa-calendar-plus"></i>
                 </button>
                 ` : ''}
+                ${task.linkUrl ? `
+                <button class="btn-icon small" data-action="open-link" data-task-id="${task.id}" title="Open link">
+                    <i class="fas fa-link"></i>
+                </button>
+                ` : ''}
                 <button class="btn-icon small" data-action="edit-task" data-task-id="${task.id}" title="Edit">
                     <i class="fas fa-edit"></i>
                 </button>
@@ -692,10 +826,16 @@ function renderGridCard(task) {
                 <div class="grid-card-icons">
                     ${task.isRecurring ? '<i class="fas fa-redo" title="Recurring"></i>' : ''}
                     ${task.linkedGoalId ? '<i class="fas fa-bullseye" title="Linked to goal"></i>' : ''}
+                    ${task.linkUrl ? '<i class="fas fa-link" title="Has link"></i>' : ''}
                     ${task.estimatedTime ? `<span title="Estimated time"><i class="fas fa-clock"></i> ${task.estimatedTime}m</span>` : ''}
                     ${TaskState.focusTimeByTaskId[task.id] ? `<span class="grid-card-focus-time" title="Total focus time"><i class="fas fa-stopwatch"></i> ${formatFocusTimeForTask(TaskState.focusTimeByTaskId[task.id])}</span>` : ''}
                 </div>
                 <div class="grid-card-actions">
+                    ${task.linkUrl ? `
+                    <button class="btn-icon tiny" data-action="open-link" data-task-id="${task.id}" title="Open link">
+                        <i class="fas fa-link"></i>
+                    </button>
+                    ` : ''}
                     <button class="btn-icon tiny" data-action="edit-task" data-task-id="${task.id}" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -725,6 +865,14 @@ function setupGridCardInteractions(container) {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
             editTask(el.dataset.taskId);
+        });
+    });
+
+    // Open link button
+    container.querySelectorAll('[data-action="open-link"]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openTaskLink(el.dataset.taskId);
         });
     });
 
@@ -1002,6 +1150,11 @@ function renderBoardCard(task) {
                     </span>
                 ` : '<span></span>'}
                 <div class="card-actions">
+                    ${task.linkUrl ? `
+                    <button class="btn-icon tiny" data-action="open-link" data-task-id="${task.id}" title="Open link">
+                        <i class="fas fa-link"></i>
+                    </button>
+                    ` : ''}
                     <button class="btn-icon tiny" data-action="edit-task" data-task-id="${task.id}" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -1245,6 +1398,20 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
                     <textarea id="task-description" rows="3" 
                               placeholder="Add more details...">${escapeHtml(task?.description || '')}</textarea>
                 </details>
+
+                <details class="task-description-section" ${task?.linkUrl ? 'open' : ''}>
+                    <summary><i class="fas fa-link"></i> Add link</summary>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="url" id="task-link-url" 
+                               placeholder="https://..."
+                               value="${escapeHtml(task?.linkUrl || '')}"
+                               style="flex:1;">
+                        <button type="button" class="btn-icon small" id="task-open-link-btn" title="Open link" ${task?.linkUrl ? '' : 'disabled'}>
+                            <i class="fas fa-external-link-alt"></i>
+                        </button>
+                    </div>
+                    <div style="margin-top:6px; opacity:0.8; font-size:0.85rem;">Tip: press Ctrl+Enter to open</div>
+                </details>
                 
                 <!-- Subtasks - Expandable -->
                 <details class="task-subtasks-section" ${(task?.subtasks?.length > 0) ? 'open' : ''}>
@@ -1304,6 +1471,27 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
     });
 
     document.getElementById('task-form')?.addEventListener('submit', saveTask);
+
+    // Link input: enable open button and allow quick open
+    const linkInputEl = document.getElementById('task-link-url');
+    const openLinkBtn = document.getElementById('task-open-link-btn');
+    const syncOpenLinkBtn = () => {
+        const normalized = normalizeTaskLinkUrl(linkInputEl?.value || '');
+        if (openLinkBtn) openLinkBtn.disabled = !normalized;
+    };
+    if (linkInputEl) {
+        linkInputEl.addEventListener('input', syncOpenLinkBtn);
+        syncOpenLinkBtn();
+        linkInputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                openExternalUrl(linkInputEl.value);
+            }
+        });
+    }
+    openLinkBtn?.addEventListener('click', () => {
+        openExternalUrl(linkInputEl?.value || '');
+    });
 
     // Load task lists for selection
     const listsPromise = loadTaskListsForModal(task?.listId);
@@ -1839,6 +2027,14 @@ async function saveTask(e) {
     const tagsValue = document.getElementById('task-tags')?.value || '';
     const tags = tagsValue ? tagsValue.split(',').filter(t => t.trim()) : [];
 
+    // Optional link
+    const linkUrlRaw = document.getElementById('task-link-url')?.value || '';
+    const linkUrl = linkUrlRaw.trim() ? normalizeTaskLinkUrl(linkUrlRaw) : null;
+    if (linkUrlRaw.trim() && !linkUrl) {
+        showToast('error', 'Validation Error', 'Please enter a valid link (http/https/mailto).');
+        return;
+    }
+
     if (!title) {
         showToast('error', 'Validation Error', 'Please enter a task title.');
         return;
@@ -1848,6 +2044,7 @@ async function saveTask(e) {
         id: TaskState.editingTask?.id,
         title,
         description,
+        linkUrl,
         startDate,
         startTime,
         dueDate,
@@ -2037,6 +2234,16 @@ function viewTask(taskId) {
             </div>
             <div class="task-details-body">
                 <h3 class="task-detail-title">${escapeHtml(task.title)}</h3>
+
+                ${task.linkUrl ? `
+                    <div class="task-detail-item" style="margin: 10px 0; gap: 8px;">
+                        <i class="fas fa-link"></i>
+                        <button class="btn-secondary" data-action="open-link" data-task-id="${task.id}" type="button" title="Open link">
+                            Open Link
+                        </button>
+                        <span style="opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(task.linkUrl)}</span>
+                    </div>
+                ` : ''}
                 
                 ${task.description ? `
                     <div class="task-detail-description">${escapeHtml(task.description)}</div>
@@ -2125,6 +2332,10 @@ function setupTaskDetailsListeners(modal, task) {
         deleteTask(task.id);
     });
 
+    modal.querySelector('[data-action="open-link"]')?.addEventListener('click', () => {
+        openTaskLink(task.id);
+    });
+
     modal.querySelector('[data-action="focus-task"]')?.addEventListener('click', () => {
         closeTaskDetails();
         startFocusOnTask(task.id);
@@ -2179,6 +2390,14 @@ function quickAddTask(input) {
     let priority = 'medium';
     let category = 'other';
 
+    // Detect first URL in input (supports "Do X https://..." or just "https://...")
+    let linkUrl = null;
+    const urlMatch = input.match(/\bhttps?:\/\/[^\s]+/i);
+    if (urlMatch && urlMatch[0]) {
+        linkUrl = normalizeTaskLinkUrl(urlMatch[0]);
+        title = title.replace(urlMatch[0], '').trim();
+    }
+
     // Parse priority markers
     if (input.includes('!urgent') || input.includes('!!!')) {
         priority = 'urgent';
@@ -2218,7 +2437,8 @@ function quickAddTask(input) {
         title,
         dueDate,
         priority,
-        category
+        category,
+        linkUrl
     });
 }
 

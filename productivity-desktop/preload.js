@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Google OAuth for Firebase authentication
     googleOAuth: (clientId) => ipcRenderer.invoke('google-oauth', clientId),
 
+    // Open external URLs in the default system browser
+    openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
     // Auto-updates (desktop app)
     updates: {
         getVersion: () => ipcRenderer.invoke('updater-get-version'),
