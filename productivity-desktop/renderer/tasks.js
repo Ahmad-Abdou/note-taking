@@ -2623,8 +2623,25 @@ function updateTaskStats() {
         (document.getElementById('completed-tasks-stat').textContent = stats.completed);
 }
 
-function startFocusOnTask(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
+async function startFocusOnTask(taskId) {
+    let task = null;
+
+    try {
+        task = TaskState?.tasks?.find?.(t => t.id === taskId) || null;
+    } catch (_) {
+        task = null;
+    }
+
+    if (!task) {
+        try {
+            if (ProductivityData?.DataStore?.getTask) {
+                task = await ProductivityData.DataStore.getTask(taskId);
+            }
+        } catch (_) {
+            task = null;
+        }
+    }
+
     if (task) {
         // Navigate to focus page so the user sees the focus UI (works across the entire hub)
         if (typeof navigateTo === 'function') {

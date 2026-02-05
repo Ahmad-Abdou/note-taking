@@ -264,8 +264,18 @@ async function handleSmartFocusStart() {
             setTimeout(() => {
                 if (typeof startFocusOnTask === 'function') {
                     startFocusOnTask(firstTask.id);
-                } else if (typeof window.startFocusSession === 'function') {
-                    window.startFocusSession(firstTask.id, firstTask.title);
+                } else {
+                    try {
+                        localStorage.setItem('focusTaskId', firstTask.id);
+                        localStorage.setItem('focusTaskTitle', firstTask.title || '');
+                    } catch (_) {
+                        // ignore
+                    }
+                    if (typeof navigateTo === 'function') {
+                        navigateTo('focus');
+                    } else if (typeof window.navigateTo === 'function') {
+                        window.navigateTo('focus');
+                    }
                 }
             }, 300); // Small delay to let the page render first
         } else {
@@ -329,8 +339,18 @@ function showSmartFocusCreateTaskPrompt() {
             // Start focus session with new task
             if (typeof startFocusOnTask === 'function') {
                 startFocusOnTask(task.id);
-            } else if (typeof window.startFocusSession === 'function') {
-                window.startFocusSession(task.id, task.title);
+            } else {
+                try {
+                    localStorage.setItem('focusTaskId', task.id);
+                    localStorage.setItem('focusTaskTitle', task.title || '');
+                } catch (_) {
+                    // ignore
+                }
+                if (typeof navigateTo === 'function') {
+                    navigateTo('focus');
+                } else if (typeof window.navigateTo === 'function') {
+                    window.navigateTo('focus');
+                }
             }
         } catch (error) {
             console.error('Failed to create task for focus:', error);

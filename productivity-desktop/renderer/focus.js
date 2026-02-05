@@ -2452,22 +2452,43 @@ function playSound(type) {
 function showNotification(title, body) {
     if (!FocusState.settings.notificationsEnabled) return;
 
-    // Try chrome.notifications first (works better in extension context)
+    // Dedupe/throttle to prevent notification loops from spamming the OS.
+    // (We still allow different notifications through.)
+    try {
+        const now = Date.now();
+        const key = `${String(title || '')}\n${String(body || '')}`;
+        const lastAt = FocusState._lastNotificationAtMs || 0;
+        const lastKey = FocusState._lastNotificationKey || '';
+        const throttleMs = 4000;
+        if (key === lastKey && (now - lastAt) < throttleMs) {
+            return;
+        }
+        FocusState._lastNotificationAtMs = now;
+        FocusState._lastNotificationKey = key;
+    } catch (_) {
+        // ignore
+    }
+
+    const opts = {
+        type: 'basic',
+        iconUrl: chrome?.runtime?.getURL ? chrome.runtime.getURL('icons/icon48.png') : 'icons/icon48.png',
+        title: title,
+        message: body,
+        priority: 2,
+        requireInteraction: false
+    };
+
+    // Try chrome.notifications first (works better in extension context / our desktop shim)
     if (chrome?.notifications?.create) {
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: chrome.runtime.getURL('icons/icon48.png'),
-            title: title,
-            message: body,
-            priority: 2,
-            requireInteraction: false
-        }).catch(() => {
-            // Fallback to web Notification API
+        // Use a stable id so repeats replace instead of stacking.
+        const id = `focus_${String(title || 'notif').toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`;
+        Promise.resolve(chrome.notifications.create(id, opts)).catch(() => {
             showWebNotification(title, body);
         });
-    } else {
-        showWebNotification(title, body);
+        return;
     }
+
+    showWebNotification(title, body);
 }
 
 /**
