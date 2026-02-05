@@ -141,3 +141,53 @@ const AppLogger = (function () {
 if (typeof window !== 'undefined') {
     window.AppLogger = AppLogger;
 }
+
+// Forward renderer crashes to the main process so they get persisted to disk.
+// This is intentionally best-effort and never throws.
+(function wireRendererCrashReporting() {
+    if (typeof window === 'undefined') return;
+
+    const report = (payload) => {
+        try {
+            window.electronAPI?.diagnostics?.reportRendererError?.(payload);
+        } catch (_) {
+            // ignore
+        }
+    };
+
+    window.addEventListener('error', (event) => {
+        try {
+            report({
+                type: 'window.error',
+                message: event?.message || 'Unknown renderer error',
+                filename: event?.filename || null,
+                lineno: event?.lineno || null,
+                colno: event?.colno || null,
+                stack: event?.error?.stack || null
+            });
+        } catch (_) {
+            // ignore
+        }
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+        try {
+            const reason = event?.reason;
+            report({
+                type: 'window.unhandledrejection',
+                message: reason?.message || (typeof reason === 'string' ? reason : 'Unhandled promise rejection'),
+                stack: reason?.stack || null,
+                reason: (() => {
+                    try {
+                        if (typeof reason === 'string') return reason;
+                        return JSON.stringify(reason);
+                    } catch {
+                        return String(reason);
+                    }
+                })()
+            });
+        } catch (_) {
+            // ignore
+        }
+    });
+})();

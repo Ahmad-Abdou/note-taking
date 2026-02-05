@@ -4,6 +4,89 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const fs = require('fs');
 
+// ===== Diagnostics logging (disk-backed) =====
+
+let diagnosticsLogFilePath = null;
+
+function safeStringify(value) {
+    try {
+        if (typeof value === 'string') return value;
+        return JSON.stringify(value);
+    } catch (_) {
+        try {
+            return String(value);
+        } catch {
+            return '[unstringifiable]';
+        }
+    }
+}
+
+function resolveDiagnosticsDir() {
+    // Prefer Electron's userData when available; fall back to env vars.
+    try {
+        // In most cases this works even before 'ready', but guard just in case.
+        const userData = app.getPath('userData');
+        if (userData) return path.join(userData, 'logs');
+    } catch (_) {
+        // ignore
+    }
+
+    const base = process.env.LOCALAPPDATA || process.env.APPDATA || process.cwd();
+    return path.join(base, 'ProductivityHub', 'logs');
+}
+
+function getDiagnosticsLogFilePath() {
+    if (diagnosticsLogFilePath) return diagnosticsLogFilePath;
+    const dir = resolveDiagnosticsDir();
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+    } catch (_) {
+        // ignore
+    }
+    diagnosticsLogFilePath = path.join(dir, 'desktop.log');
+    return diagnosticsLogFilePath;
+}
+
+function appendDiagnosticsLog(line) {
+    try {
+        const filePath = getDiagnosticsLogFilePath();
+        fs.appendFileSync(filePath, line + '\n', { encoding: 'utf8' });
+    } catch (_) {
+        // ignore
+    }
+}
+
+function diag(level, message, extra) {
+    const ts = new Date().toISOString();
+    const base = `[${ts}] [${process.pid}] [${level}] ${message}`;
+    const suffix = extra === undefined ? '' : ` ${safeStringify(extra)}`;
+    appendDiagnosticsLog(base + suffix);
+}
+
+function diagError(prefix, err) {
+    try {
+        const payload = {
+            message: err?.message || String(err),
+            stack: err?.stack || null,
+            name: err?.name || null
+        };
+        diag('error', prefix, payload);
+    } catch (_) {
+        diag('error', prefix, String(err));
+    }
+}
+
+process.on('uncaughtException', (err) => {
+    diagError('uncaughtException', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+    diag('error', 'unhandledRejection', {
+        reason: safeStringify(reason),
+        stack: reason?.stack || null
+    });
+});
+
 // Allow audio to play without user gesture
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
@@ -78,6 +161,8 @@ function prepareToQuit(reason = 'quit') {
     } catch (_) {
         // ignore
     }
+
+    diag('info', 'prepareToQuit', { reason });
 }
 
 // ===== Auto Update (electron-updater) =====
@@ -140,6 +225,7 @@ function initAutoUpdater() {
 
     autoUpdater.on('checking-for-update', () => {
         sendUpdaterStatus({ state: 'checking' });
+        diag('info', 'updater checking-for-update');
     });
 
     autoUpdater.on('update-available', (info) => {
@@ -149,14 +235,17 @@ function initAutoUpdater() {
             releaseName: info?.releaseName,
             releaseDate: info?.releaseDate
         });
+        diag('info', 'updater update-available', { version: info?.version });
     });
 
     autoUpdater.on('update-not-available', (info) => {
         sendUpdaterStatus({ state: 'not-available', version: info?.version });
+        diag('info', 'updater update-not-available', { version: info?.version });
     });
 
     autoUpdater.on('error', (err) => {
         sendUpdaterStatus({ state: 'error', message: err?.message || String(err) });
+        diagError('updater error', err);
     });
 
     autoUpdater.on('download-progress', (progress) => {
@@ -166,6 +255,9 @@ function initAutoUpdater() {
             transferred: progress?.transferred,
             total: progress?.total,
             bytesPerSecond: progress?.bytesPerSecond
+        });
+        diag('info', 'updater download-progress', {
+            percent: typeof progress?.percent === 'number' ? progress.percent : null
         });
     });
 
@@ -177,6 +269,8 @@ function initAutoUpdater() {
             releaseDate: info?.releaseDate
         });
 
+        diag('info', 'updater update-downloaded', { version: info?.version });
+
         if (installAfterDownload) {
             // Reset first to avoid loops.
             installAfterDownload = false;
@@ -185,14 +279,20 @@ function initAutoUpdater() {
                 try {
                     // Ensure the app will actually quit.
                     // Our window close handler normally hides to tray.
-                    prepareToQuit('update_install');
+                    // IMPORTANT: don't destroy the UI surfaces yet; if quitAndInstall throws,
+                    // tearing down the window/tray would look like a black-screen crash.
+                    isQuitting = true;
+                    diag('info', 'updater quitAndInstall starting');
 
                     // Trigger installer (non-silent) and restart.
                     // This is more reliable for relaunch on Windows than fully silent installs,
                     // while our NSIS hook still prevents "app cannot be closed" prompts.
                     autoUpdater.quitAndInstall(false, true);
                 } catch (e) {
+                    // Restore normal close-to-tray behavior if the install didn't start.
+                    isQuitting = false;
                     sendUpdaterStatus({ state: 'error', message: e?.message || String(e) });
+                    diagError('updater quitAndInstall failed', e);
                 }
             }, 600);
         }
@@ -223,10 +323,52 @@ function createWindow() {
         show: false
     });
 
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    const indexPath = path.join(__dirname, 'renderer', 'index.html');
+    Promise.resolve(mainWindow.loadFile(indexPath)).catch((e) => {
+        diagError('mainWindow.loadFile failed', e);
+    });
 
-    // Show window when ready
+    // Renderer load/crash diagnostics (helps when the UI becomes "black" with no stack trace)
+    try {
+        mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+            diag('error', 'webContents did-fail-load', {
+                errorCode,
+                errorDescription,
+                validatedURL
+            });
+            // If load fails, still show the window so it's not perceived as a "black screen" crash.
+            try {
+                if (!mainWindow.isDestroyed()) mainWindow.show();
+            } catch (_) {
+                // ignore
+            }
+        });
+
+        mainWindow.webContents.on('render-process-gone', (event, details) => {
+            diag('error', 'webContents render-process-gone', details);
+        });
+
+        mainWindow.webContents.on('unresponsive', () => {
+            diag('warn', 'webContents unresponsive');
+        });
+    } catch (_) {
+        // ignore
+    }
+
+    // Show window when ready (with a fallback timer so we don't stay hidden forever)
+    const readyFallback = setTimeout(() => {
+        try {
+            if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+                diag('warn', 'ready-to-show timeout; showing window');
+                mainWindow.show();
+            }
+        } catch (_) {
+            // ignore
+        }
+    }, 7000);
+
     mainWindow.once('ready-to-show', () => {
+        clearTimeout(readyFallback);
         mainWindow.show();
         // Open DevTools in development (can use F12 or Ctrl+Shift+I)
         // mainWindow.webContents.openDevTools();
@@ -331,24 +473,44 @@ function registerShortcuts() {
 // We retry once after a short delay to avoid "updated then immediately closed".
 function acquireSingleInstanceLockWithRetry() {
     const gotLock = app.requestSingleInstanceLock();
+    diag('info', 'singleInstanceLock initial', { gotLock });
     if (gotLock) return true;
 
-    setTimeout(() => {
+    const maxAttempts = 6;
+    let attempt = 1;
+
+    const tryAcquire = () => {
+        attempt++;
         try {
-            const gotRetry = app.requestSingleInstanceLock();
-            if (!gotRetry) {
+            const got = app.requestSingleInstanceLock();
+            diag('info', 'singleInstanceLock retry', { attempt, maxAttempts, got });
+            if (got) {
+                wireSecondInstanceHandler();
+                app.whenReady().then(startApp);
+                return;
+            }
+
+            if (attempt >= maxAttempts) {
+                diag('error', 'singleInstanceLock failed; quitting', { attempt, maxAttempts });
                 app.quit();
                 return;
             }
-            wireSecondInstanceHandler();
-            app.whenReady().then(startApp);
-        } catch (_) {
+
+            setTimeout(tryAcquire, 2500);
+        } catch (e) {
+            diagError('singleInstanceLock retry exception', e);
             app.quit();
         }
-    }, 2500);
+    };
 
+    setTimeout(tryAcquire, 2500);
     return false;
 }
+
+// Renderer error forwarding for diagnostics
+ipcMain.on('renderer-error', (event, payload) => {
+    diag('error', 'renderer-error', payload);
+});
 
 if (acquireSingleInstanceLockWithRetry()) {
     wireSecondInstanceHandler();

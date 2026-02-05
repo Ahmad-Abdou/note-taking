@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    // Diagnostics (desktop app)
+    diagnostics: {
+        reportRendererError: (payload) => {
+            try {
+                ipcRenderer.send('renderer-error', payload);
+            } catch (_) {
+                // ignore
+            }
+        }
+    },
+
     // Event listeners from main process
     onStartFocus: (callback) => {
         ipcRenderer.on('start-focus', (event, minutes) => callback(minutes));
