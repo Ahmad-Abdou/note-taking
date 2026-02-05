@@ -81,6 +81,64 @@
 }
 
 /* ============================================================================
+   DASHBOARD CHALLENGES WIDGET
+   ============================================================================ */
+
+.dashboard-challenges-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dashboard-challenge-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.dashboard-challenge-item.completed {
+    border-color: var(--success-color, #10b981);
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.dashboard-challenge-item .row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.dashboard-challenge-item .title {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dashboard-challenge-item .count {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.dashboard-challenge-item .progress-bar {
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.dashboard-challenge-item .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--secondary));
+    transition: width 0.3s ease;
+}
+
+/* ============================================================================
    CHALLENGE CARD
    ============================================================================ */
 

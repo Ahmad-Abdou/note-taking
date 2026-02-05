@@ -240,6 +240,25 @@ function navigateTo(page) {
 // Smart focus start: auto-start session with first incomplete task or prompt to create one
 async function handleSmartFocusStart() {
     try {
+        // If a task explicitly triggered focus (via Tasks/Dashboard), don't override it.
+        if (window.__skipSmartFocusOnce) {
+            window.__skipSmartFocusOnce = false;
+            return;
+        }
+
+        // Basic re-entrancy guard (prevents loops when focus navigation triggers logic multiple times).
+        if (window.__smartFocusInProgress) return;
+        window.__smartFocusInProgress = true;
+
+        // If a task was explicitly queued for focus by other flows, don't auto-pick a different one.
+        try {
+            const hasPending = !!(window.FocusState?.pendingLinkedTaskId);
+            const hasStored = !!(localStorage.getItem('focusTaskId') || localStorage.getItem('focusTaskTitle'));
+            if (hasPending || hasStored) return;
+        } catch (_) {
+            // ignore
+        }
+
         // Check if there's already an active focus session
         if (window.FocusState && window.FocusState.isActive) {
             return; // Don't interrupt an active session
@@ -260,30 +279,40 @@ async function handleSmartFocusStart() {
         const firstTask = todayTasks[0] || incompleteTasks[0];
 
         if (firstTask) {
-            // Auto-start focus session with the first task
-            setTimeout(() => {
-                if (typeof startFocusOnTask === 'function') {
-                    startFocusOnTask(firstTask.id);
+            // Auto-link the first task, then start directly (no extra navigation).
+            const taskId = firstTask.id;
+            const taskTitle = firstTask.title || '';
+
+            // Prefer native focus linking flow if available.
+            if (typeof window.openFocusDurationForTask === 'function') {
+                setTimeout(() => window.openFocusDurationForTask(taskId, taskTitle), 200);
+                return;
+            }
+
+            // Fallback: set pending task + start immediately if possible.
+            try {
+                if (window.FocusState) {
+                    window.FocusState.pendingLinkedTaskId = taskId;
+                    window.FocusState.pendingLinkedTaskTitle = taskTitle;
                 } else {
-                    try {
-                        localStorage.setItem('focusTaskId', firstTask.id);
-                        localStorage.setItem('focusTaskTitle', firstTask.title || '');
-                    } catch (_) {
-                        // ignore
-                    }
-                    if (typeof navigateTo === 'function') {
-                        navigateTo('focus');
-                    } else if (typeof window.navigateTo === 'function') {
-                        window.navigateTo('focus');
-                    }
+                    localStorage.setItem('focusTaskId', taskId);
+                    localStorage.setItem('focusTaskTitle', taskTitle);
                 }
-            }, 300); // Small delay to let the page render first
+            } catch (_) {
+                // ignore
+            }
+
+            if (typeof window.startFocusSession === 'function') {
+                setTimeout(() => window.startFocusSession(null), 250);
+            }
         } else {
             // No tasks - show prompt to create one
             showSmartFocusCreateTaskPrompt();
         }
     } catch (error) {
         console.error('Smart focus start error:', error);
+    } finally {
+        window.__smartFocusInProgress = false;
     }
 }
 
@@ -460,6 +489,9 @@ async function loadDashboard() {
         // Update new dashboard widgets
         await renderReviewWidget();
 
+        // Update challenges widget
+        await renderDashboardChallengesWidget();
+
         // Update badges
         updateBadges();
 
@@ -468,6 +500,69 @@ async function loadDashboard() {
 
     } catch (error) {
         console.error('Failed to load dashboard:', error);
+    }
+}
+
+async function renderDashboardChallengesWidget() {
+    const container = document.getElementById('dashboard-challenges');
+    if (!container) return;
+
+    try {
+        await window.ChallengeManager?.ensureLoaded?.();
+        const challenges = Array.isArray(window.ChallengeManager?.challenges)
+            ? window.ChallengeManager.challenges
+            : [];
+
+        const active = challenges.filter(c => c && (c.status === 'active' || c.status === 'completed'));
+        if (active.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state small">
+                    <i class="fas fa-flag-checkered"></i>
+                    <p>No challenges yet</p>
+                    <p class="sub">Create one to track progress automatically.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Prefer active first, then recently completed
+        active.sort((a, b) => {
+            const sa = a.status === 'active' ? 0 : 1;
+            const sb = b.status === 'active' ? 0 : 1;
+            if (sa !== sb) return sa - sb;
+            return String(a.title || '').localeCompare(String(b.title || ''));
+        });
+
+        const top = active.slice(0, 3);
+        container.innerHTML = `
+            <div class="dashboard-challenges-list">
+                ${top.map(c => {
+                    const current = Math.max(0, Number(c.currentProgress) || 0);
+                    const target = Math.max(1, Number(c.targetProgress) || 1);
+                    const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+                    const statusClass = c.status === 'completed' ? 'completed' : 'active';
+                    return `
+                        <div class="dashboard-challenge-item ${statusClass}">
+                            <div class="row">
+                                <div class="title">${escapeHtml(c.title || 'Challenge')}</div>
+                                <div class="count">${current}/${target}</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width:${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } catch (e) {
+        console.error('[Dashboard] Failed to render challenges widget:', e);
+        container.innerHTML = `
+            <div class="empty-state small">
+                <i class="fas fa-flag-checkered"></i>
+                <p>Challenges unavailable</p>
+            </div>
+        `;
     }
 }
 
@@ -628,7 +723,6 @@ function renderTodayTasksCard(allTasks) {
                     <div class="task-title ${task.status === 'completed' ? 'strikethrough' : ''}">${escapeHtml(task.title)}</div>
                     ${meta}
                 </div>
-                <div class="task-priority ${task.priority || 'medium'}"></div>
                 <div class="task-item-actions">
                     ${task.linkUrl ? `
                     <button type="button" class="btn-icon tiny" data-action="open-link" data-task-id="${task.id}" title="Open link">
@@ -1061,7 +1155,6 @@ function renderPriorityTasks(tasks) {
                     ${task.subject ? `<span><i class="fas fa-book"></i> ${escapeHtml(task.subject)}</span>` : ''}
                 </div>
             </div>
-            <div class="task-priority ${task.priority}"></div>
         </li>
     `).join('');
 

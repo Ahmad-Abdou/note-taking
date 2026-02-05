@@ -2128,7 +2128,20 @@ async function saveTask(e) {
 }
 
 async function toggleTask(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
+    let task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) {
+        try {
+            if (ProductivityData?.DataStore?.getTask) {
+                const fetched = await ProductivityData.DataStore.getTask(taskId);
+                if (fetched) {
+                    task = fetched;
+                    TaskState.tasks.push(fetched);
+                }
+            }
+        } catch (_) {
+            // ignore
+        }
+    }
     if (!task) return;
 
     const newStatus = task.status === 'completed' ? 'not-started' : 'completed';
@@ -2184,10 +2197,19 @@ async function toggleTask(taskId) {
 }
 
 async function editTask(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
-    if (task) {
-        openTaskModal(task);
+    let task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) {
+        try {
+            if (ProductivityData?.DataStore?.getTask) {
+                task = await ProductivityData.DataStore.getTask(taskId);
+                if (task) TaskState.tasks.push(task);
+            }
+        } catch (_) {
+            task = null;
+        }
     }
+
+    if (task) openTaskModal(task);
 }
 
 async function deleteTask(taskId) {
@@ -2220,8 +2242,18 @@ async function deleteTask(taskId) {
 }
 
 function viewTask(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
-    if (!task) return;
+    let task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) {
+        // Fallback for cases where TaskState isn't loaded yet (e.g., dashboard actions)
+        ProductivityData?.DataStore?.getTask?.(taskId)
+            ?.then((fetched) => {
+                if (!fetched) return;
+                TaskState.tasks.push(fetched);
+                viewTask(taskId);
+            })
+            .catch(() => void 0);
+        return;
+    }
 
     const modal = document.getElementById('task-details-modal') || createTaskDetailsModal();
     const categoryConfig = TASK_CATEGORIES[task.category] || TASK_CATEGORIES.other;
@@ -2252,7 +2284,9 @@ function viewTask(taskId) {
                         <button class="btn-secondary" data-action="open-link" data-task-id="${task.id}" type="button" title="Open link">
                             Open Link
                         </button>
-                        <span style="opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(task.linkUrl)}</span>
+                        <a href="#" data-action="open-link" data-task-id="${task.id}" style="opacity: 0.9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline;">
+                            ${escapeHtml(task.linkUrl)}
+                        </a>
                     </div>
                 ` : ''}
                 
@@ -2643,6 +2677,13 @@ async function startFocusOnTask(taskId) {
     }
 
     if (task) {
+        // Inform dashboard/app smart-focus logic to not auto-pick a different task.
+        try {
+            window.__skipSmartFocusOnce = true;
+        } catch (_) {
+            // ignore
+        }
+
         // Navigate to focus page so the user sees the focus UI (works across the entire hub)
         if (typeof navigateTo === 'function') {
             navigateTo('focus');
@@ -2966,7 +3007,17 @@ async function postponeTaskToToday(taskId) {
 // FINISH TASK AND SEND TO SPACED REPETITION REVIEW
 // ============================================================================
 async function finishAndSendToReview(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
+    let task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) {
+        try {
+            if (ProductivityData?.DataStore?.getTask) {
+                task = await ProductivityData.DataStore.getTask(taskId);
+                if (task) TaskState.tasks.push(task);
+            }
+        } catch (_) {
+            task = null;
+        }
+    }
     if (!task) return;
 
     // Show modal to configure the review item

@@ -47,6 +47,49 @@
     margin-bottom: var(--spacing-xl);
 }
 
+/* Smart focus prompt (shown when no tasks exist) */
+.smart-focus-prompt {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-xl);
+    max-width: 960px;
+    margin: 0 auto var(--spacing-xl);
+}
+
+.smart-focus-prompt-content {
+    text-align: center;
+}
+
+.smart-focus-prompt-content > i {
+    font-size: 2rem;
+    color: var(--primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.smart-focus-prompt-content h3 {
+    margin: 0 0 var(--spacing-xs) 0;
+}
+
+.smart-focus-prompt-content p {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--text-secondary);
+}
+
+.smart-focus-quick-add {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.smart-focus-quick-add input {
+    min-width: 320px;
+    max-width: 520px;
+    width: 100%;
+}
+
 .timer-options-redesign {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
