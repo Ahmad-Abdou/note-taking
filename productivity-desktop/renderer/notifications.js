@@ -2408,8 +2408,8 @@ async function submitAccountabilityCheckin(modal) {
             focusMinutes: todaysActivity.minutes || 0,
             reflection: reflection,
             blockers: blockers,
-            mood: moodRating,
-            tomorrowCommitment: tomorrow
+            moodRating: moodRating,
+            commitmentForTomorrow: tomorrow
         });
 
         await ProductivityData.DataStore.saveAccountabilityCheckin(checkin);
@@ -2420,7 +2420,7 @@ async function submitAccountabilityCheckin(modal) {
         if (stats.checkinStreak > (stats.longestCheckinStreak || 0)) {
             stats.longestCheckinStreak = stats.checkinStreak;
         }
-        stats.lastUpdated = today;
+        stats.lastActivityDate = today;
         await ProductivityData.DataStore.saveCommitmentStats(stats);
 
         // Award XP for completing check-in
@@ -2484,6 +2484,9 @@ window.triggerDailyTaskReminder = triggerDailyTaskReminder;
 window.setDailyReminderTime = setDailyReminderTime;
 window.playNotificationSound = playNotificationSound;
 window.NotificationState = NotificationState;
+window.initAccountabilityCheckin = initAccountabilityCheckin;
+window.showAccountabilityCheckinModal = showAccountabilityCheckinModal;
+window.triggerAccountabilityCheckin = triggerAccountabilityCheckin;
 
 // ============================================================================
 // AUTO-INITIALIZATION

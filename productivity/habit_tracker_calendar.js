@@ -701,6 +701,11 @@
 
             const stats = this.mountEl.querySelector('.habit-tracker-stats');
             if (stats) stats.textContent = this._buildStatsText();
+
+            // Record progress for challenges when habit is marked done
+            if (next && window.ChallengeManager) {
+                window.ChallengeManager.recordProgress('habits', 1);
+            }
         }
 
         async _handleExport() {

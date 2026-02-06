@@ -455,6 +455,9 @@ async function loadDashboard() {
         // Update new dashboard widgets
         await renderReviewWidget();
 
+        // Update challenges widget
+        await renderDashboardChallengesWidget();
+
         // Update badges
         updateBadges();
 
@@ -1360,6 +1363,69 @@ function formatDueLabel(dateStr) {
     if (daysDiff === 0) return 'Due today';
     if (daysDiff === 1) return 'Due tomorrow';
     return `Due in ${daysDiff}d`;
+}
+
+async function renderDashboardChallengesWidget() {
+    const container = document.getElementById('dashboard-challenges');
+    if (!container) return;
+
+    try {
+        await window.ChallengeManager?.ensureLoaded?.();
+        const challenges = Array.isArray(window.ChallengeManager?.challenges)
+            ? window.ChallengeManager.challenges
+            : [];
+
+        const active = challenges.filter(c => c && (c.status === 'active' || c.status === 'completed'));
+        if (active.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state small">
+                    <i class="fas fa-flag-checkered"></i>
+                    <p>No challenges yet</p>
+                    <p class="sub">Create one to track progress automatically.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Prefer active first, then recently completed
+        active.sort((a, b) => {
+            const sa = a.status === 'active' ? 0 : 1;
+            const sb = b.status === 'active' ? 0 : 1;
+            if (sa !== sb) return sa - sb;
+            return String(a.title || '').localeCompare(String(b.title || ''));
+        });
+
+        const top = active.slice(0, 3);
+        container.innerHTML = `
+            <div class="dashboard-challenges-list">
+                ${top.map(c => {
+                    const current = Math.max(0, Number(c.currentProgress) || 0);
+                    const target = Math.max(1, Number(c.targetProgress) || 1);
+                    const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+                    const statusClass = c.status === 'completed' ? 'completed' : 'active';
+                    return `
+                        <div class="dashboard-challenge-item ${statusClass}">
+                            <div class="row">
+                                <div class="title">${escapeHtml(c.title || 'Challenge')}</div>
+                                <div class="count">${current}/${target}</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width:${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } catch (e) {
+        console.error('[Dashboard] Failed to render challenges widget:', e);
+        container.innerHTML = `
+            <div class="empty-state small">
+                <i class="fas fa-flag-checkered"></i>
+                <p>Challenges unavailable</p>
+            </div>
+        `;
+    }
 }
 
 async function updateBadges() {

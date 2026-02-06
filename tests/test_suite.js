@@ -585,7 +585,8 @@ if (typeof window !== 'undefined') {
         'apiTests',
         'pdfViewerTests',
         'goalsAnalyticsTests',
-        'siteBlockerTests'
+        'siteBlockerTests',
+        'dataModelTests'
     ];
 
     for (const moduleName of importedModules) {

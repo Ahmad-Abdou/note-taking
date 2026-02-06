@@ -1220,6 +1220,11 @@ async function handleBoardDrop(e, newStatus) {
             } catch (err) {
                 console.warn('[Tasks] Could not update stats:', err);
             }
+
+            // Record progress for challenges
+            if (window.ChallengeManager) {
+                window.ChallengeManager.recordProgress('tasks', 1);
+            }
         }
 
         refreshTaskView();
@@ -2159,6 +2164,11 @@ async function toggleTask(taskId) {
             // Award XP and track achievement via motivation system
             if (window.MotivationSystem?.onTaskComplete) {
                 window.MotivationSystem.onTaskComplete();
+            }
+
+            // Record progress for challenges
+            if (window.ChallengeManager) {
+                window.ChallengeManager.recordProgress('tasks', 1);
             }
 
             // Update linked goal progress if any

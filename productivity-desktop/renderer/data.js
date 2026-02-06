@@ -449,10 +449,13 @@ class Goal {
         this.hoursInvested = data.hoursInvested || 0;
     }
 
-    // Get total invested time from linked focus sessions
+    // Get invested time summary for abandonment display
     getInvestedTime() {
-        // This would be calculated from focus sessions linked to this goal
-        return this.hoursInvested;
+        return {
+            hours: this.hoursInvested,
+            milestonesCompleted: this.milestones.filter(m => m.isCompleted).length,
+            totalMilestones: this.milestones.length
+        };
     }
 
     // Calculate progress based on milestones
@@ -526,13 +529,14 @@ class AccountabilityCheckin {
     constructor(data = {}) {
         this.id = data.id || generateUUID();
         this.date = data.date || new Date().toISOString().split('T')[0];
-        this.mood = data.mood || 3; // 1-5 scale
-        this.reflection = data.reflection || '';
-        this.tomorrowCommitment = data.tomorrowCommitment || '';
+        this.time = data.time || data.createdAt || new Date().toISOString();
         this.goalsWorkedOn = data.goalsWorkedOn || []; // Array of goal IDs
         this.tasksCompleted = data.tasksCompleted || 0;
         this.focusMinutes = data.focusMinutes || 0;
-        this.createdAt = data.createdAt || new Date().toISOString();
+        this.reflection = data.reflection || '';
+        this.blockers = data.blockers || '';
+        this.moodRating = data.moodRating || data.mood || 3; // 1-5 scale
+        this.commitmentForTomorrow = data.commitmentForTomorrow || data.tomorrowCommitment || '';
     }
 
     toJSON() {
@@ -546,21 +550,21 @@ class AccountabilityCheckin {
  */
 class CommitmentStats {
     constructor(data = {}) {
-        this.goalsCompleted = data.goalsCompleted || 0;
-        this.goalsAbandoned = data.goalsAbandoned || 0;
-        this.goalsCreated = data.goalsCreated || 0;
-        this.totalXPLost = data.totalXPLost || 0;
-        this.xpLostToDecay = data.xpLostToDecay || 0;
-        this.xpLostToPenalties = data.xpLostToPenalties || 0;
+        this.totalGoalsCreated = data.totalGoalsCreated || data.goalsCreated || 0;
+        this.totalGoalsCompleted = data.totalGoalsCompleted || data.goalsCompleted || 0;
+        this.totalGoalsAbandoned = data.totalGoalsAbandoned || data.goalsAbandoned || 0;
+        this.totalXPLostToDecay = data.totalXPLostToDecay || data.xpLostToDecay || 0;
+        this.totalXPLostToStakes = data.totalXPLostToStakes || data.xpLostToPenalties || 0;
+        this.lastActivityDate = data.lastActivityDate || data.lastUpdated || null;
+        this.consecutiveInactiveDays = data.consecutiveInactiveDays || 0;
         this.checkinStreak = data.checkinStreak || 0;
         this.longestCheckinStreak = data.longestCheckinStreak || 0;
-        this.lastUpdated = data.lastUpdated || new Date().toISOString();
     }
 
     get commitmentScore() {
-        const total = this.goalsCompleted + this.goalsAbandoned;
+        const total = this.totalGoalsCompleted + this.totalGoalsAbandoned;
         if (total === 0) return 100;
-        return Math.round((this.goalsCompleted / total) * 100);
+        return Math.round((this.totalGoalsCompleted / total) * 100);
     }
 
     toJSON() {
@@ -902,6 +906,15 @@ class UserSettings {
         this.enableSounds = data.enableSounds !== false;
         this.timerEndSound = data.timerEndSound || 'bell';
         this.breakEndSound = data.breakEndSound || 'chime';
+
+        // Accountability & Commitment Settings
+        this.dailyCheckinEnabled = data.dailyCheckinEnabled !== false;
+        this.dailyCheckinTime = data.dailyCheckinTime || '21:00';  // Default 9 PM
+        this.xpDecayEnabled = data.xpDecayEnabled !== false;
+        this.xpDecayDailyPercent = data.xpDecayDailyPercent || 1;  // 1% daily decay
+        this.xpDecayMaxDaily = data.xpDecayMaxDaily || 50;         // Max 50 XP/day loss
+        this.defaultStakeAmount = data.defaultStakeAmount || 100;   // Default XP stake for goals
+        this.abandonmentCooldownHours = data.abandonmentCooldownHours || 48;  // Hours before goal deletion
 
         // Preserve any additional fields stored in settings.
         // This prevents newer settings (e.g., notificationPreferences, DND, feature flags)
@@ -1456,46 +1469,60 @@ const DataStore = {
 
     // ========== ACCOUNTABILITY CHECK-INS ==========
     async getAccountabilityCheckins() {
-        return await this.get(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, {});
+        const checkins = await this.get(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, []);
+        return checkins.map(c => new AccountabilityCheckin(c));
     },
 
     async saveAccountabilityCheckin(checkin) {
         const checkins = await this.getAccountabilityCheckins();
-        checkins[checkin.date] = checkin.toJSON ? checkin.toJSON() : checkin;
-        await this.set(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, checkins);
+        const index = checkins.findIndex(c => c.id === checkin.id);
+
+        if (index >= 0) {
+            checkins[index] = checkin;
+        } else {
+            checkins.push(checkin);
+        }
+
+        // Keep only last 90 days of check-ins
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 90);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        const filtered = checkins.filter(c => c.date >= cutoffStr);
+
+        await this.set(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, filtered.map(c => c.toJSON()));
         return checkin;
     },
 
-    async getCheckinForDate(date) {
+    async getCheckinForDate(dateStr) {
         const checkins = await this.getAccountabilityCheckins();
-        const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
-        return checkins[dateStr] ? new AccountabilityCheckin(checkins[dateStr]) : null;
+        return checkins.find(c => c.date === dateStr) || null;
     },
 
     async getCheckinStreak() {
         const checkins = await this.getAccountabilityCheckins();
-        const dates = Object.keys(checkins).sort().reverse();
-        if (dates.length === 0) return 0;
+        if (checkins.length === 0) return 0;
 
-        let streak = 0;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Sort by date descending
+        const sorted = checkins.sort((a, b) => b.date.localeCompare(a.date));
+        const today = new Date().toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-        for (let i = 0; i < dates.length; i++) {
-            const checkDate = new Date(dates[i]);
-            checkDate.setHours(0, 0, 0, 0);
-            const expectedDate = new Date(today);
-            expectedDate.setDate(expectedDate.getDate() - i);
+        // Must have checked in today or yesterday to have active streak
+        if (sorted[0].date !== today && sorted[0].date !== yesterday) return 0;
 
-            if (checkDate.getTime() === expectedDate.getTime()) {
+        let streak = 1;
+        for (let i = 1; i < sorted.length; i++) {
+            const prevDate = new Date(sorted[i - 1].date);
+            const currDate = new Date(sorted[i].date);
+            const diffDays = (prevDate - currDate) / (1000 * 60 * 60 * 24);
+
+            if (diffDays === 1) {
                 streak++;
-            } else if (i === 0 && checkDate.getTime() === expectedDate.getTime() - 86400000) {
-                // Yesterday is OK for first check
-                continue;
             } else {
                 break;
             }
         }
+
         return streak;
     },
 
@@ -1506,8 +1533,8 @@ const DataStore = {
     },
 
     async saveCommitmentStats(stats) {
-        stats.lastUpdated = new Date().toISOString();
-        await this.set(STORAGE_KEYS.COMMITMENT_STATS, stats.toJSON ? stats.toJSON() : stats);
+        const dataToSave = typeof stats.toJSON === 'function' ? stats.toJSON() : stats;
+        await this.set(STORAGE_KEYS.COMMITMENT_STATS, dataToSave);
         return stats;
     },
 
@@ -1515,9 +1542,6 @@ const DataStore = {
         const stats = await this.getCommitmentStats();
         if (statName in stats) {
             stats[statName] += amount;
-        }
-        if (statName === 'xpLostToDecay' || statName === 'xpLostToPenalties') {
-            stats.totalXPLost += amount;
         }
         await this.saveCommitmentStats(stats);
         return stats;

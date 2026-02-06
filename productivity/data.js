@@ -41,6 +41,7 @@ const STORAGE_KEYS = {
     WEBSITE_DAILY_USAGE: 'productivity_website_daily_usage',
     DAY_REVIEW: 'productivity_day_review',
     DAY_REVIEW_CLOCK_FORMAT: 'productivity_day_review_clock_format',
+    CHALLENGES: 'productivity_challenges',
     // Commitment & Accountability
     ACCOUNTABILITY_CHECKINS: 'productivity_accountability_checkins',
     COMMITMENT_STATS: 'productivity_commitment_stats',
@@ -1788,6 +1789,17 @@ const DataStore = {
         return settings;
     },
 
+    // ========== CHALLENGES (AUTO-TRACKED) ==========
+    async getChallenges() {
+        return await this.get(STORAGE_KEYS.CHALLENGES, []);
+    },
+
+    async saveChallenges(challenges) {
+        const safe = Array.isArray(challenges) ? challenges : [];
+        await this.set(STORAGE_KEYS.CHALLENGES, safe);
+        return safe;
+    },
+
     // ========== ACCOUNTABILITY CHECKINS ==========
     async getAccountabilityCheckins() {
         const checkins = await this.get(STORAGE_KEYS.ACCOUNTABILITY_CHECKINS, []);
@@ -1859,12 +1871,12 @@ const DataStore = {
         return stats;
     },
 
-    async incrementGoalStat(statName) {
+    async incrementGoalStat(statName, amount = 1) {
         const stats = await this.getCommitmentStats();
         if (statName in stats) {
-            stats[statName]++;
-            await this.saveCommitmentStats(stats);
+            stats[statName] += amount;
         }
+        await this.saveCommitmentStats(stats);
         return stats;
     },
 

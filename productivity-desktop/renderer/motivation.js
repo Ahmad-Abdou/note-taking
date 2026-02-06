@@ -423,7 +423,7 @@ async function checkXPDecay() {
 
                 if (decayAmount > 0) {
                     applyXPPenalty(decayAmount, `Inactivity decay (${daysDiff} days)`);
-                    stats.xpLostToDecay = (stats.xpLostToDecay || 0) + decayAmount;
+                    stats.totalXPLostToDecay = (stats.totalXPLostToDecay || 0) + decayAmount;
                     stats.consecutiveInactiveDays = daysDiff;
                 }
             }
@@ -471,13 +471,23 @@ function getStreakBreakCost() {
  */
 function showStreakWarning() {
     const cost = getStreakBreakCost();
-    if (cost.daysLost === 0) return null;
 
-    if (typeof showToast === 'function') {
-        showToast('warning', 'Streak at Risk!', cost.message);
+    if (cost.daysLost >= 3) {
+        if (typeof showToast === 'function') {
+            showToast('warning', 'Streak at Risk!', cost.message, {
+                duration: 8000,
+                actions: [
+                    {
+                        label: 'Start Focus Session',
+                        primary: true,
+                        callback: () => {
+                            document.querySelector('[data-page="focus"]')?.click();
+                        }
+                    }
+                ]
+            });
+        }
     }
-
-    return cost;
 }
 
 // ============================================================================

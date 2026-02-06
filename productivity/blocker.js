@@ -406,11 +406,82 @@ function updateBlockerUI() {
     }
 }
 
+function createAddSiteModal() {
+    const modal = document.createElement('div');
+    modal.id = 'blocker-add-site-modal';
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-blocker-add-site"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add site to block</h2>
+                <button class="btn-icon" data-action="close-blocker-add-site">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="blocker-add-site-form">
+                <div class="modal-body">
+                    <div class="form-group full">
+                        <label for="blocker-add-site-input">Website</label>
+                        <input
+                            type="text"
+                            id="blocker-add-site-input"
+                            placeholder="e.g., facebook.com or https://facebook.com"
+                            autocomplete="off"
+                            inputmode="url"
+                            required
+                        />
+                        <div class="helper-text">Tip: enter a domain (no path). We'll normalize it.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" data-action="close-blocker-add-site">Cancel</button>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => modal.classList.remove('active');
+    modal.querySelectorAll('[data-action="close-blocker-add-site"]').forEach(el => el.addEventListener('click', close));
+
+    modal.querySelector('#blocker-add-site-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const input = modal.querySelector('#blocker-add-site-input');
+        const raw = input?.value?.trim();
+        const cleaned = cleanUrl(raw || '');
+        if (!cleaned) {
+            showToast('error', 'Error', 'Please enter a valid website (e.g., facebook.com).');
+            input?.focus();
+            return;
+        }
+
+        await addSiteToBlockList(cleaned);
+        input.value = '';
+        close();
+    });
+
+    return modal;
+}
+
 // Open modal to add new site
 function openAddSiteModal() {
-    const url = prompt('Enter website URL to block (e.g., facebook.com):');
-    if (url && url.trim()) {
-        addSiteToBlockList(url.trim());
+    let modal = document.getElementById('blocker-add-site-modal');
+    if (!modal) {
+        modal = createAddSiteModal();
+    }
+
+    modal.classList.add('active');
+    const input = modal.querySelector('#blocker-add-site-input');
+    if (input) {
+        input.value = '';
+        input.focus();
     }
 }
 

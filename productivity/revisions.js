@@ -503,6 +503,11 @@ const RevisionSystem = {
 
             await this.loadRevisions();
             await this.updateBadge();
+
+            // Record progress for challenges
+            if (window.ChallengeManager) {
+                window.ChallengeManager.recordProgress('reviews', 1);
+            }
         }
     },
 

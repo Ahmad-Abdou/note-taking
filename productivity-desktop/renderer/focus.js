@@ -693,7 +693,10 @@ function restoreFocusSession(savedState, remainingSeconds) {
     updateProgressRing();
     updatePauseButton();
 
-    // Start timer (paused)
+    // Start timer (paused) - clear any existing interval first
+    if (FocusState.timerInterval) {
+        clearInterval(FocusState.timerInterval);
+    }
     FocusState.timerInterval = setInterval(timerTick, 1000);
 
     // Sync state
@@ -1493,6 +1496,26 @@ function updateBreakIndicator() {
 // ============================================================================
 
 // Sync focus state with chrome.storage for popup menu
+// Throttle helper for syncFocusStateToStorage - prevents calling more than once per 2 seconds
+let _syncThrottleTimer = null;
+function _throttledSyncFocusState() {
+    if (_syncThrottleTimer) return;
+    _syncThrottleTimer = setTimeout(() => {
+        _syncThrottleTimer = null;
+        syncFocusStateToStorage();
+    }, 2000);
+}
+
+// Throttle helper for updateFocusTimeStats - prevents DB queries more than once per 10 seconds
+let _statsThrottleTimer = null;
+let _lastStatsUpdate = 0;
+function _throttledUpdateFocusTimeStats() {
+    const now = Date.now();
+    if (now - _lastStatsUpdate < 10000) return;
+    _lastStatsUpdate = now;
+    updateFocusTimeStats();
+}
+
 function syncFocusStateToStorage() {
     if (FocusState.isActive) {
         chrome.storage.local.set({
@@ -1520,6 +1543,8 @@ function syncFocusStateToStorage() {
 
 function timerTick() {
     if (FocusState.isPaused) return;
+    // Guard: if a completion handler is already running, skip this tick
+    if (FocusState._completing) return;
 
     const now = Date.now();
 
@@ -1530,8 +1555,8 @@ function timerTick() {
         updateTimerDisplay();
         // No progress ring update for open-ended mode (or could show infinite animation)
 
-        // Sync state to storage for popup menu
-        syncFocusStateToStorage();
+        // Sync state to storage for popup menu (throttled)
+        _throttledSyncFocusState();
 
         // Update session with current progress
         if (FocusState.currentSession) {
@@ -1555,8 +1580,8 @@ function timerTick() {
     updateTimerDisplay();
     updateProgressRing();
 
-    // Sync state to storage for popup menu
-    syncFocusStateToStorage();
+    // Sync state to storage for popup menu (throttled)
+    _throttledSyncFocusState();
 
     // Update session with current progress
     if (FocusState.currentSession) {
@@ -1571,6 +1596,7 @@ function timerTick() {
         } else {
             completeFocusSession();
         }
+        return; // Don't do warning checks after completion
     }
 
     // 5-minute warning
@@ -1623,8 +1649,8 @@ function updateTimerDisplay() {
         timerEl?.classList.remove('ending-soon');
     }
 
-    // Update focus time stats in overlay
-    updateFocusTimeStats();
+    // Update focus time stats in overlay (throttled to prevent DB spam)
+    _throttledUpdateFocusTimeStats();
 }
 
 
@@ -1721,10 +1747,10 @@ function updateProgressRing() {
 // ============================================================================
 function pauseFocusSession() {
     setFocusPaused(!FocusState.isPaused);
+}
 
-    showToast(FocusState.isPaused ? 'info' : 'success',
-        FocusState.isPaused ? 'Session Paused' : 'Session Resumed',
-        FocusState.isPaused ? 'Take a moment, then continue!' : 'Let\'s keep going!');
+function resumeFocusSession() {
+    setFocusPaused(false);
 }
 
 function updatePauseButton() {
@@ -1937,7 +1963,12 @@ window.openFocusDurationForTask = function openFocusDurationForTask(taskId, task
 
 
 async function completeFocusSession() {
+    // Re-entry guard: prevent being called multiple times
+    if (FocusState._completing) return;
+    FocusState._completing = true;
+
     clearInterval(FocusState.timerInterval);
+    FocusState.timerInterval = null;
 
     // Ensure audio context is ready (may have been suspended during pause)
     try {
@@ -2017,6 +2048,9 @@ async function completeFocusSession() {
         autoStartBreak: !!FocusState.settings.autoStartBreaks,
         autoStartDelayMs: 3000
     });
+
+    // Clear re-entry guard
+    FocusState._completing = false;
 }
 
 function showBreakTransition(breakMinutes, isLongBreak) {
@@ -2220,7 +2254,12 @@ function startBreak(minutes) {
 }
 
 async function completeBreak() {
+    // Re-entry guard
+    if (FocusState._completingBreak) return;
+    FocusState._completingBreak = true;
+
     clearInterval(FocusState.timerInterval);
+    FocusState.timerInterval = null;
 
     // Play break end sound
     playSound('break-end');
@@ -2232,6 +2271,7 @@ async function completeBreak() {
 
     // Auto-start next session or show options
     if (FocusState.settings.autoStartNextSession) {
+        FocusState._completingBreak = false;
         chrome.storage.local.get(['lastFocusDuration'], (result) => {
             const duration = result.lastFocusDuration || FocusState.selectedMinutes || 25;
             startFocusSession(duration, { skipBoredomPrompt: true });
@@ -2241,6 +2281,7 @@ async function completeBreak() {
         endFocusMode().catch(e => console.error('Failed to end focus mode:', e));
         loadFocusPage().catch(e => console.error('Failed to reload focus page:', e));
         showToast('info', 'Break Complete', 'Ready for another focus session?');
+        FocusState._completingBreak = false;
     }
 }
 
@@ -2297,6 +2338,8 @@ async function endFocusMode() {
     FocusState.pausedRemainingSeconds = null;
     FocusState.pausedElapsedSeconds = null;
     FocusState.currentSession = null;
+    FocusState._completing = false;
+    FocusState._completingBreak = false;
 
     // Clear focus state from storage so popup knows session ended
     chrome.storage.local.remove(['focusState', 'focusSession']);
@@ -2718,6 +2761,8 @@ async function checkFocusAchievements() {
 // KEYBOARD SHORTCUTS
 // ============================================================================
 function setupFocusKeyboardShortcuts() {
+    // Remove old listener first to prevent stacking on repeated loadFocusPage calls
+    document.removeEventListener('keydown', handleFocusKeypress);
     document.addEventListener('keydown', handleFocusKeypress);
 }
 
