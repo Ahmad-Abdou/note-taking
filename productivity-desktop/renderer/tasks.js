@@ -2958,6 +2958,7 @@ function setupFinishedTasksToggle() {
 // ============================================================================
 // GLOBAL EXPORTS
 // ============================================================================
+window.TaskState = TaskState;
 window.loadTasks = loadTasks;
 window.openTaskModal = openTaskModal;
 window.closeTaskModal = closeTaskModal;

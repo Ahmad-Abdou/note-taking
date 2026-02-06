@@ -458,6 +458,16 @@ async function loadDashboard() {
         const todayAgenda = buildTodayAgendaItems(ProductivityData.getTodayDate(), todayEvents, allTasks);
         renderTodaySchedule(todayAgenda);
 
+        // Populate TaskState so dashboard action handlers can access task data
+        if (window.TaskState) {
+            window.TaskState.tasks = allTasks;
+            if (!window.TaskState.taskLists || window.TaskState.taskLists.length === 0) {
+                try {
+                    window.TaskState.taskLists = await ProductivityData.DataStore.getTaskLists();
+                } catch (_) { /* ignore */ }
+            }
+        }
+
         // Update today's tasks (quick list card)
         setupTodayTasksCardHandlers();
         renderTodayTasksCard(allTasks);

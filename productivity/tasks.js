@@ -2639,6 +2639,13 @@ function startFocusOnTask(taskId) {
             return;
         }
 
+        // Inform handleSmartFocusStart to not auto-pick a different task.
+        try {
+            window.__skipSmartFocusOnce = true;
+        } catch (_) {
+            // ignore
+        }
+
         // Navigate to focus page so the user sees the focus UI (works across the entire hub)
         if (typeof navigateTo === 'function') {
             navigateTo('focus');

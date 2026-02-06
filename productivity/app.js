@@ -255,6 +255,25 @@ function navigateTo(page) {
 // Smart focus start: auto-start session with first incomplete task or prompt to create one
 async function handleSmartFocusStart() {
     try {
+        // If a task explicitly triggered focus (via Tasks/Dashboard), don't override it.
+        if (window.__skipSmartFocusOnce) {
+            window.__skipSmartFocusOnce = false;
+            return;
+        }
+
+        // Basic re-entrancy guard (prevents loops when focus navigation triggers logic multiple times).
+        if (window.__smartFocusInProgress) return;
+        window.__smartFocusInProgress = true;
+
+        // If a task was explicitly queued for focus by other flows, don't auto-pick a different one.
+        try {
+            const hasPending = !!(window.FocusState?.pendingLinkedTaskId);
+            const hasStored = !!(localStorage.getItem('focusTaskId') || localStorage.getItem('focusTaskTitle'));
+            if (hasPending || hasStored) return;
+        } catch (_) {
+            // ignore
+        }
+
         // Check if there's already an active focus session
         if (window.FocusState && window.FocusState.isActive) {
             return; // Don't interrupt an active session
@@ -275,20 +294,39 @@ async function handleSmartFocusStart() {
         const firstTask = todayTasks[0] || incompleteTasks[0];
 
         if (firstTask) {
-            // Auto-start focus session with the first task
-            setTimeout(() => {
-                if (typeof startFocusOnTask === 'function') {
-                    startFocusOnTask(firstTask.id);
-                } else if (typeof window.startFocusSession === 'function') {
-                    window.startFocusSession(firstTask.id, firstTask.title);
+            // Prefer native focus linking flow if available (no extra navigation).
+            const taskId = firstTask.id;
+            const taskTitle = firstTask.title || '';
+
+            if (typeof window.openFocusDurationForTask === 'function') {
+                setTimeout(() => window.openFocusDurationForTask(taskId, taskTitle), 200);
+                return;
+            }
+
+            // Fallback: set pending task + start immediately if possible.
+            try {
+                if (window.FocusState) {
+                    window.FocusState.pendingLinkedTaskId = taskId;
+                    window.FocusState.pendingLinkedTaskTitle = taskTitle;
+                } else {
+                    localStorage.setItem('focusTaskId', taskId);
+                    localStorage.setItem('focusTaskTitle', taskTitle);
                 }
-            }, 300); // Small delay to let the page render first
+            } catch (_) {
+                // ignore
+            }
+
+            if (typeof window.startFocusSession === 'function') {
+                setTimeout(() => window.startFocusSession(null), 250);
+            }
         } else {
             // No tasks - show prompt to create one
             showSmartFocusCreateTaskPrompt();
         }
     } catch (error) {
         console.error('Smart focus start error:', error);
+    } finally {
+        window.__smartFocusInProgress = false;
     }
 }
 
