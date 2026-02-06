@@ -2183,7 +2183,13 @@ async function toggleTask(taskId) {
 }
 
 async function editTask(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
+    let task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) {
+        // Fallback: fetch from DataStore (e.g. called from dashboard before Tasks page visited)
+        try {
+            task = await ProductivityData.DataStore.getTask(taskId);
+        } catch (_) { /* ignore */ }
+    }
     if (task) {
         openTaskModal(task);
     }
@@ -2623,8 +2629,16 @@ function updateTaskStats() {
 }
 
 function startFocusOnTask(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
-    if (task) {
+    let task = TaskState.tasks.find(t => t.id === taskId);
+
+    // Fallback: fetch from DataStore if not in local state (e.g. called from dashboard)
+    const proceed = (resolvedTask) => {
+        if (!resolvedTask) {
+            // Still navigate to focus page even without task context
+            if (typeof navigateTo === 'function') navigateTo('focus');
+            return;
+        }
+
         // Navigate to focus page so the user sees the focus UI (works across the entire hub)
         if (typeof navigateTo === 'function') {
             navigateTo('focus');
@@ -2643,15 +2657,22 @@ function startFocusOnTask(taskId) {
 
         // Prefer the dedicated duration picker flow (custom timer modal)
         if (typeof window.openFocusDurationForTask === 'function') {
-            window.openFocusDurationForTask(taskId, task.title);
-            showToast('info', 'Focus Mode', `Choose duration for: ${task.title}`);
+            window.openFocusDurationForTask(resolvedTask.id, resolvedTask.title);
+            showToast('info', 'Focus Mode', `Choose duration for: ${resolvedTask.title}`);
             return;
         }
 
         // Fallback: older flow (auto-start after navigation)
-        localStorage.setItem('focusTaskId', taskId);
-        localStorage.setItem('focusTaskTitle', task.title);
-        showToast('info', 'Focus Mode', `Starting focus session for: ${task.title}`);
+        localStorage.setItem('focusTaskId', resolvedTask.id);
+        localStorage.setItem('focusTaskTitle', resolvedTask.title);
+        showToast('info', 'Focus Mode', `Starting focus session for: ${resolvedTask.title}`);
+    };
+
+    if (task) {
+        proceed(task);
+    } else {
+        // Async fallback to DataStore
+        ProductivityData.DataStore.getTask(taskId).then(t => proceed(t)).catch(() => proceed(null));
     }
 }
 
@@ -2899,6 +2920,7 @@ function setupFinishedTasksToggle() {
 // ============================================================================
 // GLOBAL EXPORTS
 // ============================================================================
+window.TaskState = TaskState;
 window.loadTasks = loadTasks;
 window.openTaskModal = openTaskModal;
 window.closeTaskModal = closeTaskModal;
@@ -2948,8 +2970,18 @@ async function postponeTaskToToday(taskId) {
 // FINISH TASK AND SEND TO SPACED REPETITION REVIEW
 // ============================================================================
 async function finishAndSendToReview(taskId) {
-    const task = TaskState.tasks.find(t => t.id === taskId);
-    if (!task) return;
+    let task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) {
+        // Fallback: fetch from DataStore (e.g. called from dashboard before Tasks page visited)
+        try {
+            task = await ProductivityData.DataStore.getTask(taskId);
+            if (task) TaskState.tasks.push(task); // Cache it for the modal
+        } catch (_) { /* ignore */ }
+    }
+    if (!task) {
+        showToast('error', 'Error', 'Could not find the task.');
+        return;
+    }
 
     // Show modal to configure the review item
     showFinishAndReviewModal(task);

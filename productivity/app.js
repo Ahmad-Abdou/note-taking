@@ -424,6 +424,16 @@ async function loadDashboard() {
         const todayAgenda = buildTodayAgendaItems(ProductivityData.getTodayDate(), todayEvents, allTasks);
         renderTodaySchedule(todayAgenda);
 
+        // Populate TaskState so dashboard action handlers can access task data
+        if (window.TaskState) {
+            window.TaskState.tasks = allTasks;
+            if (!window.TaskState.taskLists || window.TaskState.taskLists.length === 0) {
+                try {
+                    window.TaskState.taskLists = await ProductivityData.DataStore.getTaskLists();
+                } catch (_) { /* ignore */ }
+            }
+        }
+
         // Update today's tasks (quick list card)
         setupTodayTasksCardHandlers();
         renderTodayTasksCard(allTasks);
@@ -662,7 +672,10 @@ function renderTodayTasksCard(allTasks) {
 
         if (action === 'open-link') {
             e.stopPropagation();
-            const task = window.TaskState?.tasks?.find?.(t => t.id === taskId);
+            let task = window.TaskState?.tasks?.find?.(t => t.id === taskId);
+            if (!task) {
+                try { task = await ProductivityData.DataStore.getTask(taskId); } catch (_) { /* ignore */ }
+            }
             if (!task?.linkUrl) {
                 showToast('info', 'No Link', 'This task has no link.');
                 return;
@@ -673,8 +686,8 @@ function renderTodayTasksCard(allTasks) {
 
         if (action === 'focus') {
             e.stopPropagation();
-            if (typeof startFocusOnTask === 'function') {
-                startFocusOnTask(taskId);
+            if (typeof startFocusOnTask === 'function' || typeof window.startFocusOnTask === 'function') {
+                (window.startFocusOnTask || startFocusOnTask)(taskId);
             } else {
                 navigateTo('focus');
             }
@@ -683,19 +696,37 @@ function renderTodayTasksCard(allTasks) {
 
         if (action === 'edit') {
             e.stopPropagation();
-            if (typeof editTask === 'function') {
+            // Always try DataStore first for reliability from dashboard context
+            if (typeof window.openTaskModal === 'function') {
+                let task = window.TaskState?.tasks?.find?.(t => t.id === taskId);
+                if (!task) {
+                    try { task = await ProductivityData.DataStore.getTask(taskId); } catch (_) { /* ignore */ }
+                }
+                if (task) {
+                    window.openTaskModal(task);
+                } else if (typeof editTask === 'function') {
+                    editTask(taskId);
+                }
+            } else if (typeof editTask === 'function') {
                 editTask(taskId);
-            } else if (typeof window.openTaskModal === 'function') {
-                const task = await ProductivityData.DataStore.getTask(taskId);
-                window.openTaskModal(task);
             }
             return;
         }
 
         if (action === 'review') {
             e.stopPropagation();
-            if (typeof finishAndSendToReview === 'function') {
-                finishAndSendToReview(taskId);
+            const reviewFn = window.finishAndSendToReview || (typeof finishAndSendToReview === 'function' ? finishAndSendToReview : null);
+            if (reviewFn) {
+                // Ensure TaskState has the task so finishAndSendToReview can find it
+                if (window.TaskState?.tasks && !window.TaskState.tasks.find(t => t.id === taskId)) {
+                    try {
+                        const task = await ProductivityData.DataStore.getTask(taskId);
+                        if (task) window.TaskState.tasks.push(task);
+                    } catch (_) { /* ignore */ }
+                }
+                reviewFn(taskId);
+            } else {
+                showToast('info', 'Unavailable', 'Review feature is loading, please try again.');
             }
             return;
         }
@@ -713,11 +744,18 @@ function renderTodayTasksCard(allTasks) {
         // Click on task text/info should NOT complete it.
         if (action === 'view' || !action) {
             e.stopPropagation();
-            if (typeof editTask === 'function') {
+            if (typeof window.openTaskModal === 'function') {
+                let task = window.TaskState?.tasks?.find?.(t => t.id === taskId);
+                if (!task) {
+                    try { task = await ProductivityData.DataStore.getTask(taskId); } catch (_) { /* ignore */ }
+                }
+                if (task) {
+                    window.openTaskModal(task);
+                } else if (typeof editTask === 'function') {
+                    editTask(taskId);
+                }
+            } else if (typeof editTask === 'function') {
                 editTask(taskId);
-            } else if (typeof window.openTaskModal === 'function') {
-                const task = await ProductivityData.DataStore.getTask(taskId);
-                window.openTaskModal(task);
             }
             return;
         }
