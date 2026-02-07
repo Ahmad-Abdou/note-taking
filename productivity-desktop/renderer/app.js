@@ -141,13 +141,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         App.isInitialized = true;
         // Debug removed
 
-        // Wire up desktop app updater UI
-        setupAppUpdater();
-
     } catch (error) {
         console.error('❌ Initialization failed:', error);
         showToast('error', 'Initialization Error', 'Failed to load application data.');
     }
+
+    // Wire up desktop app updater UI (outside try-catch so it works even if init partially fails)
+    try { setupAppUpdater(); } catch (e) { console.warn('setupAppUpdater error:', e); }
 });
 
 function setupHabitTrackerCalendar() {
@@ -3538,24 +3538,32 @@ setupLiveStorageSync();
 // ── Desktop App Updater ────────────────────────────────────
 function setupAppUpdater() {
     const api = window.electronAPI?.updates;
-    if (!api) return; // not running in Electron
+    if (!api) {
+        console.log('[Updater] No electronAPI.updates — skipping');
+        return;
+    }
 
     const versionEl   = document.getElementById('app-version-info');
     const statusEl    = document.getElementById('app-update-status');
     const checkBtn    = document.getElementById('app-update-check-btn');
     const updateBtn   = document.getElementById('app-update-now-btn');
 
+    console.log('[Updater] setup — checkBtn:', !!checkBtn, 'updateBtn:', !!updateBtn, 'versionEl:', !!versionEl, 'statusEl:', !!statusEl);
+
     // Show current version
-    api.getVersion().then(ver => {
-        if (versionEl) versionEl.textContent = `v${ver}`;
+    api.getVersion().then(info => {
+        const ver = typeof info === 'string' ? info : info?.version;
+        if (versionEl && ver) versionEl.textContent = `v${ver}`;
     }).catch(() => {});
 
     // Subscribe to status updates from main process
     api.onStatus((payload) => {
         if (!statusEl) return;
-        const { status, message, progress } = payload || {};
+        // main.js sends "state", normalise to local var
+        const state   = payload?.state || payload?.status || '';
+        const message = payload?.message || '';
 
-        switch (status) {
+        switch (state) {
             case 'checking':
                 statusEl.textContent = 'Checking for updates…';
                 if (checkBtn) checkBtn.disabled = true;
@@ -3568,7 +3576,7 @@ function setupAppUpdater() {
                 if (checkBtn) checkBtn.disabled = false;
                 break;
             case 'downloading':
-                const pct = progress?.percent ? Math.round(progress.percent) : '…';
+                const pct = payload?.percent != null ? Math.round(payload.percent) : '…';
                 statusEl.textContent = `Downloading update… ${pct}%`;
                 break;
             case 'downloaded':
