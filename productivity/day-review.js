@@ -531,6 +531,14 @@
                 dot.style.setProperty('--entry-color', entry.color);
             }
         });
+
+        // Force SVG repaint so stroke/fill changes are visible immediately
+        const svg = clock.querySelector('.dayreview-clock-svg');
+        if (svg) {
+            svg.style.display = 'none';
+            void svg.offsetHeight;
+            svg.style.display = '';
+        }
     }
 
     function renderSelectionText() {
@@ -569,7 +577,7 @@
                 const end = ((selection.endMin % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
                 const startDeg = (start / MINUTES_PER_DAY) * 360;
                 const endDeg = (end / MINUTES_PER_DAY) * 360;
-                const color = 'rgba(99, 102, 241, 0.35)';
+                const color = 'rgba(99, 102, 241, 0.45)';
                 if (end > start) {
                     overlay.style.backgroundImage = `conic-gradient(from -90deg, transparent 0deg, transparent ${startDeg}deg, ${color} ${startDeg}deg, ${color} ${endDeg}deg, transparent ${endDeg}deg, transparent 360deg)`;
                 } else {
@@ -578,6 +586,7 @@
             }
         }
 
+        // Clear previous selection classes
         clock.querySelectorAll('.dayreview-seg').forEach((btn) => {
             btn.classList.remove('start', 'end', 'in-range');
         });
@@ -585,6 +594,34 @@
         clock.querySelectorAll('.dayreview-dot').forEach((dot) => {
             dot.classList.remove('start', 'end', 'in-range');
         });
+
+        // Apply selection classes to segments within the active range
+        if (selection.startMin != null && selection.endMin != null) {
+            const selSegs = rangeToSegments(selection.startMin, selection.endMin);
+            const startNorm = ((selection.startMin % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+            const endNorm   = ((selection.endMin   % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+
+            clock.querySelectorAll('.dayreview-seg').forEach((seg) => {
+                const m = parseInt(seg.dataset.minutes || '0', 10);
+                const hit = selSegs.some(s => segmentsOverlap(s, [m, m + 30]));
+                if (hit) seg.classList.add('in-range');
+                if (m === startNorm) seg.classList.add('start');
+                const endSegStart = ((endNorm - 30) % MINUTES_PER_DAY + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+                if (m === endSegStart) seg.classList.add('end');
+            });
+
+            clock.querySelectorAll('.dayreview-dot').forEach((dot) => {
+                const m = parseInt(dot.dataset.minutes || '0', 10);
+                const hit = selSegs.some(s => segmentsOverlap(s, [m, m + 1]));
+                if (hit) dot.classList.add('in-range');
+            });
+        } else if (selection.startMin != null) {
+            // Only start set — highlight start segment
+            const startNorm = ((selection.startMin % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+            clock.querySelectorAll('.dayreview-seg').forEach((seg) => {
+                if (parseInt(seg.dataset.minutes || '0', 10) === startNorm) seg.classList.add('start');
+            });
+        }
 
         renderClockEntries();
 

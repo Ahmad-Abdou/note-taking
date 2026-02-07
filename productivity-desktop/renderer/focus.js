@@ -260,6 +260,9 @@ async function loadFocusPage() {
     // Update session counts (today, week, total)
     await updateSessionCounts();
 
+    // Load and display best records
+    await loadBestRecords();
+
     // Load tasks for linking
     await loadTaskOptions();
 
@@ -2835,8 +2838,127 @@ async function updateFocusStats_Internal(minutes, completed) {
             streakData.updateStreak(null, true); // true = was productive
             await ProductivityData.DataStore.saveStreakData(streakData);
         }
+
+        // Refresh best records (may have set a new one)
+        loadBestRecords(true).catch(() => void 0);
     } catch (e) {
         console.error('Failed to update focus stats:', e);
+    }
+}
+
+// ============================================================================
+// BEST RECORDS
+// ============================================================================
+
+/**
+ * Scans all daily stats to find the user's personal best day (by focus time).
+ * Shows the record prominently and compares today's progress against it.
+ * @param {boolean} checkNewRecord - If true, compare against previous best & toast if beaten
+ */
+let _previousBestMinutes = 0; // tracks last known record for new-record detection
+
+async function loadBestRecords(checkNewRecord = false) {
+    const container = document.getElementById('best-record-section');
+    if (!container) return;
+
+    try {
+        // Fetch ALL daily stats
+        const allStats = await ProductivityData.DataStore.get('productivity_daily_stats', {});
+        const today = new Date().toISOString().split('T')[0];
+        const todayStats = allStats[today] || { focusMinutes: 0, focusSessions: 0, tasksCompleted: 0, productivityScore: 0 };
+
+        // Find the best day by focus time
+        let bestDay = null;
+        for (const [date, stats] of Object.entries(allStats)) {
+            const fm = stats.focusMinutes || 0;
+            if (fm > 0 && (!bestDay || fm > bestDay.focusMinutes)) {
+                bestDay = {
+                    date,
+                    focusMinutes: fm,
+                    focusSessions: stats.focusSessions || 0,
+                    tasksCompleted: stats.tasksCompleted || 0,
+                    productivityScore: stats.productivityScore || 0
+                };
+            }
+        }
+
+        if (!bestDay || bestDay.focusMinutes === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const todayFocus = todayStats.focusMinutes || 0;
+        const todaySessions = todayStats.focusSessions || 0;
+        const todayTasks = todayStats.tasksCompleted || 0;
+        const isToday = bestDay.date === today;
+        const progress = Math.min((todayFocus / bestDay.focusMinutes) * 100, 100);
+        const isNewRecord = isToday && todayFocus >= bestDay.focusMinutes && todayFocus > 0;
+        const remaining = Math.max(0, bestDay.focusMinutes - todayFocus);
+
+        // Check for newly broken record (toast once)
+        if (checkNewRecord && isNewRecord && _previousBestMinutes > 0 && todayFocus > _previousBestMinutes) {
+            if (typeof showToast === 'function') {
+                showToast('success', '\uD83C\uDFC6 New Record!', `You beat your personal best! ${formatFocusTime(todayFocus)} of focus today.`);
+            }
+        }
+        _previousBestMinutes = bestDay.focusMinutes;
+
+        // Format the record date
+        const recordDate = new Date(bestDay.date + 'T00:00:00');
+        const dateLabel = isToday ? 'Today — New Record!' : recordDate.toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+        });
+
+        container.innerHTML = `
+            <div class="best-record-card ${isNewRecord ? 'is-record' : ''}">
+                <div class="best-record-header">
+                    <div class="best-record-icon">${isNewRecord ? '\uD83C\uDFC6' : '\uD83C\uDFC5'}</div>
+                    <div class="best-record-heading">
+                        <h3>${isNewRecord ? 'New Personal Record!' : 'Personal Best'}</h3>
+                        <span class="best-record-date">${dateLabel}</span>
+                    </div>
+                </div>
+
+                <div class="best-record-stats">
+                    <div class="best-record-stat primary">
+                        <span class="best-record-stat-value">${formatFocusTime(bestDay.focusMinutes)}</span>
+                        <span class="best-record-stat-label">Focus Time</span>
+                    </div>
+                    <div class="best-record-stat">
+                        <span class="best-record-stat-value">${bestDay.focusSessions}</span>
+                        <span class="best-record-stat-label">Sessions</span>
+                    </div>
+                    <div class="best-record-stat">
+                        <span class="best-record-stat-value">${bestDay.tasksCompleted}</span>
+                        <span class="best-record-stat-label">Tasks Done</span>
+                    </div>
+                    ${bestDay.productivityScore > 0 ? `
+                    <div class="best-record-stat">
+                        <span class="best-record-stat-value">${bestDay.productivityScore}%</span>
+                        <span class="best-record-stat-label">Score</span>
+                    </div>` : ''}
+                </div>
+
+                ${!isToday ? `
+                <div class="best-record-progress">
+                    <div class="best-record-progress-header">
+                        <span class="best-record-progress-label">Today's progress toward record</span>
+                        <span class="best-record-progress-value">${Math.round(progress)}%</span>
+                    </div>
+                    <div class="best-record-progress-bar">
+                        <div class="best-record-progress-fill ${progress >= 100 ? 'complete' : progress >= 75 ? 'close' : ''}" style="width: ${progress}%"></div>
+                    </div>
+                    <div class="best-record-today-stats">
+                        <span>${formatFocusTime(todayFocus)} focused</span>
+                        <span>${todaySessions} session${todaySessions === 1 ? '' : 's'}</span>
+                        <span>${todayTasks} task${todayTasks === 1 ? '' : 's'} done</span>
+                        ${remaining > 0 ? `<span class="best-record-remaining">${formatFocusTime(remaining)} to beat record</span>` : `<span class="best-record-beaten">\uD83C\uDF89 Record beaten!</span>`}
+                    </div>
+                </div>` : ''}
+            </div>
+        `;
+    } catch (e) {
+        console.error('Failed to load best records:', e);
     }
 }
 

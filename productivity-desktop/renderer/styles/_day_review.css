@@ -191,6 +191,22 @@
     }
 }
 
+/* Selection range highlighting on segments */
+.dayreview-seg.in-range {
+    stroke: rgba(99, 102, 241, 0.6);
+    filter: drop-shadow(0 0 3px rgba(99, 102, 241, 0.35));
+}
+
+.dayreview-seg.start {
+    stroke: rgba(16, 185, 129, 0.8);
+    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
+}
+
+.dayreview-seg.end {
+    stroke: rgba(245, 158, 11, 0.8);
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.4));
+}
+
 /* Hover cross-highlight from entry list */
 .dayreview-seg.entry-hover {
     stroke: color-mix(in srgb, var(--entry-color, #6366f1) 90%, #fff);
