@@ -93,57 +93,64 @@ class NotificationSounds {
     createFallbackBuffer(type) {
         const sr = this.audioContext.sampleRate || 44100;
 
-        // Small patterns per type (frequency in Hz, duration in seconds)
+        // Melodic multi-note patterns with bell-like harmonics (freq Hz, start sec, decay sec)
         const patterns = {
-            success: [{ f: 880, d: 0.07 }, { f: 1175, d: 0.09 }],
-            warning: [{ f: 440, d: 0.09 }, { f: 392, d: 0.10 }],
-            reminder: [{ f: 660, d: 0.08 }, { f: 660, d: 0.08 }],
-            focusStart: [{ f: 523, d: 0.10 }, { f: 784, d: 0.10 }],
-            focusEnd: [{ f: 784, d: 0.10 }, { f: 523, d: 0.10 }],
-            break: [{ f: 330, d: 0.12 }],
-            achievement: [{ f: 659, d: 0.08 }, { f: 784, d: 0.08 }, { f: 988, d: 0.10 }],
-            streak: [{ f: 740, d: 0.08 }, { f: 932, d: 0.10 }],
-            ping: [{ f: 988, d: 0.06 }],
-            message: [{ f: 880, d: 0.06 }],
-            ding: [{ f: 1046, d: 0.09 }],
-            chime: [{ f: 784, d: 0.08 }, { f: 1046, d: 0.10 }],
-            default: [{ f: 880, d: 0.06 }]
+            default:     [{ f: 659, s: 0, d: 0.5 }, { f: 784, s: 0.15, d: 0.55 }],
+            reminder:    [{ f: 880, s: 0, d: 0.3 }, { f: 659, s: 0.18, d: 0.3 }, { f: 880, s: 0.38, d: 0.45 }],
+            success:     [{ f: 523, s: 0, d: 0.5 }, { f: 659, s: 0.12, d: 0.5 }, { f: 784, s: 0.24, d: 0.55 }, { f: 1047, s: 0.38, d: 0.65 }],
+            warning:     [{ f: 294, s: 0, d: 0.25 }, { f: 466, s: 0.2, d: 0.35 }],
+            focusStart:  [{ f: 392, s: 0, d: 0.4 }, { f: 494, s: 0.15, d: 0.45 }, { f: 587, s: 0.3, d: 0.6 }],
+            focusEnd:    [{ f: 587, s: 0, d: 0.45 }, { f: 494, s: 0.18, d: 0.45 }, { f: 392, s: 0.36, d: 0.65 }],
+            break:       [{ f: 349, s: 0, d: 0.55 }, { f: 440, s: 0.25, d: 0.65 }],
+            achievement: [{ f: 523, s: 0, d: 0.35 }, { f: 659, s: 0.1, d: 0.35 }, { f: 784, s: 0.2, d: 0.4 }, { f: 1047, s: 0.32, d: 0.5 }, { f: 1319, s: 0.45, d: 0.7 }],
+            streak:      [{ f: 880, s: 0, d: 0.3 }, { f: 1109, s: 0.12, d: 0.45 }],
+            ping:        [{ f: 1319, s: 0, d: 0.35 }],
+            message:     [{ f: 784, s: 0, d: 0.3 }, { f: 659, s: 0.15, d: 0.4 }],
+            ding:        [{ f: 1047, s: 0, d: 0.45 }],
+            chime:       [{ f: 659, s: 0, d: 0.5 }, { f: 831, s: 0.14, d: 0.5 }, { f: 988, s: 0.28, d: 0.6 }]
         };
 
         const seq = patterns[type] || patterns.default;
-        const totalDur = seq.reduce((sum, p) => sum + p.d, 0) + 0.05;
+        const totalDur = Math.max(...seq.map(p => p.s + p.d)) + 0.15;
         const length = Math.max(1, Math.floor(totalDur * sr));
         const buffer = this.audioContext.createBuffer(1, length, sr);
         const data = buffer.getChannelData(0);
 
-        // Simple ADSR-ish envelope per segment
-        let cursor = 0;
+        // Bell-like synthesis: fundamental + harmonics with exponential decay
         for (const p of seq) {
-            const segLen = Math.floor(p.d * sr);
-            const attack = Math.floor(segLen * 0.12);
-            const release = Math.floor(segLen * 0.25);
-            const sustainLen = Math.max(0, segLen - attack - release);
-
-            for (let i = 0; i < segLen && (cursor + i) < data.length; i++) {
+            const startSample = Math.floor(p.s * sr);
+            const noteLen = Math.floor((p.d + 0.1) * sr);
+            const harmonics = [
+                { ratio: 1.0, amp: 1.0, decayMul: 1.0 },
+                { ratio: 2.0, amp: 0.4, decayMul: 0.7 },
+                { ratio: 3.0, amp: 0.15, decayMul: 0.45 },
+                { ratio: 4.16, amp: 0.08, decayMul: 0.3 },
+            ];
+            for (let i = 0; i < noteLen && (startSample + i) < data.length; i++) {
                 const t = i / sr;
-                const phase = 2 * Math.PI * p.f * t;
-                let env = 1;
-                if (i < attack) env = i / Math.max(1, attack);
-                else if (i < attack + sustainLen) env = 1;
-                else {
-                    const r = (i - attack - sustainLen) / Math.max(1, release);
-                    env = 1 - r;
+                const attackEnv = 1 - Math.exp(-t * 60);
+                let sample = 0;
+                for (const h of harmonics) {
+                    const env = Math.exp(-t / (p.d * h.decayMul));
+                    sample += Math.sin(2 * Math.PI * p.f * h.ratio * t) * h.amp * env;
                 }
-                data[cursor + i] += Math.sin(phase) * env * 0.25;
+                data[startSample + i] += sample * attackEnv * 0.22;
             }
-            cursor += segLen + Math.floor(0.015 * sr);
+        }
+
+        // Normalize
+        let peak = 0;
+        for (let i = 0; i < data.length; i++) {
+            const a = Math.abs(data[i]);
+            if (a > peak) peak = a;
+        }
+        if (peak > 0) {
+            const scale = 0.75 / peak;
+            for (let i = 0; i < data.length; i++) data[i] *= scale;
         }
 
         // Soft clip
-        for (let i = 0; i < data.length; i++) {
-            const x = data[i];
-            data[i] = Math.tanh(x);
-        }
+        for (let i = 0; i < data.length; i++) data[i] = Math.tanh(data[i]);
 
         return buffer;
     }

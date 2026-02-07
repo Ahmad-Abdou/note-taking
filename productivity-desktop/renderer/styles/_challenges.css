@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Challenges System Styles
  * Adapted for the extension's challenge card HTML structure
  */
@@ -39,7 +39,7 @@
 }
 
 .goals-tab.active {
-    background: var(--accent-primary);
+    background: var(--primary);
     color: white;
 }
 
@@ -107,7 +107,7 @@
     height: 44px;
     border-radius: 12px;
     background: rgba(99, 102, 241, 0.15);
-    color: var(--accent-primary);
+    color: var(--primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -171,14 +171,14 @@
 
 .challenge-categories .category-btn:hover {
     color: var(--text-primary);
-    border-color: var(--accent-primary);
+    border-color: var(--primary);
     background: var(--bg-tertiary);
 }
 
 .challenge-categories .category-btn.active {
-    background: var(--accent-primary);
+    background: var(--primary);
     color: white;
-    border-color: var(--accent-primary);
+    border-color: var(--primary);
 }
 
 /* ============================================================================
@@ -227,7 +227,7 @@
     top: 0;
     bottom: 0;
     width: 4px;
-    background: var(--accent-primary);
+    background: var(--primary);
     opacity: 0;
     transition: opacity 0.2s ease;
 }
@@ -235,7 +235,7 @@
 .challenge-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    border-color: var(--accent-primary);
+    border-color: var(--primary);
 }
 
 .challenge-card:hover::before {
@@ -275,7 +275,7 @@
 
 .challenge-card .challenge-type i {
     font-size: 11px;
-    color: var(--accent-primary);
+    color: var(--primary);
 }
 
 .challenge-card .streak-badge {
@@ -343,7 +343,7 @@
 
 .challenge-card .challenge-progress .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--accent-primary), #818cf8);
+    background: linear-gradient(90deg, var(--primary), #818cf8);
     border-radius: 999px;
     transition: width 0.5s ease;
 }
@@ -443,7 +443,7 @@
 
 .dashboard-challenge-item .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--accent-primary, #6366f1), #818cf8);
+    background: linear-gradient(90deg, var(--primary, #6366f1), #818cf8);
     transition: width 0.3s ease;
     border-radius: 999px;
 }
@@ -541,7 +541,7 @@
 .challenge-form input:focus,
 .challenge-form select:focus {
     outline: none;
-    border-color: var(--accent-primary);
+    border-color: var(--primary);
 }
 
 .challenge-type-grid {
@@ -561,19 +561,19 @@
 }
 
 .challenge-type-option:hover {
-    border-color: var(--accent-primary);
+    border-color: var(--primary);
     background: var(--bg-tertiary);
 }
 
 .challenge-type-option.selected {
-    border-color: var(--accent-primary);
+    border-color: var(--primary);
     background: rgba(99, 102, 241, 0.1);
 }
 
 .challenge-type-option i {
     font-size: 24px;
     margin-bottom: 8px;
-    color: var(--accent-primary);
+    color: var(--primary);
 }
 
 .challenge-type-option span {
