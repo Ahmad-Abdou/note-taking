@@ -164,6 +164,7 @@ function setupHabitTrackerCalendar() {
     });
 
     widget.init();
+    window.habitTrackerInstance = widget;
 }
 
 // ============================================================================

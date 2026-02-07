@@ -2153,6 +2153,11 @@ async function toggleTask(taskId) {
         refreshTaskView();
         updateTaskStats();
 
+        // Sync daily task state with habit tracker (both complete and uncomplete)
+        if (window.habitTrackerInstance?.syncExternalDailyItems) {
+            window.habitTrackerInstance.syncExternalDailyItems();
+        }
+
         // Refresh calendar (completed tasks are hidden from calendar)
         if (typeof window.refreshCalendarTasks === 'function') {
             window.refreshCalendarTasks();

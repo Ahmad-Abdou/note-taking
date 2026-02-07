@@ -61,6 +61,136 @@
             await this._load();
             this._ensureGoalDefaults();
             this.render();
+            // Sync daily tasks & challenges into the habit grid
+            await this.syncExternalDailyItems();
+        }
+
+        // --- External Daily-Item Sync ---
+
+        /**
+         * Pull daily recurring tasks and daily challenges into the habit grid.
+         * Auto-checks today if the source item is completed / progressed.
+         */
+        async syncExternalDailyItems() {
+            const today = this._isoToday();
+            const dismissed = new Set(this.state.data.dismissedSyncIds || []);
+            let didChange = false;
+
+            // --- Daily recurring tasks ---
+            try {
+                const DataStore = typeof ProductivityData !== 'undefined' && ProductivityData?.DataStore;
+                if (DataStore?.getTasks) {
+                    const tasks = await DataStore.getTasks();
+                    const dailyTasks = tasks.filter(t =>
+                        (t.isRecurring || t.recurring) &&
+                        (t.repeatType === 'daily' || t.recurrence === 'daily')
+                    );
+                    for (const task of dailyTasks) {
+                        const habitId = `daily-task--${task.id}`;
+                        if (dismissed.has(habitId)) continue;
+                        const label = '\u{1F4CB} ' + (task.title || 'Daily Task');
+                        didChange = this._ensureSyncedHabit(habitId, label) || didChange;
+
+                        const goalData = this.state.data.goals[habitId];
+                        if (!goalData) continue;
+
+                        const isCompletedNow = task.status === 'completed';
+                        const isChecked = !!goalData.completed[today];
+                        if (isCompletedNow && !isChecked) {
+                            goalData.completed[today] = 1;
+                            didChange = true;
+                        } else if (!isCompletedNow && isChecked) {
+                            delete goalData.completed[today];
+                            didChange = true;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[HabitTracker] Error syncing daily tasks:', e);
+            }
+
+            // --- Daily challenges ---
+            try {
+                const CM = window.ChallengeManager;
+                if (CM) {
+                    await CM.ensureLoaded();
+                    const dailyChallenges = (CM.challenges || []).filter(c => c.type === 'daily');
+                    for (const ch of dailyChallenges) {
+                        const habitId = `daily-challenge--${ch.id}`;
+                        if (dismissed.has(habitId)) continue;
+                        const label = '\u{1F3C6} ' + (ch.title || 'Daily Challenge');
+                        didChange = this._ensureSyncedHabit(habitId, label) || didChange;
+
+                        const goalData = this.state.data.goals[habitId];
+                        if (!goalData) continue;
+
+                        const isDoneToday = ch.status === 'completed' || ch.lastProgressDate === today;
+                        const isChecked = !!goalData.completed[today];
+                        if (isDoneToday && !isChecked) {
+                            goalData.completed[today] = 1;
+                            didChange = true;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[HabitTracker] Error syncing daily challenges:', e);
+            }
+
+            if (didChange) {
+                await this._save();
+                this.render();
+            }
+        }
+
+        _ensureSyncedHabit(habitId, label) {
+            const existingMeta = this.state.data.goalsMeta.find(g => g.id === habitId);
+            if (existingMeta) {
+                if (existingMeta.label !== label) {
+                    existingMeta.label = label;
+                    return true;
+                }
+                return false;
+            }
+
+            this.state.data.goalsMeta.push({ id: habitId, label });
+
+            const today = this._isoToday();
+            const todayDate = new Date();
+            let defaultStart, defaultEnd;
+            if (this.state.activeView === 'weekly') {
+                const ws = this._alignToWeekStart(todayDate);
+                const we = this._alignToWeekEnd(todayDate);
+                defaultStart = this._toIso(ws);
+                defaultEnd = this._toIso(we);
+            } else if (this.state.activeView === 'monthly') {
+                defaultStart = this._toIso(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
+                defaultEnd = this._toIso(new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0));
+            } else if (this.state.activeView === 'yearly') {
+                defaultStart = this._toIso(new Date(todayDate.getFullYear(), 0, 1));
+                defaultEnd = this._toIso(new Date(todayDate.getFullYear(), 11, 31));
+            } else {
+                defaultStart = this._addDaysIso(today, -30);
+                defaultEnd = today;
+            }
+
+            this.state.data.goals[habitId] = {
+                startDate: defaultStart,
+                endDate: defaultEnd,
+                completed: {}
+            };
+            return true;
+        }
+
+        _isSyncedHabit(goalId) {
+            return typeof goalId === 'string' &&
+                (goalId.startsWith('daily-task--') || goalId.startsWith('daily-challenge--'));
+        }
+
+        _getSyncedHabitIcon(goalId) {
+            if (typeof goalId !== 'string') return '';
+            if (goalId.startsWith('daily-task--')) return '\u{1F4CB} ';
+            if (goalId.startsWith('daily-challenge--')) return '\u{1F3C6} ';
+            return '';
         }
 
         // --- Storage ---
@@ -97,7 +227,8 @@
                 this.state.data = {
                     version: stored.version === 2 ? 2 : 1,
                     goalsMeta: Array.isArray(stored.goalsMeta) ? stored.goalsMeta : [],
-                    goals: stored.goals && typeof stored.goals === 'object' ? stored.goals : {}
+                    goals: stored.goals && typeof stored.goals === 'object' ? stored.goals : {},
+                    dismissedSyncIds: Array.isArray(stored.dismissedSyncIds) ? stored.dismissedSyncIds : []
                 };
             }
         }
@@ -256,7 +387,7 @@
             for (const goal of this._getGoalsList()) {
                 const opt = document.createElement('option');
                 opt.value = goal.id;
-                opt.textContent = goal.label;
+                opt.textContent = this._getSyncedHabitIcon(goal.id) + goal.label;
                 if (goal.id === this.state.activeGoalId) opt.selected = true;
                 goalSelect.appendChild(opt);
             }
@@ -448,6 +579,10 @@
 
                     const name = document.createElement('div');
                     name.className = 'habit-manage-name';
+
+                    if (this._isSyncedHabit(g.id)) {
+                        item.classList.add('is-synced');
+                    }
 
                     if (isEditing) {
                         const input = document.createElement('input');
@@ -864,6 +999,14 @@
             const goal = goals.find(g => g.id === goalId);
             const ok = confirm(`Delete habit "${goal?.label || goalId}"? This will remove its history.`);
             if (!ok) return;
+
+            // Track dismissed synced habits so they don't reappear
+            if (this._isSyncedHabit(goalId)) {
+                if (!Array.isArray(this.state.data.dismissedSyncIds)) this.state.data.dismissedSyncIds = [];
+                if (!this.state.data.dismissedSyncIds.includes(goalId)) {
+                    this.state.data.dismissedSyncIds.push(goalId);
+                }
+            }
 
             this.state.data.goalsMeta = goals.filter(g => g.id !== goalId);
             delete this.state.data.goals[goalId];

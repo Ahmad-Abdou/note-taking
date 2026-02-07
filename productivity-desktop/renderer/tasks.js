@@ -162,17 +162,16 @@ async function openExternalUrl(url) {
         return false;
     }
 
-    // Electron environment: open in system browser via IPC.
+    // Extension environment: open in a new tab when possible.
     try {
-        if (window.electronAPI?.openExternal) {
-            const ok = await window.electronAPI.openExternal(normalized);
-            if (ok) return true;
+        if (typeof chrome !== 'undefined' && chrome?.tabs?.create) {
+            chrome.tabs.create({ url: normalized });
+            return true;
         }
     } catch (_) {
         // ignore
     }
 
-    // Fallback (may open inside the app window)
     try {
         window.open(normalized, '_blank', 'noopener,noreferrer');
         return true;
@@ -2133,20 +2132,7 @@ async function saveTask(e) {
 }
 
 async function toggleTask(taskId) {
-    let task = TaskState.tasks.find(t => t.id === taskId);
-    if (!task) {
-        try {
-            if (ProductivityData?.DataStore?.getTask) {
-                const fetched = await ProductivityData.DataStore.getTask(taskId);
-                if (fetched) {
-                    task = fetched;
-                    TaskState.tasks.push(fetched);
-                }
-            }
-        } catch (_) {
-            // ignore
-        }
-    }
+    const task = TaskState.tasks.find(t => t.id === taskId);
     if (!task) return;
 
     const newStatus = task.status === 'completed' ? 'not-started' : 'completed';
@@ -2166,6 +2152,11 @@ async function toggleTask(taskId) {
 
         refreshTaskView();
         updateTaskStats();
+
+        // Sync daily task state with habit tracker (both complete and uncomplete)
+        if (window.habitTrackerInstance?.syncExternalDailyItems) {
+            window.habitTrackerInstance.syncExternalDailyItems();
+        }
 
         // Refresh calendar (completed tasks are hidden from calendar)
         if (typeof window.refreshCalendarTasks === 'function') {
@@ -2204,17 +2195,14 @@ async function toggleTask(taskId) {
 async function editTask(taskId) {
     let task = TaskState.tasks.find(t => t.id === taskId);
     if (!task) {
+        // Fallback: fetch from DataStore (e.g. called from dashboard before Tasks page visited)
         try {
-            if (ProductivityData?.DataStore?.getTask) {
-                task = await ProductivityData.DataStore.getTask(taskId);
-                if (task) TaskState.tasks.push(task);
-            }
-        } catch (_) {
-            task = null;
-        }
+            task = await ProductivityData.DataStore.getTask(taskId);
+        } catch (_) { /* ignore */ }
     }
-
-    if (task) openTaskModal(task);
+    if (task) {
+        openTaskModal(task);
+    }
 }
 
 async function deleteTask(taskId) {
@@ -2247,18 +2235,8 @@ async function deleteTask(taskId) {
 }
 
 function viewTask(taskId) {
-    let task = TaskState.tasks.find(t => t.id === taskId);
-    if (!task) {
-        // Fallback for cases where TaskState isn't loaded yet (e.g., dashboard actions)
-        ProductivityData?.DataStore?.getTask?.(taskId)
-            ?.then((fetched) => {
-                if (!fetched) return;
-                TaskState.tasks.push(fetched);
-                viewTask(taskId);
-            })
-            .catch(() => void 0);
-        return;
-    }
+    const task = TaskState.tasks.find(t => t.id === taskId);
+    if (!task) return;
 
     const modal = document.getElementById('task-details-modal') || createTaskDetailsModal();
     const categoryConfig = TASK_CATEGORIES[task.category] || TASK_CATEGORIES.other;
@@ -2289,9 +2267,7 @@ function viewTask(taskId) {
                         <button class="btn-secondary" data-action="open-link" data-task-id="${task.id}" type="button" title="Open link">
                             Open Link
                         </button>
-                        <a href="#" data-action="open-link" data-task-id="${task.id}" style="opacity: 0.9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline;">
-                            ${escapeHtml(task.linkUrl)}
-                        </a>
+                        <span style="opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(task.linkUrl)}</span>
                     </div>
                 ` : ''}
                 
@@ -2662,27 +2638,18 @@ function updateTaskStats() {
         (document.getElementById('completed-tasks-stat').textContent = stats.completed);
 }
 
-async function startFocusOnTask(taskId) {
-    let task = null;
+function startFocusOnTask(taskId) {
+    let task = TaskState.tasks.find(t => t.id === taskId);
 
-    try {
-        task = TaskState?.tasks?.find?.(t => t.id === taskId) || null;
-    } catch (_) {
-        task = null;
-    }
-
-    if (!task) {
-        try {
-            if (ProductivityData?.DataStore?.getTask) {
-                task = await ProductivityData.DataStore.getTask(taskId);
-            }
-        } catch (_) {
-            task = null;
+    // Fallback: fetch from DataStore if not in local state (e.g. called from dashboard)
+    const proceed = (resolvedTask) => {
+        if (!resolvedTask) {
+            // Still navigate to focus page even without task context
+            if (typeof navigateTo === 'function') navigateTo('focus');
+            return;
         }
-    }
 
-    if (task) {
-        // Inform dashboard/app smart-focus logic to not auto-pick a different task.
+        // Inform handleSmartFocusStart to not auto-pick a different task.
         try {
             window.__skipSmartFocusOnce = true;
         } catch (_) {
@@ -2707,15 +2674,22 @@ async function startFocusOnTask(taskId) {
 
         // Prefer the dedicated duration picker flow (custom timer modal)
         if (typeof window.openFocusDurationForTask === 'function') {
-            window.openFocusDurationForTask(taskId, task.title);
-            showToast('info', 'Focus Mode', `Choose duration for: ${task.title}`);
+            window.openFocusDurationForTask(resolvedTask.id, resolvedTask.title);
+            showToast('info', 'Focus Mode', `Choose duration for: ${resolvedTask.title}`);
             return;
         }
 
         // Fallback: older flow (auto-start after navigation)
-        localStorage.setItem('focusTaskId', taskId);
-        localStorage.setItem('focusTaskTitle', task.title);
-        showToast('info', 'Focus Mode', `Starting focus session for: ${task.title}`);
+        localStorage.setItem('focusTaskId', resolvedTask.id);
+        localStorage.setItem('focusTaskTitle', resolvedTask.title);
+        showToast('info', 'Focus Mode', `Starting focus session for: ${resolvedTask.title}`);
+    };
+
+    if (task) {
+        proceed(task);
+    } else {
+        // Async fallback to DataStore
+        ProductivityData.DataStore.getTask(taskId).then(t => proceed(t)).catch(() => proceed(null));
     }
 }
 
@@ -3015,16 +2989,16 @@ async function postponeTaskToToday(taskId) {
 async function finishAndSendToReview(taskId) {
     let task = TaskState.tasks.find(t => t.id === taskId);
     if (!task) {
+        // Fallback: fetch from DataStore (e.g. called from dashboard before Tasks page visited)
         try {
-            if (ProductivityData?.DataStore?.getTask) {
-                task = await ProductivityData.DataStore.getTask(taskId);
-                if (task) TaskState.tasks.push(task);
-            }
-        } catch (_) {
-            task = null;
-        }
+            task = await ProductivityData.DataStore.getTask(taskId);
+            if (task) TaskState.tasks.push(task); // Cache it for the modal
+        } catch (_) { /* ignore */ }
     }
-    if (!task) return;
+    if (!task) {
+        showToast('error', 'Error', 'Could not find the task.');
+        return;
+    }
 
     // Show modal to configure the review item
     showFinishAndReviewModal(task);

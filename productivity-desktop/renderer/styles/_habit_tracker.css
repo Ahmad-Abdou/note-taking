@@ -464,3 +464,22 @@
 #habit-tracker-root .habit-swatch-missed::after {
     content: '✗';
 }
+
+/* Auto-synced habit badges (daily tasks & challenges) */
+#habit-tracker-root .habit-manage-item.is-synced {
+    border-left: 3px solid rgba(99, 102, 241, 0.5);
+    padding-left: 10px;
+}
+
+#habit-tracker-root .habit-manage-item.is-synced .habit-manage-name::after {
+    content: 'Auto-synced';
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(99, 102, 241, 0.8);
+    background: rgba(99, 102, 241, 0.08);
+    padding: 2px 8px;
+    border-radius: 999px;
+    vertical-align: middle;
+}

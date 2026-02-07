@@ -203,6 +203,11 @@ const ChallengeManager = {
         if (!didChange) return;
         await this.save();
 
+        // Sync daily challenge state with habit tracker
+        if (window.habitTrackerInstance?.syncExternalDailyItems) {
+            window.habitTrackerInstance.syncExternalDailyItems();
+        }
+
         // If challenges page is mounted, refresh visuals.
         try {
             if (document.getElementById('challenges-grid')) {
