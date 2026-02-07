@@ -141,6 +141,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         App.isInitialized = true;
         // Debug removed
 
+        // Wire up desktop app updater UI
+        setupAppUpdater();
+
     } catch (error) {
         console.error('❌ Initialization failed:', error);
         showToast('error', 'Initialization Error', 'Failed to load application data.');
@@ -3531,5 +3534,84 @@ function setupLiveStorageSync() {
 }
 
 setupLiveStorageSync();
+
+// ── Desktop App Updater ────────────────────────────────────
+function setupAppUpdater() {
+    const api = window.electronAPI?.updates;
+    if (!api) return; // not running in Electron
+
+    const versionEl   = document.getElementById('app-version-info');
+    const statusEl    = document.getElementById('app-update-status');
+    const checkBtn    = document.getElementById('app-update-check-btn');
+    const updateBtn   = document.getElementById('app-update-now-btn');
+
+    // Show current version
+    api.getVersion().then(ver => {
+        if (versionEl) versionEl.textContent = `v${ver}`;
+    }).catch(() => {});
+
+    // Subscribe to status updates from main process
+    api.onStatus((payload) => {
+        if (!statusEl) return;
+        const { status, message, progress } = payload || {};
+
+        switch (status) {
+            case 'checking':
+                statusEl.textContent = 'Checking for updates…';
+                if (checkBtn) checkBtn.disabled = true;
+                break;
+            case 'available':
+                statusEl.textContent = message || 'A new update is available. Downloading…';
+                break;
+            case 'not-available':
+                statusEl.textContent = 'You are on the latest version.';
+                if (checkBtn) checkBtn.disabled = false;
+                break;
+            case 'downloading':
+                const pct = progress?.percent ? Math.round(progress.percent) : '…';
+                statusEl.textContent = `Downloading update… ${pct}%`;
+                break;
+            case 'downloaded':
+                statusEl.textContent = message || 'Update downloaded. Restart to install.';
+                if (updateBtn) {
+                    updateBtn.style.display = 'inline-flex';
+                    updateBtn.disabled = false;
+                }
+                if (checkBtn) checkBtn.disabled = false;
+                break;
+            case 'error':
+                statusEl.textContent = message || 'Update check failed.';
+                if (checkBtn) checkBtn.disabled = false;
+                break;
+            default:
+                statusEl.textContent = message || '';
+                if (checkBtn) checkBtn.disabled = false;
+        }
+    });
+
+    // "Check for Updates" button
+    if (checkBtn) {
+        checkBtn.addEventListener('click', () => {
+            if (statusEl) statusEl.textContent = 'Checking for updates…';
+            checkBtn.disabled = true;
+            api.check().catch(() => {
+                if (statusEl) statusEl.textContent = 'Update check failed.';
+                checkBtn.disabled = false;
+            });
+        });
+    }
+
+    // "Update Now" / "Restart & Install" button
+    if (updateBtn) {
+        updateBtn.addEventListener('click', () => {
+            updateBtn.disabled = true;
+            if (statusEl) statusEl.textContent = 'Restarting to install update…';
+            api.updateNow().catch(() => {
+                if (statusEl) statusEl.textContent = 'Failed to install update.';
+                updateBtn.disabled = false;
+            });
+        });
+    }
+}
 
 // Main Application loaded
