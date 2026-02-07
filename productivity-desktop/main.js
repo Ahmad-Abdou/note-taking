@@ -335,6 +335,45 @@ function ensureUpdateConfigOrExplain() {
     return { ok: true };
 }
 
+/**
+ * Produce a short, user-friendly message from an auto-updater error.
+ * electron-updater often wraps HTTP bodies (including full HTML pages) in the
+ * error message — we strip those so the UI stays clean.
+ */
+function sanitizeUpdaterError(err) {
+    const raw = err?.message || String(err);
+
+    // Detect HTTP status codes from electron-updater errors
+    const httpMatch = raw.match(/(?:HttpError:\s*)?(?:status\s+)?(\d{3})\b/i)
+        || raw.match(/^(\d{3})\s/)
+        || raw.match(/\b(5\d{2}|4\d{2})\b.*url:/i);
+    if (httpMatch) {
+        const code = httpMatch[1];
+        if (code.startsWith('5')) {
+            return `GitHub server error (${code}). Please try again in a few minutes.`;
+        }
+        if (code === '404') {
+            return 'Update file not found. The release may not have been published yet.';
+        }
+        if (code === '403') {
+            return 'Access denied when checking for updates. The repository may be private or rate-limited.';
+        }
+        return `Update check failed (HTTP ${code}). Please try again later.`;
+    }
+
+    // If the raw message contains HTML, it's an error page body — don't show it
+    if (raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+        return 'Update check failed due to a server error. Please try again later.';
+    }
+
+    // Truncate very long messages
+    if (raw.length > 300) {
+        return raw.substring(0, 280) + '…';
+    }
+
+    return raw;
+}
+
 function sendUpdaterStatus(payload) {
     try {
         if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -376,7 +415,8 @@ function initAutoUpdater() {
     });
 
     autoUpdater.on('error', (err) => {
-        sendUpdaterStatus({ state: 'error', message: err?.message || String(err) });
+        const friendlyMsg = sanitizeUpdaterError(err);
+        sendUpdaterStatus({ state: 'error', message: friendlyMsg });
         diagError('updater error', err);
     });
 
@@ -925,7 +965,7 @@ ipcMain.handle('updater-check', async () => {
         await autoUpdater.checkForUpdates();
         return { ok: true };
     } catch (err) {
-        const msg = err?.message || String(err);
+        const msg = sanitizeUpdaterError(err);
         sendUpdaterStatus({ state: 'error', message: msg });
         return { ok: false, error: msg };
     }
@@ -971,7 +1011,7 @@ ipcMain.handle('updater-update-now', async () => {
         return { ok: true };
     } catch (err) {
         installAfterDownload = false;
-        const msg = err?.message || String(err);
+        const msg = sanitizeUpdaterError(err);
         sendUpdaterStatus({ state: 'error', message: msg });
         return { ok: false, error: msg };
     }
