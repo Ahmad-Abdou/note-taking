@@ -297,9 +297,11 @@
             const existingMeta = Array.isArray(this.state.data.goalsMeta) ? this.state.data.goalsMeta : [];
             const metaById = new Map();
 
-            // 1) start with defaults (keep stable ordering)
+            // 1) start with defaults (keep stable ordering) — skip deleted ones
+            const dismissed = new Set(this.state.data.dismissedSyncIds || []);
             for (const g of this.defaultGoals) {
                 if (!g || typeof g.id !== 'string') continue;
+                if (dismissed.has(g.id)) continue; // user explicitly deleted this habit
                 const label = typeof g.label === 'string' ? g.label : this._humanizeId(g.id);
                 metaById.set(g.id, { id: g.id, label });
             }
@@ -1000,12 +1002,10 @@
             const ok = confirm(`Delete habit "${goal?.label || goalId}"? This will remove its history.`);
             if (!ok) return;
 
-            // Track dismissed synced habits so they don't reappear
-            if (this._isSyncedHabit(goalId)) {
-                if (!Array.isArray(this.state.data.dismissedSyncIds)) this.state.data.dismissedSyncIds = [];
-                if (!this.state.data.dismissedSyncIds.includes(goalId)) {
-                    this.state.data.dismissedSyncIds.push(goalId);
-                }
+            // Track all dismissed habit IDs so they don't reappear (defaults + synced)
+            if (!Array.isArray(this.state.data.dismissedSyncIds)) this.state.data.dismissedSyncIds = [];
+            if (!this.state.data.dismissedSyncIds.includes(goalId)) {
+                this.state.data.dismissedSyncIds.push(goalId);
             }
 
             this.state.data.goalsMeta = goals.filter(g => g.id !== goalId);

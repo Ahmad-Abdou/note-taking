@@ -470,8 +470,33 @@ async function checkActiveSession() {
 
             // Only restore if there's still time left
             if (newRemaining > 0) {
-                // Show restore prompt for running countdown session
-                showRestoreSessionPrompt(savedState, newRemaining);
+                // Silently auto-resume the running session instead of showing a prompt
+                FocusState.isActive = true;
+                FocusState.isPaused = false;
+                FocusState.isOpenEnded = false;
+                FocusState.isBreak = savedState.isBreak || false;
+                FocusState.startTimestamp = savedState.startTimestamp;
+                FocusState.endTimestamp = savedState.endTimestamp;
+                FocusState.selectedMinutes = savedState.selectedMinutes || 25;
+                FocusState.remainingSeconds = newRemaining;
+                FocusState.currentSession = {
+                    id: `restored_${Date.now()}`,
+                    type: getSessionType(savedState.selectedMinutes),
+                    durationMinutes: savedState.selectedMinutes || 25,
+                    linkedTaskTitle: savedState.taskTitle,
+                    startTime: new Date(savedState.startTimestamp).toISOString(),
+                    status: 'in-progress'
+                };
+
+                showFocusOverlay();
+                updateTimerDisplay();
+
+                if (FocusState.timerInterval) clearInterval(FocusState.timerInterval);
+                FocusState.timerInterval = setInterval(timerTick, 1000);
+                syncFocusStateToStorage();
+
+                const elapsedMin = savedState.selectedMinutes - Math.ceil(newRemaining / 60);
+                showToast('info', 'Session Restored', `Resumed: ${elapsedMin}m done, ${Math.ceil(newRemaining / 60)}m remaining.`);
             } else {
                 // Session expired or completed - clear it
                 chrome.storage.local.remove('focusState');
@@ -997,7 +1022,7 @@ function renderRecentSessions(sessions) {
                             </span>
                         ` : ''}
                         <span class="session-status-badge ${session.status}">
-                            ${isCompleted ? '✓ Completed' : '◐ Interrupted'}
+                            ${isCompleted ? 'Completed' : 'Interrupted'}
                         </span>
                     </div>
                 </div>

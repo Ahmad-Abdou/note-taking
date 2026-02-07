@@ -1623,9 +1623,9 @@ async function renderCommitmentStats() {
         const checkinStreak = await ProductivityData.DataStore.getCheckinStreak();
 
         // Calculate commitment score
-        const totalGoals = stats.goalsCompleted + stats.goalsAbandoned;
+        const totalGoals = (stats.totalGoalsCompleted || 0) + (stats.totalGoalsAbandoned || 0);
         const commitmentScore = totalGoals > 0
-            ? Math.round((stats.goalsCompleted / totalGoals) * 100)
+            ? Math.round(((stats.totalGoalsCompleted || 0) / totalGoals) * 100)
             : 100;
 
         // Update score circle
@@ -1670,9 +1670,9 @@ async function renderCommitmentStats() {
         const xpLostEl = document.getElementById('xp-lost-total');
         const streakEl = document.getElementById('checkin-streak-count');
 
-        if (completedEl) completedEl.textContent = stats.goalsCompleted;
-        if (abandonedEl) abandonedEl.textContent = stats.goalsAbandoned;
-        if (xpLostEl) xpLostEl.textContent = stats.totalXPLost;
+        if (completedEl) completedEl.textContent = stats.totalGoalsCompleted || 0;
+        if (abandonedEl) abandonedEl.textContent = stats.totalGoalsAbandoned || 0;
+        if (xpLostEl) xpLostEl.textContent = (stats.totalXPLostToDecay || 0) + (stats.totalXPLostToStakes || 0);
         if (streakEl) streakEl.textContent = checkinStreak;
 
     } catch (error) {

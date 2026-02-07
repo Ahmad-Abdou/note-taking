@@ -76,7 +76,11 @@
 }
 
 .progress-card {
-    grid-column: span 2;
+    grid-column: 1 / -1;
+}
+
+.goals-card {
+    grid-column: 1 / -1;
 }
 
 .goals-preview-card {

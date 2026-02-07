@@ -16,7 +16,7 @@
     border-radius: var(--radius-xl);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     padding: var(--spacing-2xl);
-    max-width: 960px;
+    max-width: 1200px;
     margin: 0 auto var(--spacing-xl);
 }
 
@@ -443,7 +443,7 @@
 
 /* Focus Stats Section */
 .focus-stats-section {
-    max-width: 960px;
+    max-width: 1200px;
     margin: 0 auto var(--spacing-xl);
 }
 
@@ -545,7 +545,7 @@
    BEST RECORDS SECTION
    ============================================================================ */
 .best-record-section {
-    max-width: 960px;
+    max-width: 1200px;
     margin: 0 auto var(--spacing-xl);
 }
 
@@ -750,7 +750,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: var(--spacing-lg);
-    max-width: 960px;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -899,6 +899,23 @@
 .overview-stat .stat-label {
     font-size: 0.85rem;
     color: var(--text-muted);
+}
+
+/* Analytics Two-Column Layout */
+.analytics-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-lg);
+}
+
+.analytics-two-col .chart-card {
+    grid-column: span 1;
+}
+
+@media (max-width: 800px) {
+    .analytics-two-col {
+        grid-template-columns: 1fr;
+    }
 }
 
 .chart-card {

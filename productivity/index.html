@@ -209,21 +209,6 @@
                     <section id="habit-tracker-root" aria-label="Habit tracker calendar" class="hero-habit-tracker">
                     </section>
 
-                    <!-- Quick Actions in Hero -->
-                    <div class="hero-actions">
-                        <button class="hero-action-btn" data-action="focus">
-                            <i class="fas fa-play-circle"></i>
-                            <span>Start Focus</span>
-                        </button>
-                        <button class="hero-action-btn" data-action="task">
-                            <i class="fas fa-plus-circle"></i>
-                            <span>Add Task</span>
-                        </button>
-                        <button class="hero-action-btn" data-action="schedule">
-                            <i class="fas fa-calendar"></i>
-                            <span>Open Schedule</span>
-                        </button>
-                    </div>
                 </div>
 
                 <!-- Motivation & Gamification Section -->
@@ -239,6 +224,11 @@
                             <!-- Populated dynamically -->
                         </div>
                     </div>
+                </div>
+
+                <!-- Best Record (Dashboard) -->
+                <div class="best-record-section" id="dashboard-best-record">
+                    <!-- Dynamically rendered by app.js -->
                 </div>
 
                 <!-- Main Dashboard Grid -->
@@ -284,7 +274,21 @@
                         </div>
                     </div>
 
-                    <!-- Weekly Progress Chart -->
+                    <!-- Active Goals - Full Width -->
+                    <div class="dash-card goals-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-trophy"></i> Goals</h3>
+                            <a href="#" class="view-link" data-page="goals">View All <i
+                                    class="fas fa-arrow-right"></i></a>
+                        </div>
+                        <div class="dash-card-content">
+                            <div class="goals-preview-compact" id="goals-preview">
+                                <!-- Goals preview injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Weekly Progress Chart - Full Width -->
                     <div class="dash-card progress-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-chart-line"></i> This Week</h3>
@@ -316,20 +320,6 @@
                         <div class="dash-card-content">
                             <div id="dashboard-challenges">
                                 <!-- Active challenges injected here -->
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Active Goals - Compact -->
-                    <div class="dash-card goals-card">
-                        <div class="dash-card-header">
-                            <h3><i class="fas fa-trophy"></i> Goals</h3>
-                            <a href="#" class="view-link" data-page="goals">View All <i
-                                    class="fas fa-arrow-right"></i></a>
-                        </div>
-                        <div class="dash-card-content">
-                            <div class="goals-preview-compact" id="goals-preview">
-                                <!-- Goals preview injected here -->
                             </div>
                         </div>
                     </div>
@@ -1006,33 +996,23 @@
                         </div>
                     </div>
 
-                    <!-- Study Time Chart -->
-                    <div class="card chart-card">
-                        <div class="card-header">
-                            <h3>Study Time Distribution</h3>
+                    <!-- Study Time & Boredom Distribution - Side by Side -->
+                    <div class="analytics-two-col">
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Study Time Distribution</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="chart-container" id="study-time-chart"></div>
+                            </div>
                         </div>
-                        <div class="card-content">
-                            <div class="chart-container" id="study-time-chart"></div>
-                        </div>
-                    </div>
-
-                    <!-- Subject Distribution -->
-                    <div class="card chart-card">
-                        <div class="card-header">
-                            <h3>Time by Subject</h3>
-                        </div>
-                        <div class="card-content">
-                            <div class="subject-breakdown" id="subject-breakdown"></div>
-                        </div>
-                    </div>
-
-                    <!-- Boredom Distribution -->
-                    <div class="card chart-card">
-                        <div class="card-header">
-                            <h3>Time by Boredom Level</h3>
-                        </div>
-                        <div class="card-content">
-                            <div class="boredom-breakdown" id="boredom-breakdown-analytics"></div>
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <h3>Time by Boredom Level</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="boredom-breakdown" id="boredom-breakdown-analytics"></div>
+                            </div>
                         </div>
                     </div>
 
