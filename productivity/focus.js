@@ -25,6 +25,8 @@ const FocusState = {
     isBreak: false,
     isOpenEnded: false,  // New: for count-up timer mode
     isStopping: false,
+    isExtraTime: false,      // Extra time mode after countdown session completes
+    extraTimeSeconds: 0,     // Seconds of extra time accumulated
     elapsedSeconds: 0,   // New: tracks elapsed time for open-ended mode
     startTimestamp: null,
     endTimestamp: null,
@@ -1501,6 +1503,22 @@ function timerTick() {
     // Guard: if a completion handler is already running, skip this tick
     if (FocusState._completing) return;
 
+    // Handle extra time mode (count up after session completion)
+    if (FocusState.isExtraTime) {
+        FocusState.extraTimeSeconds++;
+        updateTimerDisplay();
+        _throttledSyncFocusState();
+
+        // Update the live counter in the modal if it exists
+        const extraTimeEl = document.querySelector('[data-extra-time-counter]');
+        if (extraTimeEl) {
+            const mins = Math.floor(FocusState.extraTimeSeconds / 60);
+            const secs = FocusState.extraTimeSeconds % 60;
+            extraTimeEl.textContent = `+${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return;
+    }
+
     // Handle open-ended (count-up) mode
     if (FocusState.isOpenEnded) {
         if (FocusState.startTimestamp) {
@@ -1550,7 +1568,8 @@ function timerTick() {
         if (FocusState.isBreak) {
             completeBreak();
         } else {
-            completeFocusSession();
+            // Switch to extra time mode instead of ending immediately
+            enterExtraTimeMode();
         }
         return; // Don't do warning checks after completion
     }
@@ -1571,8 +1590,14 @@ function updateTimerDisplay() {
     let display;
     let timeSeconds;
 
-    // Handle open-ended (count-up) mode
-    if (FocusState.isOpenEnded) {
+    // Handle extra time (count-up after session completes)
+    if (FocusState.isExtraTime) {
+        timeSeconds = FocusState.extraTimeSeconds;
+        const minutes = Math.floor(timeSeconds / 60);
+        const seconds = timeSeconds % 60;
+        display = `+${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else if (FocusState.isOpenEnded) {
+        // Handle open-ended (count-up) mode
         timeSeconds = FocusState.elapsedSeconds;
         const hours = Math.floor(timeSeconds / 3600);
         const minutes = Math.floor((timeSeconds % 3600) / 60);
@@ -1595,14 +1620,19 @@ function updateTimerDisplay() {
     if (timerEl) timerEl.textContent = display;
 
     // Update page title
-    const prefix = FocusState.isBreak ? '☕ ' : (FocusState.isOpenEnded ? '⏱️ ' : '🎯 ');
+    const prefix = FocusState.isBreak ? '☕ ' : (FocusState.isExtraTime ? '⏰ ' : (FocusState.isOpenEnded ? '⏱️ ' : '🎯 '));
     document.title = `${prefix}${display} - Focus Mode`;
 
     // Update timer color based on time remaining (only for countdown mode)
-    if (!FocusState.isOpenEnded && !FocusState.isBreak && FocusState.remainingSeconds <= 60) {
+    if (FocusState.isExtraTime) {
+        timerEl?.classList.remove('ending-soon');
+        timerEl?.classList.add('extra-time');
+    } else if (!FocusState.isOpenEnded && !FocusState.isBreak && FocusState.remainingSeconds <= 60) {
         timerEl?.classList.add('ending-soon');
+        timerEl?.classList.remove('extra-time');
     } else {
         timerEl?.classList.remove('ending-soon');
+        timerEl?.classList.remove('extra-time');
     }
 
     // Update focus time stats in overlay (throttled to prevent DB spam)
@@ -1817,6 +1847,17 @@ async function stopFocusSession() {
         return;
     }
 
+    // If currently in extra time, finalize without the extra and stop
+    if (FocusState.isExtraTime) {
+        closeModal('session-complete-modal');
+        await finalizeExtraTimeSession(false);
+        await endFocusMode();
+        showToast('info', 'Focus Stopped', 'Session ended. Extra time was discarded.');
+        loadFocusPage().catch(e => console.error('Failed to reload focus page:', e));
+        FocusState.isStopping = false;
+        return;
+    }
+
     // Calculate elapsed time - different for open-ended mode
     let elapsedSeconds;
     let remainingSeconds = 0;
@@ -1993,9 +2034,139 @@ function promptEndEarlyPomodoroOptions({ elapsedMinutes, remainingMinutes, taskT
 }
 
 
+// ============================================================================
+// EXTRA TIME MODE
+// ============================================================================
+/**
+ * Called when a countdown session reaches 0. Instead of ending immediately,
+ * switches to "extra time" mode — the timer counts UP while showing the user
+ * completion UI. The user can later choose to add or discard the extra time.
+ */
+function enterExtraTimeMode() {
+    // Don't enter extra time if already in extra time or during a break
+    if (FocusState.isExtraTime || FocusState.isBreak) {
+        completeFocusSession();
+        return;
+    }
+
+    FocusState.isExtraTime = true;
+    FocusState.extraTimeSeconds = 0;
+    FocusState.remainingSeconds = 0;
+
+    // Ensure audio context is ready
+    try { window.NotificationSounds?.init?.(); } catch (e) {}
+
+    // Play completion sound
+    playSound('complete');
+
+    // Vibrate if supported
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+    }
+
+    // Toast & notification
+    const boredomLevel = FocusState.currentSession?.boredomLevel;
+    const moodNudge = (Number(boredomLevel) >= 4)
+        ? ' You finished even while bored — that\u2019s discipline.'
+        : (Number(boredomLevel) <= 2 ? ' Nice — keep that rhythm going.' : ' Keep stacking wins.');
+
+    showToast('success', '\uD83C\uDF89 Session Complete!', `Great job! You focused for ${FocusState.selectedMinutes} minutes. Extra time is counting...`);
+    showNotification('\uD83C\uDF89 Session Complete!', `Great job! You focused for ${FocusState.selectedMinutes} minutes.${moodNudge}`);
+
+    // Update display to show +00:00
+    updateTimerDisplay();
+
+    // Determine break type for the modal
+    const pendingPomodoros = (FocusState.completedPomodoros || 0) + 1;
+    const isLongBreak = pendingPomodoros % FocusState.settings.longBreakInterval === 0;
+    const breakDurationSelect = document.getElementById('break-duration');
+    const userBreakDuration = breakDurationSelect ? parseInt(breakDurationSelect.value) : null;
+    const breakMinutes = isLongBreak ?
+        FocusState.settings.longBreakMinutes :
+        (userBreakDuration || FocusState.settings.shortBreakMinutes);
+
+    // Show the completion modal (with extra time banner)
+    // Auto-start is disabled during extra time so user can decide
+    showSessionCompleteModal(breakMinutes, isLongBreak, {
+        autoStartBreak: false
+    });
+
+    // Timer keeps running — timerTick() handles extra time counting
+}
+
+/**
+ * Finalizes the session after extra time, saving stats with or without extra time.
+ * @param {boolean} addExtraTime - Whether to include extra time in stats
+ */
+async function finalizeExtraTimeSession(addExtraTime) {
+    // Prevent double-finalization
+    if (FocusState._completing) return;
+    FocusState._completing = true;
+
+    // Stop the timer
+    clearInterval(FocusState.timerInterval);
+    FocusState.timerInterval = null;
+
+    // Prevent the background completion alarm from double-saving
+    try {
+        FocusState.isPaused = true;
+        syncFocusStateToStorage();
+        chrome.runtime?.sendMessage?.({ action: 'FOCUS_STOP' }, () => void 0);
+    } catch (e) {}
+
+    const extraMinutes = Math.floor(FocusState.extraTimeSeconds / 60);
+    const totalMinutes = addExtraTime
+        ? FocusState.selectedMinutes + extraMinutes
+        : FocusState.selectedMinutes;
+
+    // Save completed session
+    if (FocusState.currentSession) {
+        FocusState.currentSession.status = 'completed';
+        FocusState.currentSession.endTime = new Date().toISOString();
+        FocusState.currentSession.actualDurationMinutes = totalMinutes;
+        if (addExtraTime && extraMinutes > 0) {
+            FocusState.currentSession.extraTimeMinutes = extraMinutes;
+        }
+
+        await ProductivityData.DataStore.saveFocusSession(FocusState.currentSession);
+
+        // Update stats
+        await updateFocusStats_Internal(totalMinutes, true);
+
+        // Check for achievements
+        await checkFocusAchievements();
+
+        // Record progress for challenges
+        if (window.ChallengeManager) {
+            window.ChallengeManager.recordProgress('focus_sessions', 1, { duration: totalMinutes });
+            window.ChallengeManager.recordProgress('focus_time', totalMinutes);
+        }
+    }
+
+    FocusState.completedPomodoros++;
+
+    // Award XP via motivation system
+    if (window.MotivationSystem?.onFocusSessionComplete) {
+        window.MotivationSystem.onFocusSessionComplete(totalMinutes);
+    }
+
+    // Reset extra time state
+    FocusState.isExtraTime = false;
+    FocusState.extraTimeSeconds = 0;
+    FocusState._completing = false;
+}
+
+
 async function completeFocusSession() {
     // Re-entry guard: prevent being called multiple times
     if (FocusState._completing) return;
+
+    // If we're in extra time mode, finalize without extra time
+    if (FocusState.isExtraTime) {
+        await finalizeExtraTimeSession(false);
+        return;
+    }
+
     FocusState._completing = true;
 
     clearInterval(FocusState.timerInterval);
@@ -2099,6 +2270,9 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
     const sessionsToday = FocusState.completedPomodoros || 0;
     const sessionsTodayLabel = `${sessionsToday} session${sessionsToday === 1 ? '' : 's'} completed today`;
 
+    // Check if extra time is running
+    const hasExtraTime = FocusState.isExtraTime;
+
     // Show completion modal with options
     const modal = createModal('session-complete-modal', `
         <div class="session-complete">
@@ -2112,7 +2286,24 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
 
             <div class="pomodoro-count">${sessionsTodayLabel}</div>
 
-            ${autoStartBreak ? `
+            ${hasExtraTime ? `
+                <div class="extra-time-banner">
+                    <div class="extra-time-info">
+                        <i class="fas fa-stopwatch"></i>
+                        <span>Extra time: <strong data-extra-time-counter>+00:00</strong></span>
+                    </div>
+                    <div class="extra-time-actions">
+                        <button class="btn-extra-add" data-action="add-extra-time" title="Add extra time to your stats">
+                            <i class="fas fa-plus-circle"></i> Add to Stats
+                        </button>
+                        <button class="btn-extra-discard" data-action="discard-extra-time" title="Discard extra time">
+                            <i class="fas fa-times"></i> Discard
+                        </button>
+                    </div>
+                </div>
+            ` : ''}
+
+            ${autoStartBreak && !hasExtraTime ? `
                 <div class="pomodoro-count" style="margin-top: 8px; opacity: 0.9;">
                     Auto-starting break in <strong><span data-break-countdown>${autoStartDelaySeconds}</span>s</strong>
                 </div>
@@ -2146,7 +2337,18 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
         }
     }
 
-    if (autoStartBreak) {
+    // Helper: finalize session (save stats) then do action
+    async function finalizeAndThen(action, addExtraTime = false) {
+        clearAutoStart();
+        if (FocusState.isExtraTime) {
+            await finalizeExtraTimeSession(addExtraTime);
+        }
+        closeModal('session-complete-modal');
+        if (action) action();
+    }
+
+    // Auto-start break countdown (only if not in extra time mode)
+    if (autoStartBreak && !hasExtraTime) {
         const countdownEl = modal.querySelector('[data-break-countdown]');
         if (countdownEl) {
             let remaining = autoStartDelaySeconds;
@@ -2163,7 +2365,6 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
         }
 
         autoStartTimeout = setTimeout(() => {
-            // If the modal is still open, auto-start the break.
             if (document.getElementById('session-complete-modal')) {
                 startBreak(breakMinutes);
                 closeModal('session-complete-modal');
@@ -2171,24 +2372,50 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
         }, autoStartDelayMs);
     }
 
-    // Setup listeners
-    modal.querySelector('[data-action="take-break"]')?.addEventListener('click', (e) => {
-        clearAutoStart();
-        const minutes = parseInt(e.currentTarget?.dataset?.minutes || breakMinutes, 10);
-        startBreak(minutes);
-        closeModal('session-complete-modal');
-    });
-
-    modal.querySelector('[data-action="start-another"]')?.addEventListener('click', () => {
-        clearAutoStart();
-        startFocusSession();
-        closeModal('session-complete-modal');
-    });
-
-    modal.querySelector('[data-action="done-session"]')?.addEventListener('click', () => {
-        clearAutoStart();
-        closeModal('session-complete-modal');
+    // Extra time button handlers
+    modal.querySelector('[data-action="add-extra-time"]')?.addEventListener('click', async () => {
+        const extraMins = Math.floor(FocusState.extraTimeSeconds / 60);
+        await finalizeAndThen(null, true);
+        showToast('success', '⏱️ Extra Time Added', `${extraMins} extra minute${extraMins === 1 ? '' : 's'} added to your stats.`);
         loadFocusPage();
+    });
+
+    modal.querySelector('[data-action="discard-extra-time"]')?.addEventListener('click', async () => {
+        await finalizeAndThen(null, false);
+        showToast('info', '⏱️ Extra Time Discarded', 'Only the original session time was saved.');
+        loadFocusPage();
+    });
+
+    // Main action handlers
+    modal.querySelector('[data-action="take-break"]')?.addEventListener('click', async (e) => {
+        const minutes = parseInt(e.currentTarget?.dataset?.minutes || breakMinutes, 10);
+        if (hasExtraTime) {
+            await finalizeAndThen(() => startBreak(minutes), false);
+        } else {
+            clearAutoStart();
+            startBreak(minutes);
+            closeModal('session-complete-modal');
+        }
+    });
+
+    modal.querySelector('[data-action="start-another"]')?.addEventListener('click', async () => {
+        if (hasExtraTime) {
+            await finalizeAndThen(() => startFocusSession(), false);
+        } else {
+            clearAutoStart();
+            startFocusSession();
+            closeModal('session-complete-modal');
+        }
+    });
+
+    modal.querySelector('[data-action="done-session"]')?.addEventListener('click', async () => {
+        if (hasExtraTime) {
+            await finalizeAndThen(() => loadFocusPage(), false);
+        } else {
+            clearAutoStart();
+            closeModal('session-complete-modal');
+            loadFocusPage();
+        }
     });
 
     openModal('session-complete-modal');
@@ -2328,6 +2555,8 @@ async function endFocusMode() {
     FocusState.isPaused = false;
     FocusState.isBreak = false;
     FocusState.isOpenEnded = false;
+    FocusState.isExtraTime = false;
+    FocusState.extraTimeSeconds = 0;
     FocusState.elapsedSeconds = 0;
     FocusState.remainingSeconds = 0;
     FocusState.startTimestamp = null;

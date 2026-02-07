@@ -1573,7 +1573,98 @@
     }
 }
 
-/* ============================================================================
+/* Extra Time Banner in Session Complete Modal */
+#session-complete-modal .extra-time-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(251, 191, 36, 0.08));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+#session-complete-modal .extra-time-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: #fbbf24;
+    font-size: 0.95rem;
+}
+
+#session-complete-modal .extra-time-info i {
+    font-size: 1.1rem;
+}
+
+#session-complete-modal .extra-time-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+#session-complete-modal .btn-extra-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+#session-complete-modal .btn-extra-add:hover {
+    background: rgba(16, 185, 129, 0.25);
+    border-color: #34d399;
+}
+
+#session-complete-modal .btn-extra-discard {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+#session-complete-modal .btn-extra-discard:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Extra time timer display style */
+#focus-time.extra-time {
+    color: #fbbf24 !important;
+    animation: extraTimePulse 2s ease-in-out infinite;
+}
+
+@keyframes extraTimePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@media (max-width: 520px) {
+    #session-complete-modal .extra-time-banner {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        text-align: center;
+    }
+
+    #session-complete-modal .extra-time-actions {
+        justify-content: center;
+    }
+}/* ============================================================================
    COLLAPSIBLE FILTERS SECTION
    ============================================================================ */
 

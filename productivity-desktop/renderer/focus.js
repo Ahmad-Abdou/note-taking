@@ -25,17 +25,19 @@ const FocusState = {
     isBreak: false,
     isOpenEnded: false,  // New: for count-up timer mode
     isStopping: false,
+    isExtraTime: false,      // Extra time mode after countdown session completes
+    extraTimeSeconds: 0,     // Seconds of extra time accumulated
     elapsedSeconds: 0,   // New: tracks elapsed time for open-ended mode
-    currentSession: null,
-    timerInterval: null,
-    remainingSeconds: 0,
-    selectedMinutes: 25,
     startTimestamp: null,
     endTimestamp: null,
     pausedRemainingSeconds: null,
     pausedElapsedSeconds: null,
     pendingLinkedTaskId: null,
     pendingLinkedTaskTitle: null,
+    currentSession: null,
+    timerInterval: null,
+    remainingSeconds: 0,
+    selectedMinutes: 25,
     breakMinutes: 5,
     completedPomodoros: 0,
 
@@ -350,6 +352,15 @@ async function renderBoredomBreakdownFocus({ days = 7 } = {}) {
                     </div>
                 </div>
             `).join('')}
+            ${unknown > 0 ? `
+                <div style="display:flex; align-items:center; gap: 12px;">
+                    <div style="width: 120px; min-width: 120px; color: var(--text-secondary); font-size: 0.9rem;">Unrated</div>
+                    <div style="flex: 1; height: 10px; background: var(--bg-secondary); border-radius: 999px; overflow: hidden; border: 1px solid var(--border-color);">
+                        <div style="height: 100%; width: ${Math.max(0, (unknown / totalMinutes) * 100)}%; background: #64748b;"></div>
+                    </div>
+                    <div style="width: 90px; text-align: right; color: var(--text-tertiary); font-size: 0.9rem;">${formatFocusTime(Math.round(unknown))}</div>
+                </div>
+            ` : ''}
         </div>
     `;
 }
@@ -366,15 +377,9 @@ async function checkActiveSession() {
         if (stored.focusState && stored.focusState.isActive) {
             const savedState = stored.focusState;
 
-            const now = Date.now();
-
-            const effectiveStartTimestamp = savedState.startTimestamp
-                ?? (savedState.isOpenEnded
-                    ? (now - ((savedState.elapsedSeconds || 0) * 1000))
-                    : (now - (((savedState.selectedMinutes || 0) * 60 - (savedState.remainingSeconds || 0)) * 1000)));
-
             // Check if session is less than 24 hours old
-            const hoursSinceSaved = (now - effectiveStartTimestamp) / (1000 * 60 * 60);
+            const now = Date.now();
+            const hoursSinceSaved = (now - savedState.startTimestamp) / (1000 * 60 * 60);
 
             if (hoursSinceSaved >= 24) {
                 // Session too old - clear it
@@ -390,9 +395,9 @@ async function checkActiveSession() {
                 FocusState.isPaused = true;
                 FocusState.isOpenEnded = savedState.isOpenEnded || false;
                 FocusState.isBreak = savedState.isBreak || false;
-                FocusState.startTimestamp = effectiveStartTimestamp;
+                FocusState.startTimestamp = savedState.startTimestamp;
                 FocusState.selectedMinutes = savedState.selectedMinutes || 0;
-
+                
                 if (savedState.isOpenEnded) {
                     FocusState.pausedElapsedSeconds = savedState.pausedElapsedSeconds ?? savedState.elapsedSeconds ?? 0;
                     FocusState.elapsedSeconds = FocusState.pausedElapsedSeconds;
@@ -400,16 +405,16 @@ async function checkActiveSession() {
                     FocusState.pausedRemainingSeconds = savedState.pausedRemainingSeconds ?? savedState.remainingSeconds;
                     FocusState.remainingSeconds = FocusState.pausedRemainingSeconds;
                 }
-
+                
                 FocusState.currentSession = {
                     id: `restored_${Date.now()}`,
                     type: savedState.isOpenEnded ? 'open-ended' : getSessionType(savedState.selectedMinutes),
                     durationMinutes: savedState.selectedMinutes || 0,
                     linkedTaskTitle: savedState.taskTitle,
-                    startTime: new Date(effectiveStartTimestamp).toISOString(),
+                    startTime: new Date(savedState.startTimestamp).toISOString(),
                     status: 'in-progress'
                 };
-
+                
                 // Show a subtle indicator that there's a paused session
                 showToast('info', 'Paused Session', 'You have a paused focus session. Start focus to resume or start fresh.');
                 return;
@@ -417,7 +422,8 @@ async function checkActiveSession() {
 
             // Handle open-ended (count-up) mode - RUNNING session
             if (savedState.isOpenEnded) {
-                const elapsedSeconds = Math.max(0, Math.floor((now - effectiveStartTimestamp) / 1000));
+                // Recalculate elapsed time since session started
+                const elapsedSeconds = Math.floor((now - savedState.startTimestamp) / 1000);
 
                 // Restore state directly for open-ended mode
                 FocusState.isActive = true;
@@ -425,12 +431,11 @@ async function checkActiveSession() {
                 FocusState.isBreak = false;
                 FocusState.isOpenEnded = true;
                 FocusState.elapsedSeconds = elapsedSeconds;
-                FocusState.remainingSeconds = 0;
-                FocusState.selectedMinutes = 0;
-                FocusState.startTimestamp = effectiveStartTimestamp;
+                FocusState.startTimestamp = savedState.startTimestamp;
                 FocusState.endTimestamp = null;
                 FocusState.pausedElapsedSeconds = null;
-                FocusState.pausedRemainingSeconds = null;
+                FocusState.remainingSeconds = 0;
+                FocusState.selectedMinutes = 0;
 
                 // Create session object
                 FocusState.currentSession = {
@@ -438,7 +443,7 @@ async function checkActiveSession() {
                     type: 'open-ended',
                     durationMinutes: 0,
                     linkedTaskTitle: savedState.taskTitle,
-                    startTime: new Date(effectiveStartTimestamp).toISOString(),
+                    startTime: new Date(savedState.startTimestamp).toISOString(),
                     status: 'in-progress'
                 };
 
@@ -458,19 +463,12 @@ async function checkActiveSession() {
             }
 
             // Standard countdown mode - calculate remaining time for RUNNING session
-            const selectedMinutes = savedState.selectedMinutes || FocusState.selectedMinutes || 25;
-            const newRemaining = typeof savedState.endTimestamp === 'number'
-                ? Math.ceil((savedState.endTimestamp - now) / 1000)
-                : Math.ceil((selectedMinutes * 60) - Math.floor((now - effectiveStartTimestamp) / 1000));
+            const newRemaining = Math.ceil((savedState.endTimestamp - now) / 1000);
 
             // Only restore if there's still time left
             if (newRemaining > 0) {
                 // Show restore prompt for running countdown session
-                showRestoreSessionPrompt({
-                    ...savedState,
-                    selectedMinutes,
-                    startTimestamp: effectiveStartTimestamp
-                }, newRemaining);
+                showRestoreSessionPrompt(savedState, newRemaining);
             } else {
                 // Session expired or completed - clear it
                 chrome.storage.local.remove('focusState');
@@ -582,7 +580,7 @@ async function endPausedSessionForFreshStart(addTimeToStats) {
         FocusState.currentSession.endTime = new Date().toISOString();
         FocusState.currentSession.actualDurationMinutes = elapsedMinutes;
         FocusState.currentSession.status = 'interrupted';
-
+        
         try {
             await ProductivityData.DataStore.saveFocusSession(FocusState.currentSession);
         } catch (e) {
@@ -595,7 +593,7 @@ async function endPausedSessionForFreshStart(addTimeToStats) {
         clearInterval(FocusState.timerInterval);
         FocusState.timerInterval = null;
     }
-
+    
     FocusState.isActive = false;
     FocusState.isPaused = false;
     FocusState.isOpenEnded = false;
@@ -606,7 +604,9 @@ async function endPausedSessionForFreshStart(addTimeToStats) {
     FocusState.pausedElapsedSeconds = null;
     FocusState.remainingSeconds = 0;
     FocusState.elapsedSeconds = 0;
-
+    FocusState._completing = false;
+    FocusState._completingBreak = false;
+    
     // Clear storage
     chrome.storage.local.remove('focusState');
 }
@@ -667,13 +667,12 @@ function restoreFocusSession(savedState, remainingSeconds) {
     FocusState.isActive = true;
     FocusState.isPaused = true; // Always start paused so user can review
     FocusState.isBreak = savedState.isBreak || false;
-    FocusState.isOpenEnded = false;
     FocusState.remainingSeconds = remainingSeconds;
     FocusState.selectedMinutes = savedState.selectedMinutes;
-    FocusState.startTimestamp = savedState.startTimestamp || Date.now();
+
+    FocusState.startTimestamp = savedState.startTimestamp;
     FocusState.endTimestamp = null;
     FocusState.pausedRemainingSeconds = remainingSeconds;
-    FocusState.pausedElapsedSeconds = null;
 
     // Create session object
     FocusState.currentSession = {
@@ -681,7 +680,7 @@ function restoreFocusSession(savedState, remainingSeconds) {
         type: getSessionType(savedState.selectedMinutes),
         durationMinutes: savedState.selectedMinutes,
         linkedTaskTitle: savedState.taskTitle,
-        startTime: new Date(FocusState.startTimestamp).toISOString(),
+        startTime: new Date(savedState.startTimestamp).toISOString(),
         status: 'in-progress'
     };
 
@@ -703,82 +702,6 @@ function restoreFocusSession(savedState, remainingSeconds) {
     syncFocusStateToStorage();
 
     showToast('success', 'Session Restored!', 'Press play to continue your focus session.');
-}
-
-function setFocusPaused(paused) {
-    if (!FocusState.isActive) return;
-    if (FocusState.isPaused === paused) return;
-
-    const now = Date.now();
-
-    // Snapshot right before pausing
-    if (paused) {
-        if (FocusState.isOpenEnded) {
-            const start = FocusState.startTimestamp ?? now;
-            FocusState.elapsedSeconds = Math.max(0, Math.floor((now - start) / 1000));
-            FocusState.pausedElapsedSeconds = FocusState.elapsedSeconds;
-        } else {
-            if (typeof FocusState.endTimestamp === 'number') {
-                FocusState.remainingSeconds = Math.max(0, Math.ceil((FocusState.endTimestamp - now) / 1000));
-            }
-            FocusState.pausedRemainingSeconds = FocusState.remainingSeconds;
-            FocusState.endTimestamp = null;
-        }
-
-        // Keep overlay visible when paused so the user can easily resume.
-    }
-
-    FocusState.isPaused = paused;
-    updatePauseButton();
-
-    // Update overlay state
-    const overlay = document.getElementById('focus-overlay');
-    overlay?.classList.toggle('paused', FocusState.isPaused);
-
-    // Pause/resume ambient sound
-    if (FocusState.ambientSound) {
-        if (FocusState.isPaused) {
-            FocusState.ambientSound.pause();
-        } else {
-            FocusState.ambientSound.play();
-        }
-    }
-
-    // On resume, rebuild timestamps and show overlay
-    if (!paused) {
-        if (FocusState.isOpenEnded) {
-            const elapsed = FocusState.pausedElapsedSeconds ?? FocusState.elapsedSeconds ?? 0;
-            FocusState.startTimestamp = now - (elapsed * 1000);
-            FocusState.pausedElapsedSeconds = null;
-        } else {
-            const remaining = FocusState.pausedRemainingSeconds ?? FocusState.remainingSeconds;
-            FocusState.remainingSeconds = remaining;
-            FocusState.endTimestamp = now + (remaining * 1000);
-            FocusState.startTimestamp = now - ((FocusState.selectedMinutes * 60 - remaining) * 1000);
-            FocusState.pausedRemainingSeconds = null;
-        }
-
-        // Show overlay when resuming
-        showFocusOverlay();
-
-        // Ensure timer interval is running
-        if (!FocusState.timerInterval) {
-            FocusState.timerInterval = setInterval(timerTick, 1000);
-        }
-
-        // Pre-initialize audio context for completion sound
-        try {
-            window.NotificationSounds?.init?.();
-        } catch (e) {
-            // Ignore audio init errors
-        }
-    }
-
-    syncFocusStateToStorage();
-
-    showToast(FocusState.isPaused ? 'info' : 'success',
-        FocusState.isPaused ? 'Session Paused' : 'Session Resumed',
-        FocusState.isPaused ? 'Take a moment, then continue!' : 'Let\'s keep going!');
 }
 
 async function loadFocusSettings() {
@@ -1128,6 +1051,14 @@ function selectTimerPreset(minutes) {
 
 async function startFocusSession(minutes = null, options = {}) {
 
+    // Best-effort: unlock audio on a user gesture (start click) so completion
+    // sounds can play reliably later.
+    try {
+        window.NotificationSounds?.init?.();
+    } catch (e) {
+        // Ignore audio unlock errors
+    }
+
     // Check if there's a paused session - show options modal
     const pausedCheck = await checkPausedSessionBeforeStart();
     if (pausedCheck.action === 'cancelled') {
@@ -1146,6 +1077,10 @@ async function startFocusSession(minutes = null, options = {}) {
         await endPausedSessionForFreshStart(false);
     }
     // If 'no-paused-session', just continue normally
+
+    // Ensure we are in countdown mode (not open-ended)
+    FocusState.isOpenEnded = false;
+    FocusState.elapsedSeconds = 0;
 
     // Fix: Prioritize passed minutes, then selected, then load from storage if needed
     let duration = minutes;
@@ -1181,12 +1116,10 @@ async function startFocusSession(minutes = null, options = {}) {
     FocusState.selectedMinutes = duration;
     FocusState.remainingSeconds = duration * 60;
 
-    const now = Date.now();
-    FocusState.startTimestamp = now;
-    FocusState.endTimestamp = now + (duration * 60 * 1000);
+    FocusState.startTimestamp = Date.now();
+    FocusState.endTimestamp = FocusState.startTimestamp + (duration * 60 * 1000);
     FocusState.pausedRemainingSeconds = null;
     FocusState.pausedElapsedSeconds = null;
-    FocusState.isOpenEnded = false;
 
     FocusState.isActive = true;
     FocusState.isPaused = false;
@@ -1195,19 +1128,19 @@ async function startFocusSession(minutes = null, options = {}) {
     // Save selected duration
     chrome.storage.local.set({ lastFocusDuration: duration });
 
-    // Get linked task info
+    // Get linked task info (allow a pending task set from elsewhere in the app)
     const taskSelect = document.getElementById('focus-task-select');
-    let linkedTaskId = FocusState.pendingLinkedTaskId || taskSelect?.value || null;
-    let linkedTaskTitle = FocusState.pendingLinkedTaskTitle || (linkedTaskId ? taskSelect?.selectedOptions[0]?.text : '') || '';
-
-    // If we have a pending linked task, try to reflect it in the UI dropdown too
-    if (FocusState.pendingLinkedTaskId && taskSelect) {
+    if (taskSelect && FocusState.pendingLinkedTaskId) {
         const option = taskSelect.querySelector(`option[value="${FocusState.pendingLinkedTaskId}"]`);
         if (option) {
             taskSelect.value = FocusState.pendingLinkedTaskId;
-            linkedTaskTitle = FocusState.pendingLinkedTaskTitle || option.text;
         }
     }
+
+    const linkedTaskId = taskSelect?.value || FocusState.pendingLinkedTaskId || null;
+    const linkedTaskTitle = linkedTaskId
+        ? (taskSelect?.selectedOptions?.[0]?.text || FocusState.pendingLinkedTaskTitle || '')
+        : '';
 
     // Get subject
     const subjectSelect = document.getElementById('focus-subject-select');
@@ -1223,9 +1156,6 @@ async function startFocusSession(minutes = null, options = {}) {
         startTime: new Date().toISOString(),
         boredomLevel: boredom.boredomLevel
     });
-
-    FocusState.pendingLinkedTaskId = null;
-    FocusState.pendingLinkedTaskTitle = null;
 
     // Save session start (non-blocking for faster UI)
     ProductivityData.DataStore.saveFocusSession(FocusState.currentSession).catch(e =>
@@ -1261,6 +1191,17 @@ async function startFocusSession(minutes = null, options = {}) {
     // Sync state immediately so popup can show it
     syncFocusStateToStorage();
 
+    // Notify background so it can schedule a completion alarm (MV3-safe)
+    try {
+        chrome.runtime?.sendMessage?.({ action: 'FOCUS_STARTED' }, () => void 0);
+    } catch (e) {
+        // Ignore cross-context errors
+    }
+
+    // Clear pending task after starting
+    FocusState.pendingLinkedTaskId = null;
+    FocusState.pendingLinkedTaskTitle = null;
+
     // Show notification
     if (FocusState.settings.notificationsEnabled) {
         showNotification('Focus Session Started', `${duration} minutes - Let's get productive!`);
@@ -1279,6 +1220,14 @@ function getSessionType(minutes) {
  * Timer runs until manually stopped by user
  */
 async function startOpenEndedSession() {
+    // Best-effort: unlock audio on a user gesture (start click) so milestone
+    // sounds can play reliably later.
+    try {
+        window.NotificationSounds?.init?.();
+    } catch (e) {
+        // Ignore audio unlock errors
+    }
+
     // Check if there's a paused session - show options modal
     const pausedCheck = await checkPausedSessionBeforeStart();
     if (pausedCheck.action === 'cancelled') {
@@ -1314,8 +1263,7 @@ async function startOpenEndedSession() {
     FocusState.remainingSeconds = 0; // Not used in open-ended mode
     FocusState.selectedMinutes = 0;  // Will be calculated at end
 
-    const now = Date.now();
-    FocusState.startTimestamp = now;
+    FocusState.startTimestamp = Date.now();
     FocusState.endTimestamp = null;
     FocusState.pausedElapsedSeconds = null;
     FocusState.pausedRemainingSeconds = null;
@@ -1373,6 +1321,13 @@ async function startOpenEndedSession() {
     // Sync state to storage
     syncFocusStateToStorage();
 
+    // Notify background so it can keep state in sync; alarms are ignored for open-ended.
+    try {
+        chrome.runtime?.sendMessage?.({ action: 'FOCUS_STARTED' }, () => void 0);
+    } catch (e) {
+        // Ignore cross-context errors
+    }
+
     // Show notification
     if (FocusState.settings.notificationsEnabled) {
         showNotification('Free Focus Started', 'Timer is counting up. Stop when ready!');
@@ -1384,11 +1339,13 @@ async function startOpenEndedSession() {
 function checkAutoStartFromTask() {
     const focusTaskId = localStorage.getItem('focusTaskId');
     const focusTaskTitle = localStorage.getItem('focusTaskTitle');
+    const focusTaskDuration = parseInt(localStorage.getItem('focusTaskDuration') || '', 10);
 
     if (focusTaskId && focusTaskTitle) {
         // Clear the localStorage items so we don't auto-start again
         localStorage.removeItem('focusTaskId');
         localStorage.removeItem('focusTaskTitle');
+        localStorage.removeItem('focusTaskDuration');
 
         // Set the task in the dropdown if it exists
         const taskSelect = document.getElementById('focus-task-select');
@@ -1400,15 +1357,13 @@ function checkAutoStartFromTask() {
             }
         }
 
-        // Let the user choose duration (reuse the custom timer modal)
-        FocusState.pendingLinkedTaskId = focusTaskId;
-        FocusState.pendingLinkedTaskTitle = focusTaskTitle;
+        // Auto-start the focus session after a brief delay
         setTimeout(() => {
-            if (typeof openModal === 'function') {
-                openModal('custom-timer-modal');
-                showToast('info', 'Focus Mode', `Choose duration for: ${focusTaskTitle}`);
-            }
-        }, 200);
+            showToast('info', 'Starting Focus', `Beginning focus session for: ${focusTaskTitle}`);
+            FocusState.pendingLinkedTaskId = focusTaskId;
+            FocusState.pendingLinkedTaskTitle = focusTaskTitle;
+            startFocusSession(Number.isFinite(focusTaskDuration) && focusTaskDuration > 0 ? focusTaskDuration : 25);
+        }, 500);
     }
 }
 
@@ -1495,7 +1450,6 @@ function updateBreakIndicator() {
 // TIMER TICK & DISPLAY
 // ============================================================================
 
-// Sync focus state with chrome.storage for popup menu
 // Throttle helper for syncFocusStateToStorage - prevents calling more than once per 2 seconds
 let _syncThrottleTimer = null;
 function _throttledSyncFocusState() {
@@ -1516,6 +1470,7 @@ function _throttledUpdateFocusTimeStats() {
     updateFocusTimeStats();
 }
 
+// Sync focus state with chrome.storage for popup menu
 function syncFocusStateToStorage() {
     if (FocusState.isActive) {
         chrome.storage.local.set({
@@ -1529,7 +1484,9 @@ function syncFocusStateToStorage() {
                 selectedMinutes: FocusState.selectedMinutes,
                 taskTitle: FocusState.currentSession?.linkedTaskTitle || null,
                 boredomLevel: FocusState.currentSession?.boredomLevel ?? null,
-                startTimestamp: FocusState.startTimestamp,
+                startTimestamp: FocusState.startTimestamp || (FocusState.isOpenEnded
+                    ? Date.now() - (FocusState.elapsedSeconds * 1000)
+                    : Date.now() - ((FocusState.selectedMinutes * 60 - FocusState.remainingSeconds) * 1000)),
                 endTimestamp: FocusState.endTimestamp,
                 pausedRemainingSeconds: FocusState.pausedRemainingSeconds,
                 pausedElapsedSeconds: FocusState.pausedElapsedSeconds
@@ -1546,12 +1503,29 @@ function timerTick() {
     // Guard: if a completion handler is already running, skip this tick
     if (FocusState._completing) return;
 
-    const now = Date.now();
+    // Handle extra time mode (count up after session completion)
+    if (FocusState.isExtraTime) {
+        FocusState.extraTimeSeconds++;
+        updateTimerDisplay();
+        _throttledSyncFocusState();
+
+        // Update the live counter in the modal if it exists
+        const extraTimeEl = document.querySelector('[data-extra-time-counter]');
+        if (extraTimeEl) {
+            const mins = Math.floor(FocusState.extraTimeSeconds / 60);
+            const secs = FocusState.extraTimeSeconds % 60;
+            extraTimeEl.textContent = `+${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return;
+    }
 
     // Handle open-ended (count-up) mode
     if (FocusState.isOpenEnded) {
-        const start = FocusState.startTimestamp ?? now;
-        FocusState.elapsedSeconds = Math.max(0, Math.floor((now - start) / 1000));
+        if (FocusState.startTimestamp) {
+            FocusState.elapsedSeconds = Math.max(0, Math.floor((Date.now() - FocusState.startTimestamp) / 1000));
+        } else {
+            FocusState.elapsedSeconds++;
+        }
         updateTimerDisplay();
         // No progress ring update for open-ended mode (or could show infinite animation)
 
@@ -1573,7 +1547,7 @@ function timerTick() {
 
     // Standard countdown mode
     if (typeof FocusState.endTimestamp === 'number') {
-        FocusState.remainingSeconds = Math.max(0, Math.ceil((FocusState.endTimestamp - now) / 1000));
+        FocusState.remainingSeconds = Math.max(0, Math.ceil((FocusState.endTimestamp - Date.now()) / 1000));
     } else {
         FocusState.remainingSeconds = Math.max(0, FocusState.remainingSeconds - 1);
     }
@@ -1594,7 +1568,8 @@ function timerTick() {
         if (FocusState.isBreak) {
             completeBreak();
         } else {
-            completeFocusSession();
+            // Switch to extra time mode instead of ending immediately
+            enterExtraTimeMode();
         }
         return; // Don't do warning checks after completion
     }
@@ -1615,8 +1590,14 @@ function updateTimerDisplay() {
     let display;
     let timeSeconds;
 
-    // Handle open-ended (count-up) mode
-    if (FocusState.isOpenEnded) {
+    // Handle extra time (count-up after session completes)
+    if (FocusState.isExtraTime) {
+        timeSeconds = FocusState.extraTimeSeconds;
+        const minutes = Math.floor(timeSeconds / 60);
+        const seconds = timeSeconds % 60;
+        display = `+${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else if (FocusState.isOpenEnded) {
+        // Handle open-ended (count-up) mode
         timeSeconds = FocusState.elapsedSeconds;
         const hours = Math.floor(timeSeconds / 3600);
         const minutes = Math.floor((timeSeconds % 3600) / 60);
@@ -1639,14 +1620,19 @@ function updateTimerDisplay() {
     if (timerEl) timerEl.textContent = display;
 
     // Update page title
-    const prefix = FocusState.isBreak ? '☕ ' : (FocusState.isOpenEnded ? '⏱️ ' : '🎯 ');
+    const prefix = FocusState.isBreak ? '☕ ' : (FocusState.isExtraTime ? '⏰ ' : (FocusState.isOpenEnded ? '⏱️ ' : '🎯 '));
     document.title = `${prefix}${display} - Focus Mode`;
 
     // Update timer color based on time remaining (only for countdown mode)
-    if (!FocusState.isOpenEnded && !FocusState.isBreak && FocusState.remainingSeconds <= 60) {
+    if (FocusState.isExtraTime) {
+        timerEl?.classList.remove('ending-soon');
+        timerEl?.classList.add('extra-time');
+    } else if (!FocusState.isOpenEnded && !FocusState.isBreak && FocusState.remainingSeconds <= 60) {
         timerEl?.classList.add('ending-soon');
+        timerEl?.classList.remove('extra-time');
     } else {
         timerEl?.classList.remove('ending-soon');
+        timerEl?.classList.remove('extra-time');
     }
 
     // Update focus time stats in overlay (throttled to prevent DB spam)
@@ -1753,6 +1739,78 @@ function resumeFocusSession() {
     setFocusPaused(false);
 }
 
+function setFocusPaused(paused) {
+    if (!FocusState.isActive) return;
+    if (FocusState.isPaused === paused) return;
+
+    // Snapshot right before pausing
+    if (paused) {
+        if (FocusState.isOpenEnded) {
+            FocusState.pausedElapsedSeconds = FocusState.startTimestamp
+                ? Math.max(0, Math.floor((Date.now() - FocusState.startTimestamp) / 1000))
+                : (FocusState.elapsedSeconds || 0);
+        } else {
+            FocusState.pausedRemainingSeconds = typeof FocusState.endTimestamp === 'number'
+                ? Math.max(0, Math.ceil((FocusState.endTimestamp - Date.now()) / 1000))
+                : FocusState.remainingSeconds;
+            FocusState.endTimestamp = null;
+        }
+        
+        // Keep overlay visible when paused so the user can easily resume.
+    }
+
+    FocusState.isPaused = paused;
+    updatePauseButton();
+
+    const overlay = document.getElementById('focus-overlay');
+    overlay?.classList.toggle('paused', FocusState.isPaused);
+
+    // Pause/resume ambient sound
+    if (FocusState.ambientSound) {
+        if (FocusState.isPaused) {
+            FocusState.ambientSound.pause();
+        } else {
+            FocusState.ambientSound.play();
+        }
+    }
+
+    // On resume, rebuild timestamps and show overlay
+    if (!paused) {
+        if (FocusState.isOpenEnded) {
+            const elapsed = FocusState.pausedElapsedSeconds ?? FocusState.elapsedSeconds ?? 0;
+            FocusState.startTimestamp = Date.now() - (elapsed * 1000);
+            FocusState.pausedElapsedSeconds = null;
+        } else {
+            const remaining = FocusState.pausedRemainingSeconds ?? FocusState.remainingSeconds;
+            FocusState.remainingSeconds = remaining;
+            FocusState.endTimestamp = Date.now() + (remaining * 1000);
+            FocusState.startTimestamp = Date.now() - ((FocusState.selectedMinutes * 60 - remaining) * 1000);
+            FocusState.pausedRemainingSeconds = null;
+        }
+
+        // Show overlay when resuming
+        showFocusOverlay();
+
+        // Ensure timer interval is running
+        if (!FocusState.timerInterval) {
+            FocusState.timerInterval = setInterval(timerTick, 1000);
+        }
+
+        // Pre-initialize audio context for completion sound
+        try {
+            window.NotificationSounds?.init?.();
+        } catch (e) {
+            // Ignore audio init errors
+        }
+    }
+
+    syncFocusStateToStorage();
+
+    showToast(FocusState.isPaused ? 'info' : 'success',
+        FocusState.isPaused ? 'Session Paused' : 'Session Resumed',
+        FocusState.isPaused ? 'Take a moment, then continue!' : 'Let\'s keep going!');
+}
+
 function updatePauseButton() {
     const pauseBtn = document.getElementById('focus-pause-btn');
     if (pauseBtn) {
@@ -1767,6 +1825,7 @@ async function stopFocusSession() {
     if (FocusState.isStopping) return;
     FocusState.isStopping = true;
 
+    // If the overlay is open but state got out of sync, still allow user to close it.
     if (!FocusState.isActive) {
         hideFocusOverlay();
         FocusState.isStopping = false;
@@ -1788,20 +1847,28 @@ async function stopFocusSession() {
         return;
     }
 
+    // If currently in extra time, finalize without the extra and stop
+    if (FocusState.isExtraTime) {
+        closeModal('session-complete-modal');
+        await finalizeExtraTimeSession(false);
+        await endFocusMode();
+        showToast('info', 'Focus Stopped', 'Session ended. Extra time was discarded.');
+        loadFocusPage().catch(e => console.error('Failed to reload focus page:', e));
+        FocusState.isStopping = false;
+        return;
+    }
+
     // Calculate elapsed time - different for open-ended mode
     let elapsedSeconds;
     let remainingSeconds = 0;
     if (FocusState.isOpenEnded) {
-        if (typeof FocusState.startTimestamp === 'number') {
-            elapsedSeconds = Math.max(0, Math.floor((Date.now() - FocusState.startTimestamp) / 1000));
-        } else {
-            elapsedSeconds = FocusState.elapsedSeconds;
-        }
+        elapsedSeconds = FocusState.startTimestamp
+            ? Math.max(0, Math.floor((Date.now() - FocusState.startTimestamp) / 1000))
+            : FocusState.elapsedSeconds;
     } else {
         if (typeof FocusState.endTimestamp === 'number') {
-            const plannedSeconds = FocusState.selectedMinutes * 60;
             remainingSeconds = Math.max(0, Math.ceil((FocusState.endTimestamp - Date.now()) / 1000));
-            elapsedSeconds = plannedSeconds - remainingSeconds;
+            elapsedSeconds = (FocusState.selectedMinutes * 60) - remainingSeconds;
         } else {
             remainingSeconds = typeof FocusState.remainingSeconds === 'number' ? FocusState.remainingSeconds : 0;
             elapsedSeconds = (FocusState.selectedMinutes * 60) - remainingSeconds;
@@ -1833,7 +1900,12 @@ async function stopFocusSession() {
         countPomodoro = opts.countPomodoro;
     } else if (elapsedMinutes >= 5) {
         // Fallback confirmation for other cases where meaningful progress exists.
-        if (!confirm(`You've focused for ${elapsedMinutes} minutes. End session now?`)) {
+        const ok = await confirmDialog(`You've focused for ${elapsedMinutes} minutes. End session now?`, {
+            title: 'End Session?',
+            confirmText: 'End',
+            cancelText: 'Keep Going'
+        });
+        if (!ok) {
             FocusState.isStopping = false;
             return;
         }
@@ -1892,27 +1964,47 @@ function promptEndEarlyPomodoroOptions({ elapsedMinutes, remainingMinutes, taskT
         modal.className = 'modal active';
         modal.innerHTML = `
             <div class="modal-backdrop" data-action="cancel-end-early"></div>
-            <div class="modal-content" style="max-width: 480px; padding: 24px;">
-                <h3 style="margin-bottom: 0.5rem;">End session early?</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                    You’ve focused for <strong>${safeElapsed} minute${safeElapsed === 1 ? '' : 's'}</strong> on ${title}.<br>
-                    <span style="font-size: 0.9rem;">${safeRemaining} minute${safeRemaining === 1 ? '' : 's'} remaining.</span>
-                </p>
-
-                <div style="display: grid; gap: 1rem; margin-bottom: 1.5rem;">
-                    <label style="display:flex; gap:0.8rem; align-items:center; cursor:pointer;">
-                        <input type="checkbox" id="end-early-add-time" checked />
-                        <span>Add the time I spent to today’s focus time</span>
-                    </label>
-                    <label style="display:flex; gap:0.8rem; align-items:center; cursor:pointer;">
-                        <input type="checkbox" id="end-early-count-pomo" />
-                        <span>Count this Pomodoro as completed</span>
-                    </label>
+            <div class="modal-content" style="max-width: 420px; padding: 0; overflow: hidden; border-radius: 16px;">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 20px 24px; color: white;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-stop-circle" style="font-size: 1.25rem;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">End Session Early?</h3>
+                            <p style="margin: 4px 0 0 0; font-size: 0.85rem; opacity: 0.9;">${safeRemaining} minute${safeRemaining === 1 ? '' : 's'} remaining</p>
+                        </div>
+                    </div>
                 </div>
+                
+                <!-- Body -->
+                <div style="padding: 20px 24px;">
+                    <p style="color: var(--text-secondary); margin: 0 0 20px 0; font-size: 0.95rem; line-height: 1.5;">
+                        You've focused for <strong style="color: var(--text-primary);">${safeElapsed} minute${safeElapsed === 1 ? '' : 's'}</strong> on ${title}.
+                    </p>
 
-                <div style="display:flex; gap: 0.75rem; justify-content:flex-end;">
-                    <button class="btn-secondary" data-action="cancel-end-early">Cancel</button>
-                    <button class="btn-primary" data-action="confirm-end-early">End Session</button>
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+                        <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-secondary); border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
+                            <input type="checkbox" id="end-early-add-time" checked style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;" />
+                            <div>
+                                <span style="font-weight: 500; color: var(--text-primary); font-size: 0.9rem;">Add time to today's focus</span>
+                                <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-tertiary);">Include ${safeElapsed} min in your daily stats</p>
+                            </div>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-secondary); border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border-color);">
+                            <input type="checkbox" id="end-early-count-pomo" style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;" />
+                            <div>
+                                <span style="font-weight: 500; color: var(--text-primary); font-size: 0.9rem;">Count as completed</span>
+                                <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-tertiary);">Mark this Pomodoro as done</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button class="btn-secondary" data-action="cancel-end-early" style="padding: 10px 20px; border-radius: 8px; font-weight: 500;">Cancel</button>
+                        <button data-action="confirm-end-early" style="padding: 10px 20px; border-radius: 8px; font-weight: 500; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border: none; cursor: pointer; transition: all 0.2s;">End Session</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -1941,34 +2033,154 @@ function promptEndEarlyPomodoroOptions({ elapsedMinutes, remainingMinutes, taskT
     });
 }
 
-window.openFocusDurationForTask = function openFocusDurationForTask(taskId, taskTitle) {
-    FocusState.pendingLinkedTaskId = taskId;
-    FocusState.pendingLinkedTaskTitle = taskTitle;
 
-    const taskSelect = document.getElementById('focus-task-select');
-    if (taskSelect) {
-        const option = taskSelect.querySelector(`option[value="${taskId}"]`);
-        if (option) taskSelect.value = taskId;
+// ============================================================================
+// EXTRA TIME MODE
+// ============================================================================
+/**
+ * Called when a countdown session reaches 0. Instead of ending immediately,
+ * switches to "extra time" mode — the timer counts UP while showing the user
+ * completion UI. The user can later choose to add or discard the extra time.
+ */
+function enterExtraTimeMode() {
+    // Don't enter extra time if already in extra time or during a break
+    if (FocusState.isExtraTime || FocusState.isBreak) {
+        completeFocusSession();
+        return;
     }
 
-    const customMinutesInput = document.getElementById('custom-focus-minutes');
-    if (customMinutesInput && FocusState.selectedMinutes) {
-        customMinutesInput.value = String(FocusState.selectedMinutes);
+    FocusState.isExtraTime = true;
+    FocusState.extraTimeSeconds = 0;
+    FocusState.remainingSeconds = 0;
+
+    // Ensure audio context is ready
+    try { window.NotificationSounds?.init?.(); } catch (e) {}
+
+    // Play completion sound
+    playSound('complete');
+
+    // Vibrate if supported
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
     }
 
-    if (typeof openModal === 'function') {
-        openModal('custom-timer-modal');
+    // Toast & notification
+    const boredomLevel = FocusState.currentSession?.boredomLevel;
+    const moodNudge = (Number(boredomLevel) >= 4)
+        ? ' You finished even while bored — that\u2019s discipline.'
+        : (Number(boredomLevel) <= 2 ? ' Nice — keep that rhythm going.' : ' Keep stacking wins.');
+
+    showToast('success', '\uD83C\uDF89 Session Complete!', `Great job! You focused for ${FocusState.selectedMinutes} minutes. Extra time is counting...`);
+    showNotification('\uD83C\uDF89 Session Complete!', `Great job! You focused for ${FocusState.selectedMinutes} minutes.${moodNudge}`);
+
+    // Update display to show +00:00
+    updateTimerDisplay();
+
+    // Determine break type for the modal
+    const pendingPomodoros = (FocusState.completedPomodoros || 0) + 1;
+    const isLongBreak = pendingPomodoros % FocusState.settings.longBreakInterval === 0;
+    const breakDurationSelect = document.getElementById('break-duration');
+    const userBreakDuration = breakDurationSelect ? parseInt(breakDurationSelect.value) : null;
+    const breakMinutes = isLongBreak ?
+        FocusState.settings.longBreakMinutes :
+        (userBreakDuration || FocusState.settings.shortBreakMinutes);
+
+    // Show the completion modal (with extra time banner)
+    // Auto-start is disabled during extra time so user can decide
+    showSessionCompleteModal(breakMinutes, isLongBreak, {
+        autoStartBreak: false
+    });
+
+    // Timer keeps running — timerTick() handles extra time counting
+}
+
+/**
+ * Finalizes the session after extra time, saving stats with or without extra time.
+ * @param {boolean} addExtraTime - Whether to include extra time in stats
+ */
+async function finalizeExtraTimeSession(addExtraTime) {
+    // Prevent double-finalization
+    if (FocusState._completing) return;
+    FocusState._completing = true;
+
+    // Stop the timer
+    clearInterval(FocusState.timerInterval);
+    FocusState.timerInterval = null;
+
+    // Prevent the background completion alarm from double-saving
+    try {
+        FocusState.isPaused = true;
+        syncFocusStateToStorage();
+        chrome.runtime?.sendMessage?.({ action: 'FOCUS_STOP' }, () => void 0);
+    } catch (e) {}
+
+    const extraMinutes = Math.floor(FocusState.extraTimeSeconds / 60);
+    const totalMinutes = addExtraTime
+        ? FocusState.selectedMinutes + extraMinutes
+        : FocusState.selectedMinutes;
+
+    // Save completed session
+    if (FocusState.currentSession) {
+        FocusState.currentSession.status = 'completed';
+        FocusState.currentSession.endTime = new Date().toISOString();
+        FocusState.currentSession.actualDurationMinutes = totalMinutes;
+        if (addExtraTime && extraMinutes > 0) {
+            FocusState.currentSession.extraTimeMinutes = extraMinutes;
+        }
+
+        await ProductivityData.DataStore.saveFocusSession(FocusState.currentSession);
+
+        // Update stats
+        await updateFocusStats_Internal(totalMinutes, true);
+
+        // Check for achievements
+        await checkFocusAchievements();
+
+        // Record progress for challenges
+        if (window.ChallengeManager) {
+            window.ChallengeManager.recordProgress('focus_sessions', 1, { duration: totalMinutes });
+            window.ChallengeManager.recordProgress('focus_time', totalMinutes);
+        }
     }
-};
+
+    FocusState.completedPomodoros++;
+
+    // Award XP via motivation system
+    if (window.MotivationSystem?.onFocusSessionComplete) {
+        window.MotivationSystem.onFocusSessionComplete(totalMinutes);
+    }
+
+    // Reset extra time state
+    FocusState.isExtraTime = false;
+    FocusState.extraTimeSeconds = 0;
+    FocusState._completing = false;
+}
 
 
 async function completeFocusSession() {
     // Re-entry guard: prevent being called multiple times
     if (FocusState._completing) return;
+
+    // If we're in extra time mode, finalize without extra time
+    if (FocusState.isExtraTime) {
+        await finalizeExtraTimeSession(false);
+        return;
+    }
+
     FocusState._completing = true;
 
     clearInterval(FocusState.timerInterval);
     FocusState.timerInterval = null;
+
+    // Prevent the background completion alarm from double-saving this same session.
+    // If this page reaches completion, it will do the persistence work itself.
+    try {
+        FocusState.isPaused = true;
+        syncFocusStateToStorage();
+        chrome.runtime?.sendMessage?.({ action: 'FOCUS_STOP' }, () => void 0);
+    } catch (e) {
+        // Ignore cross-context errors
+    }
 
     // Ensure audio context is ready (may have been suspended during pause)
     try {
@@ -2013,18 +2225,12 @@ async function completeFocusSession() {
         window.MotivationSystem.onFocusSessionComplete(FocusState.selectedMinutes);
     }
 
-    // Show prominent in-app notification (appears above focus overlay)
-    showFocusCompleteNotification(
-        'Session Complete!',
-        `Great job! You focused for ${FocusState.selectedMinutes} minutes. Time for a break!`
-    );
-
-    // Also show toast notification for visibility
     const boredomLevel = FocusState.currentSession?.boredomLevel;
     const moodNudge = (Number(boredomLevel) >= 4)
         ? ' You finished even while bored — that’s discipline.'
         : (Number(boredomLevel) <= 2 ? ' Nice — keep that rhythm going.' : ' Keep stacking wins.');
 
+    // Unified toast notification (single style)
     showToast('success', '🎉 Session Complete!', `Great job! You focused for ${FocusState.selectedMinutes} minutes.${moodNudge}`);
 
     // Also try desktop notification
@@ -2053,46 +2259,6 @@ async function completeFocusSession() {
     FocusState._completing = false;
 }
 
-function showBreakTransition(breakMinutes, isLongBreak) {
-    // Immediately switch to break mode in state so timers remain consistent.
-    FocusState.isBreak = true;
-    FocusState.isPaused = true;
-    FocusState.isOpenEnded = false;
-    FocusState.remainingSeconds = breakMinutes * 60;
-    FocusState.selectedMinutes = breakMinutes;
-    FocusState.startTimestamp = Date.now();
-    FocusState.endTimestamp = FocusState.startTimestamp + (breakMinutes * 60 * 1000);
-    FocusState.pausedRemainingSeconds = FocusState.remainingSeconds;
-    FocusState.pausedElapsedSeconds = null;
-
-    // Sync immediately so UI/state stay aligned.
-    syncFocusStateToStorage();
-
-    // Update overlay for break mode
-    const overlay = document.getElementById('focus-overlay');
-    overlay?.classList.add('break-mode');
-
-    const timerDisplay = document.getElementById('focus-time');
-    if (timerDisplay) {
-        timerDisplay.innerHTML = '🎉';
-    }
-
-    const taskName = document.getElementById('focus-task-name');
-    if (taskName) {
-        taskName.textContent = isLongBreak ? 'Long Break Time!' : 'Short Break Time!';
-    }
-
-    const quote = document.getElementById('focus-quote');
-    if (quote) {
-        quote.innerHTML = `<span class="quote-text">Take a ${breakMinutes}-minute break. You've earned it!</span>`;
-    }
-
-    // Auto-start break after 3 seconds
-    setTimeout(() => {
-        startBreak(breakMinutes);
-    }, 3000);
-}
-
 function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
     // Hide focus overlay
     hideFocusOverlay();
@@ -2103,6 +2269,9 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
 
     const sessionsToday = FocusState.completedPomodoros || 0;
     const sessionsTodayLabel = `${sessionsToday} session${sessionsToday === 1 ? '' : 's'} completed today`;
+
+    // Check if extra time is running
+    const hasExtraTime = FocusState.isExtraTime;
 
     // Show completion modal with options
     const modal = createModal('session-complete-modal', `
@@ -2117,7 +2286,24 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
 
             <div class="pomodoro-count">${sessionsTodayLabel}</div>
 
-            ${autoStartBreak ? `
+            ${hasExtraTime ? `
+                <div class="extra-time-banner">
+                    <div class="extra-time-info">
+                        <i class="fas fa-stopwatch"></i>
+                        <span>Extra time: <strong data-extra-time-counter>+00:00</strong></span>
+                    </div>
+                    <div class="extra-time-actions">
+                        <button class="btn-extra-add" data-action="add-extra-time" title="Add extra time to your stats">
+                            <i class="fas fa-plus-circle"></i> Add to Stats
+                        </button>
+                        <button class="btn-extra-discard" data-action="discard-extra-time" title="Discard extra time">
+                            <i class="fas fa-times"></i> Discard
+                        </button>
+                    </div>
+                </div>
+            ` : ''}
+
+            ${autoStartBreak && !hasExtraTime ? `
                 <div class="pomodoro-count" style="margin-top: 8px; opacity: 0.9;">
                     Auto-starting break in <strong><span data-break-countdown>${autoStartDelaySeconds}</span>s</strong>
                 </div>
@@ -2151,7 +2337,18 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
         }
     }
 
-    if (autoStartBreak) {
+    // Helper: finalize session (save stats) then do action
+    async function finalizeAndThen(action, addExtraTime = false) {
+        clearAutoStart();
+        if (FocusState.isExtraTime) {
+            await finalizeExtraTimeSession(addExtraTime);
+        }
+        closeModal('session-complete-modal');
+        if (action) action();
+    }
+
+    // Auto-start break countdown (only if not in extra time mode)
+    if (autoStartBreak && !hasExtraTime) {
         const countdownEl = modal.querySelector('[data-break-countdown]');
         if (countdownEl) {
             let remaining = autoStartDelaySeconds;
@@ -2175,24 +2372,50 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
         }, autoStartDelayMs);
     }
 
-    // Setup listeners
-    modal.querySelector('[data-action="take-break"]')?.addEventListener('click', (e) => {
-        clearAutoStart();
-        const minutes = parseInt(e.currentTarget?.dataset?.minutes || breakMinutes, 10);
-        startBreak(minutes);
-        closeModal('session-complete-modal');
-    });
-
-    modal.querySelector('[data-action="start-another"]')?.addEventListener('click', () => {
-        clearAutoStart();
-        startFocusSession();
-        closeModal('session-complete-modal');
-    });
-
-    modal.querySelector('[data-action="done-session"]')?.addEventListener('click', () => {
-        clearAutoStart();
-        closeModal('session-complete-modal');
+    // Extra time button handlers
+    modal.querySelector('[data-action="add-extra-time"]')?.addEventListener('click', async () => {
+        const extraMins = Math.floor(FocusState.extraTimeSeconds / 60);
+        await finalizeAndThen(null, true);
+        showToast('success', '⏱️ Extra Time Added', `${extraMins} extra minute${extraMins === 1 ? '' : 's'} added to your stats.`);
         loadFocusPage();
+    });
+
+    modal.querySelector('[data-action="discard-extra-time"]')?.addEventListener('click', async () => {
+        await finalizeAndThen(null, false);
+        showToast('info', '⏱️ Extra Time Discarded', 'Only the original session time was saved.');
+        loadFocusPage();
+    });
+
+    // Main action handlers
+    modal.querySelector('[data-action="take-break"]')?.addEventListener('click', async (e) => {
+        const minutes = parseInt(e.currentTarget?.dataset?.minutes || breakMinutes, 10);
+        if (hasExtraTime) {
+            await finalizeAndThen(() => startBreak(minutes), false);
+        } else {
+            clearAutoStart();
+            startBreak(minutes);
+            closeModal('session-complete-modal');
+        }
+    });
+
+    modal.querySelector('[data-action="start-another"]')?.addEventListener('click', async () => {
+        if (hasExtraTime) {
+            await finalizeAndThen(() => startFocusSession(), false);
+        } else {
+            clearAutoStart();
+            startFocusSession();
+            closeModal('session-complete-modal');
+        }
+    });
+
+    modal.querySelector('[data-action="done-session"]')?.addEventListener('click', async () => {
+        if (hasExtraTime) {
+            await finalizeAndThen(() => loadFocusPage(), false);
+        } else {
+            clearAutoStart();
+            closeModal('session-complete-modal');
+            loadFocusPage();
+        }
     });
 
     openModal('session-complete-modal');
@@ -2271,6 +2494,7 @@ async function completeBreak() {
 
     // Auto-start next session or show options
     if (FocusState.settings.autoStartNextSession) {
+        // Use last chosen duration if available.
         FocusState._completingBreak = false;
         chrome.storage.local.get(['lastFocusDuration'], (result) => {
             const duration = result.lastFocusDuration || FocusState.selectedMinutes || 25;
@@ -2331,6 +2555,8 @@ async function endFocusMode() {
     FocusState.isPaused = false;
     FocusState.isBreak = false;
     FocusState.isOpenEnded = false;
+    FocusState.isExtraTime = false;
+    FocusState.extraTimeSeconds = 0;
     FocusState.elapsedSeconds = 0;
     FocusState.remainingSeconds = 0;
     FocusState.startTimestamp = null;
@@ -2338,8 +2564,6 @@ async function endFocusMode() {
     FocusState.pausedRemainingSeconds = null;
     FocusState.pausedElapsedSeconds = null;
     FocusState.currentSession = null;
-    FocusState._completing = false;
-    FocusState._completingBreak = false;
 
     // Clear focus state from storage so popup knows session ended
     chrome.storage.local.remove(['focusState', 'focusSession']);
@@ -2454,6 +2678,25 @@ function setAmbientVolume(volume) {
 function playSound(type) {
     if (!FocusState.settings.soundEnabled) return;
 
+    // Prefer the shared NotificationSounds system (it reuses a single
+    // AudioContext and attempts resume, which is more reliable than creating
+    // a new context at the exact moment the timer ends).
+    try {
+        if (window.NotificationSounds && typeof window.NotificationSounds.play === 'function') {
+            const map = {
+                complete: 'focusEnd',
+                'break-start': 'break',
+                'break-end': 'break',
+                warning: 'warning',
+                tick: 'ping'
+            };
+            window.NotificationSounds.play(map[type] || 'default');
+            return;
+        }
+    } catch (e) {
+        // Fall through to tone generator
+    }
+
     const sounds = {
         'complete': [523.25, 659.25, 783.99], // C5, E5, G5 - triumphant chord
         'break-start': [440, 554.37], // A4, C#5
@@ -2495,150 +2738,29 @@ function playSound(type) {
 function showNotification(title, body) {
     if (!FocusState.settings.notificationsEnabled) return;
 
-    // Dedupe/throttle to prevent notification loops from spamming the OS.
-    // (We still allow different notifications through.)
-    try {
-        const now = Date.now();
-        const key = `${String(title || '')}\n${String(body || '')}`;
-        const lastAt = FocusState._lastNotificationAtMs || 0;
-        const lastKey = FocusState._lastNotificationKey || '';
-        const throttleMs = 4000;
-        if (key === lastKey && (now - lastAt) < throttleMs) {
-            return;
-        }
-        FocusState._lastNotificationAtMs = now;
-        FocusState._lastNotificationKey = key;
-    } catch (_) {
-        // ignore
-    }
-
-    const opts = {
-        type: 'basic',
-        iconUrl: chrome?.runtime?.getURL ? chrome.runtime.getURL('icons/icon48.png') : 'icons/icon48.png',
-        title: title,
-        message: body,
-        priority: 2,
-        requireInteraction: false
-    };
-
-    // Try chrome.notifications first (works better in extension context / our desktop shim)
+    // Try chrome.notifications first (works better in extension context)
     if (chrome?.notifications?.create) {
-        // Use a stable id so repeats replace instead of stacking.
-        const id = `focus_${String(title || 'notif').toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`;
-        Promise.resolve(chrome.notifications.create(id, opts)).catch(() => {
+        try {
+            const notificationId = `focus-${Date.now()}`;
+            chrome.notifications.create(notificationId, {
+                type: 'basic',
+                iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+                title: title,
+                message: body,
+                priority: 2,
+                requireInteraction: false
+            }, () => {
+                // If the Chrome notifications API fails, fall back to Web Notifications
+                if (chrome.runtime?.lastError) {
+                    showWebNotification(title, body);
+                }
+            });
+        } catch (e) {
             showWebNotification(title, body);
-        });
-        return;
-    }
-
-    showWebNotification(title, body);
-}
-
-/**
- * Show a forced notification for focus session completion
- * This appears ON TOP of everything including the focus overlay
- */
-function showFocusCompleteNotification(title, message) {
-    // Remove any existing notification
-    const existingNotif = document.getElementById('focus-complete-notification');
-    if (existingNotif) existingNotif.remove();
-
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.id = 'focus-complete-notification';
-    notification.innerHTML = `
-        <div class="focus-complete-icon">🎉</div>
-        <div class="focus-complete-content">
-            <div class="focus-complete-title">${title}</div>
-            <div class="focus-complete-message">${message}</div>
-        </div>
-        <button class="focus-complete-close">&times;</button>
-    `;
-
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 2147483647;
-        background: linear-gradient(135deg, #10b981, #059669);
-        color: white;
-        border-radius: 16px;
-        padding: 16px 20px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow: 0 10px 40px rgba(16, 185, 129, 0.4), 0 0 0 4px rgba(16, 185, 129, 0.2);
-        max-width: 400px;
-        animation: focusNotifSlideIn 0.5s ease-out;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    `;
-
-    // Add animation keyframes if not exists
-    if (!document.getElementById('focus-notif-styles')) {
-        const style = document.createElement('style');
-        style.id = 'focus-notif-styles';
-        style.textContent = `
-            @keyframes focusNotifSlideIn {
-                from { transform: translateX(120%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            @keyframes focusNotifSlideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(120%); opacity: 0; }
-            }
-            #focus-complete-notification .focus-complete-icon {
-                font-size: 2rem;
-                flex-shrink: 0;
-            }
-            #focus-complete-notification .focus-complete-content {
-                flex: 1;
-            }
-            #focus-complete-notification .focus-complete-title {
-                font-weight: 700;
-                font-size: 1.1rem;
-                margin-bottom: 4px;
-            }
-            #focus-complete-notification .focus-complete-message {
-                font-size: 0.9rem;
-                opacity: 0.9;
-            }
-            #focus-complete-notification .focus-complete-close {
-                background: rgba(255,255,255,0.2);
-                border: none;
-                color: white;
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 1.2rem;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                transition: background 0.2s;
-            }
-            #focus-complete-notification .focus-complete-close:hover {
-                background: rgba(255,255,255,0.3);
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    document.body.appendChild(notification);
-
-    // Close button handler
-    const closeBtn = notification.querySelector('.focus-complete-close');
-    closeBtn.addEventListener('click', () => {
-        notification.style.animation = 'focusNotifSlideOut 0.3s ease-in forwards';
-        setTimeout(() => notification.remove(), 300);
-    });
-
-    // Auto-dismiss after 8 seconds
-    setTimeout(() => {
-        if (document.body.contains(notification)) {
-            notification.style.animation = 'focusNotifSlideOut 0.3s ease-in forwards';
-            setTimeout(() => notification.remove(), 300);
         }
-    }, 8000);
+    } else {
+        showWebNotification(title, body);
+    }
 }
 
 function showWebNotification(title, body) {
@@ -2646,7 +2768,7 @@ function showWebNotification(title, body) {
     if (Notification.permission === 'granted') {
         const iconUrl = (typeof chrome !== 'undefined' && chrome?.runtime?.getURL)
             ? chrome.runtime.getURL('icons/icon48.png')
-            : 'icons/icon48.png';
+            : '../icons/icon48.png';
         new Notification(title, {
             body,
             icon: iconUrl,
@@ -2778,9 +2900,13 @@ function handleFocusKeypress(e) {
             break;
         case 'Escape':
             e.preventDefault();
-            if (confirm('End focus session?')) {
-                stopFocusSession();
-            }
+            confirmDialog('End focus session?', {
+                title: 'End Focus Session',
+                confirmText: 'End',
+                cancelText: 'Cancel'
+            }).then((ok) => {
+                if (ok) stopFocusSession();
+            });
             break;
         case 'KeyM':
             e.preventDefault();
@@ -2844,6 +2970,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const timerEl = document.getElementById('focus-time');
     if (timerEl && !FocusState.isActive) {
         timerEl.textContent = `${String(FocusState.selectedMinutes).padStart(2, '0')}:00`;
+    }
+
+    const customInput = document.getElementById('custom-focus-minutes');
+    if (customInput) {
+        customInput.value = String(FocusState.selectedMinutes || 25);
     }
 
     // Timer preset buttons (both old and new design)
@@ -3194,10 +3325,21 @@ async function saveOverlaySettings() {
 window.loadFocusPage = loadFocusPage;
 window.startFocusSession = startFocusSession;
 window.pauseFocusSession = pauseFocusSession;
-window.resumeFocusSession = typeof resumeFocusSession !== 'undefined' ? resumeFocusSession : pauseFocusSession;
+window.resumeFocusSession = resumeFocusSession;
 window.stopFocusSession = stopFocusSession;
 window.skipBreak = skipBreak;
 window.checkAutoStartFromTask = checkAutoStartFromTask;
+window.openFocusDurationForTask = (taskId, taskTitle) => {
+    FocusState.pendingLinkedTaskId = taskId;
+    FocusState.pendingLinkedTaskTitle = taskTitle;
+
+    const input = document.getElementById('custom-focus-minutes');
+    if (input) input.value = String(FocusState.selectedMinutes || 25);
+
+    if (typeof openModal === 'function') {
+        openModal('custom-timer-modal');
+    }
+};
 window.openFocusSettings = typeof openFocusSettings !== 'undefined' ? openFocusSettings : function () { };
 window.closeFocusSettings = typeof closeFocusSettings !== 'undefined' ? closeFocusSettings : function () { };
 window.saveFocusSettings = typeof saveFocusSettings !== 'undefined' ? saveFocusSettings : function () { };
@@ -3233,99 +3375,111 @@ window.setAmbientVolume = setAmbientVolume;
 // ============================================================================
 // POPUP MENU MESSAGE HANDLING
 // ============================================================================
-if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
-    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        if (request.action === 'FOCUS_PAUSE_TOGGLE') {
-            if (FocusState.isActive) {
-                if (request.isPaused) {
-                    pauseFocusSession();
-                } else {
-                    resumeFocusSession();
-                }
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'FOCUS_PAUSE_TOGGLE') {
+        if (FocusState.isActive) {
+            if (request.isPaused) {
+                pauseFocusSession();
+            } else {
+                resumeFocusSession();
             }
-            sendResponse({ success: true });
-            return true;
         }
+        sendResponse({ success: true });
+        return true;
+    }
 
-        if (request.action === 'FOCUS_STOP') {
-            if (FocusState.isActive) {
-                stopFocusSession();
+    if (request.action === 'FOCUS_STOP') {
+        if (FocusState.isActive) {
+            stopFocusSession();
+        }
+        sendResponse({ success: true });
+        return true;
+    }
+
+    if (request.action === 'FOCUS_STARTED') {
+        // Popup started a quick focus - sync the hub UI to show the active session
+        if (!FocusState.isActive && (request.isOpenEnded || request.duration)) {
+            // Update local state to reflect the popup-started session
+            FocusState.isActive = true;
+            FocusState.isPaused = false;
+            FocusState.selectedMinutes = request.duration;
+            FocusState.remainingSeconds = request.duration * 60;
+
+            FocusState.isOpenEnded = !!request.isOpenEnded;
+            FocusState.startTimestamp = Date.now();
+            FocusState.endTimestamp = FocusState.isOpenEnded ? null : (FocusState.startTimestamp + (request.duration * 60 * 1000));
+            FocusState.pausedRemainingSeconds = null;
+            FocusState.pausedElapsedSeconds = null;
+
+            if (request.taskTitle) {
+                FocusState.currentSession = {
+                    linkedTaskTitle: request.taskTitle,
+                    linkedTaskId: request.taskId
+                };
             }
-            sendResponse({ success: true });
-            return true;
-        }
 
-        if (request.action === 'FOCUS_STARTED') {
-            // Popup started a quick focus - sync the hub UI to show the active session
-            if (!FocusState.isActive && request.duration) {
-                // Update local state to reflect the popup-started session
-                FocusState.isActive = true;
-                FocusState.isPaused = false;
-                FocusState.selectedMinutes = request.duration;
-                FocusState.remainingSeconds = request.duration * 60;
+            // Update UI to show active session
+            showFocusOverlay();
+            updateTimerDisplay();
 
-                if (request.taskTitle) {
-                    FocusState.currentSession = {
-                        linkedTaskTitle: request.taskTitle,
-                        linkedTaskId: request.taskId
-                    };
-                }
-
-                // Update UI to show active session
-                showFocusOverlay();
-                updateTimerDisplay();
-
-                // Start timer interval if not already running
-                if (!FocusState.timerInterval) {
-                    FocusState.timerInterval = setInterval(timerTick, 1000);
-                }
+            // Start timer interval if not already running
+            if (!FocusState.timerInterval) {
+                FocusState.timerInterval = setInterval(timerTick, 1000);
             }
-            sendResponse({ success: true });
-            return true;
         }
-    });
-}
+        sendResponse({ success: true });
+        return true;
+    }
+});
 
 // Listen for storage changes to sync focus state from popup
-if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace !== 'local') return;
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace !== 'local') return;
 
-        // If focusState changed and we're not the one who changed it
-        if (changes.focusState) {
-            const newState = changes.focusState.newValue;
+    // If focusState changed and we're not the one who changed it
+    if (changes.focusState) {
+        const newState = changes.focusState.newValue;
 
-            // If a session was started elsewhere and we're not active
-            if (newState && newState.isActive && !FocusState.isActive) {
-                FocusState.isActive = true;
-                FocusState.isPaused = newState.isPaused || false;
-                FocusState.selectedMinutes = newState.selectedMinutes;
-                FocusState.remainingSeconds = newState.remainingSeconds;
+        // If a session was started elsewhere and we're not active
+        if (newState && newState.isActive && !FocusState.isActive) {
+            FocusState.isActive = true;
+            FocusState.isPaused = newState.isPaused || false;
+            FocusState.selectedMinutes = newState.selectedMinutes;
+            FocusState.remainingSeconds = newState.remainingSeconds;
+            FocusState.isBreak = newState.isBreak || false;
+            FocusState.isOpenEnded = newState.isOpenEnded || false;
+            FocusState.startTimestamp = newState.startTimestamp || null;
+            FocusState.endTimestamp = newState.endTimestamp || null;
+            FocusState.pausedRemainingSeconds = newState.pausedRemainingSeconds ?? null;
+            FocusState.pausedElapsedSeconds = newState.pausedElapsedSeconds ?? null;
 
-                showFocusOverlay();
-                updateTimerDisplay();
-
-                if (!FocusState.timerInterval) {
-                    FocusState.timerInterval = setInterval(timerTick, 1000);
-                }
+            if (!FocusState.isOpenEnded && !FocusState.isPaused && typeof FocusState.endTimestamp !== 'number') {
+                FocusState.endTimestamp = Date.now() + ((newState.remainingSeconds || 0) * 1000);
             }
-            // If session was stopped elsewhere
-            else if (!newState && FocusState.isActive) {
-                hideFocusOverlay();
-                if (FocusState.timerInterval) {
-                    clearInterval(FocusState.timerInterval);
-                    FocusState.timerInterval = null;
-                }
-                FocusState.isActive = false;
-            }
-            // If pause state changed
-            else if (newState && newState.isPaused !== FocusState.isPaused) {
-                FocusState.isPaused = newState.isPaused;
-                updatePauseButton();
+
+            showFocusOverlay();
+            updateTimerDisplay();
+
+            if (!FocusState.timerInterval) {
+                FocusState.timerInterval = setInterval(timerTick, 1000);
             }
         }
-    });
-}
+        // If session was stopped elsewhere
+        else if (!newState && FocusState.isActive) {
+            hideFocusOverlay();
+            if (FocusState.timerInterval) {
+                clearInterval(FocusState.timerInterval);
+                FocusState.timerInterval = null;
+            }
+            FocusState.isActive = false;
+        }
+        // If pause state changed
+        else if (newState && newState.isPaused !== FocusState.isPaused) {
+            FocusState.isPaused = newState.isPaused;
+            updatePauseButton();
+        }
+    }
+});
 
 // ============================================================================
 // PAGE CLEANUP - Prevent memory leaks
