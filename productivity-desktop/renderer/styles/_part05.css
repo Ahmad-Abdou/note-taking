@@ -15,6 +15,33 @@
     color: var(--text-muted);
 }
 
+/* Inline clickable links in task titles */
+a.task-inline-link,
+.task-title a.task-inline-link,
+.grid-card-title a.task-inline-link,
+.card-title a.task-inline-link,
+.task-detail-title a.task-inline-link {
+    color: var(--accent-color, #6c8aff);
+    text-decoration: underline;
+    text-decoration-color: rgba(108, 138, 255, 0.4);
+    cursor: pointer;
+    word-break: break-all;
+    transition: color 0.2s, text-decoration-color 0.2s;
+}
+
+a.task-inline-link:hover,
+.task-title a.task-inline-link:hover,
+.grid-card-title a.task-inline-link:hover,
+.card-title a.task-inline-link:hover,
+.task-detail-title a.task-inline-link:hover {
+    color: var(--accent-hover, #8da6ff);
+    text-decoration-color: var(--accent-hover, #8da6ff);
+}
+
+.task-item.completed .task-title a.task-inline-link {
+    opacity: 0.6;
+}
+
 .task-recurring-icon,
 .task-goal-icon {
     font-size: 0.75rem;

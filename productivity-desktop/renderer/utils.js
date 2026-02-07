@@ -22,6 +22,21 @@ function escapeHtml(text) {
 }
 
 /**
+ * Escape HTML and convert URLs in text to clickable links
+ */
+function linkifyText(text) {
+    if (!text) return '';
+    const escaped = escapeHtml(text);
+    return escaped.replace(
+        /(?:https?:\/\/|www\.)[^\s<>&"']+/gi,
+        function(url) {
+            const href = url.startsWith('www.') ? 'https://' + url : url;
+            return '<a href="' + href + '" class="task-inline-link" target="_blank" rel="noopener noreferrer" title="' + url + '">' + url + '</a>';
+        }
+    );
+}
+
+/**
  * Truncate text to specified length with ellipsis
  */
 function truncate(str, length = 50) {
@@ -494,6 +509,7 @@ function setLocalStorage(key, value) {
 window.Utils = {
     // String
     escapeHtml,
+    linkifyText,
     truncate,
     capitalizeFirst,
 
@@ -532,6 +548,7 @@ window.Utils = {
 
 // Also expose common functions globally for backward compatibility
 window.escapeHtml = escapeHtml;
+window.linkifyText = linkifyText;
 window.truncate = truncate;
 window.capitalizeFirst = capitalizeFirst;
 window.formatTime = formatTime;

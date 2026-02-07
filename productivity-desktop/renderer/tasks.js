@@ -413,6 +413,9 @@ function setupTaskEventDelegation() {
 }
 
 function handleTaskAction(e) {
+    // Let inline link clicks open the URL instead of triggering task actions
+    if (e.target.closest('a.task-inline-link')) return;
+
     const target = e.target.closest('[data-action]');
     if (!target) return;
 
@@ -634,7 +637,7 @@ function renderTaskItem(task, isOverdue = false) {
             </div>
             <div class="task-content" data-action="view-task" data-task-id="${task.id}">
                 <div class="task-title-row">
-                    <span class="task-title">${escapeHtml(task.title)}</span>
+                    <span class="task-title">${linkifyText(task.title)}</span>
                     ${task.isRecurring ? '<i class="fas fa-redo task-recurring-icon" title="Recurring task"></i>' : ''}
                     ${task.linkedGoalId ? '<i class="fas fa-bullseye task-goal-icon" title="Linked to goal"></i>' : ''}
                 </div>
@@ -792,7 +795,7 @@ function renderGridCard(task) {
                 </div>
             </div>
             
-            <h4 class="grid-card-title">${escapeHtml(task.title)}</h4>
+            <h4 class="grid-card-title">${linkifyText(task.title)}</h4>
             
             ${task.description ? `
                 <p class="grid-card-description">${escapeHtml(task.description.substring(0, 80))}${task.description.length > 80 ? '...' : ''}</p>
@@ -895,7 +898,8 @@ function setupGridCardInteractions(container) {
 
     // Card click to view
     container.querySelectorAll('.task-grid-card').forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('a.task-inline-link')) return;
             viewTask(card.dataset.taskId);
         });
     });
@@ -1093,6 +1097,7 @@ function setupBoardDragDrop() {
         card.addEventListener('click', (e) => {
             // Allow action buttons (e.g., complete/edit) to work without opening details.
             if (e.target.closest('[data-action]')) return;
+            if (e.target.closest('a.task-inline-link')) return;
             viewTask(card.dataset.taskId);
         });
     });
@@ -1132,7 +1137,7 @@ function renderBoardCard(task) {
                     <i class="fas ${categoryConfig.icon}"></i>
                 </span>
             </div>
-            <div class="card-title">${escapeHtml(task.title)}</div>
+            <div class="card-title">${linkifyText(task.title)}</div>
             ${task.description ? `
                 <div class="card-description">${escapeHtml(truncate(task.description, 60))}</div>
             ` : ''}
@@ -2276,7 +2281,7 @@ function viewTask(taskId) {
                 </button>
             </div>
             <div class="task-details-body">
-                <h3 class="task-detail-title">${escapeHtml(task.title)}</h3>
+                <h3 class="task-detail-title">${linkifyText(task.title)}</h3>
 
                 ${task.linkUrl ? `
                     <div class="task-detail-item" style="margin: 10px 0; gap: 8px;">
