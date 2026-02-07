@@ -333,6 +333,8 @@
     border-radius: 50%;
     border: 2px solid transparent;
     cursor: pointer;
+    padding: 0;
+    box-sizing: border-box;
     transition: all 0.2s;
 }
 

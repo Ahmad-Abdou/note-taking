@@ -155,7 +155,7 @@ window.updateHighlightColor = function (highlightId, newColor) {
     // Update DOM elements
     const elements = document.querySelectorAll(`[data-highlight-id="${highlightId}"]`);
     elements.forEach(el => {
-        el.style.backgroundColor = hexToRgba(newColor, 0.35);
+        el.style.backgroundColor = hexToRgba(newColor, 0.45);
     });
 
     // Save changes
@@ -588,10 +588,10 @@ function renderHighlight(highlight, isNew = false, retryCount = 0) {
             highlightEl.style.height = `${rect.height}px`;
         }
 
-        // Use semi-transparent background color for readable text
+        // Use semi-transparent background with mix-blend-mode: multiply for readable text
         // Don't use opacity on the element itself to keep delete button fully visible
         const hexColor = highlight.color || '#FFEB3B';
-        const rgbaColor = hexToRgba(hexColor, 0.35);
+        const rgbaColor = hexToRgba(hexColor, 0.45);
         highlightEl.style.backgroundColor = rgbaColor;
         if (index === 0) {
             const deleteBtn = document.createElement('div');
@@ -852,7 +852,7 @@ function showNoteDialog(highlight) {
 
             // Update DOM elements
             document.querySelectorAll(`[data-highlight-id="${highlight.id}"]`).forEach(el => {
-                el.style.backgroundColor = hexToRgba(selectedColor, 0.35);
+                el.style.backgroundColor = hexToRgba(selectedColor, 0.45);
             });
 
             if (noteText) {

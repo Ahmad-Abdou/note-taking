@@ -194,6 +194,8 @@
     border-radius: 50%;
     border: 2px solid transparent;
     cursor: pointer;
+    padding: 0;
+    box-sizing: border-box;
     transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
@@ -1152,14 +1154,13 @@
     align-items: center;
     gap: 10px;
     font-size: 0.8rem;
-    color: var(--text-primary);
-    opacity: 0.9;
+    color: var(--text-secondary);
 }
 
 .spaced-repetition-info .step-num {
     width: 20px;
     height: 20px;
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(139, 92, 246, 0.2);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1255,293 +1256,17 @@
         max-height: 100vh;
         border-radius: 0;
     }
-
+    
     .review-schedule-options {
         grid-template-columns: 1fr;
     }
-
+    
     .finish-review-footer {
         flex-wrap: wrap;
     }
-
+    
     .finish-review-footer button {
         flex: 1;
         min-width: 120px;
     }
-}
-
-/* ============================================================================
-   STUDY MATERIALS STYLES
-   ============================================================================ */
-
-.task-materials-section {
-    margin: 0 20px 12px;
-}
-
-.task-materials-section summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    background: var(--bg-secondary);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    transition: all 0.2s;
-    list-style: none;
-    position: relative;
-    padding-right: 40px;
-}
-
-.task-materials-section summary::-webkit-details-marker {
-    display: none;
-}
-
-.task-materials-section summary::after {
-    content: "\f078";
-    font-family: "Font Awesome 5 Free";
-    font-weight: 900;
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    transition: transform 0.2s, color 0.2s;
-}
-
-.task-materials-section[open] summary::after {
-    transform: translateY(-50%) rotate(180deg);
-    color: var(--text-secondary);
-}
-
-.task-materials-section summary:hover {
-    background: var(--bg-tertiary);
-}
-
-.task-materials-section[open] summary {
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.task-materials-section summary i {
-    color: #10b981;
-}
-
-.materials-count {
-    background: var(--primary);
-    color: white;
-    padding: 2px 8px;
-    border-radius: var(--radius-full);
-    font-size: 0.75rem;
-    margin-left: auto;
-}
-
-.materials-list {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-top: none;
-    padding: 8px;
-}
-
-.material-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--bg-card);
-    border-radius: var(--radius-sm);
-    margin-bottom: 6px;
-    transition: all 0.2s;
-}
-
-.material-item:last-child {
-    margin-bottom: 0;
-}
-
-.material-item:hover {
-    background: var(--bg-tertiary);
-}
-
-.material-item>i {
-    font-size: 1.1rem;
-    color: var(--primary);
-    width: 24px;
-    text-align: center;
-}
-
-.material-item .fa-file-pdf {
-    color: #ef4444;
-}
-
-.material-item .fa-file-word {
-    color: #3b82f6;
-}
-
-.material-item .fa-file-excel {
-    color: #10b981;
-}
-
-.material-item .fa-image {
-    color: #8b5cf6;
-}
-
-.material-item .fa-link {
-    color: #f59e0b;
-}
-
-.material-name {
-    flex: 1;
-    font-size: 0.9rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.material-size {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    padding: 2px 6px;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
-}
-
-.material-actions {
-    display: flex;
-    gap: 4px;
-}
-
-.material-actions .btn-icon-tiny {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-}
-
-.material-actions .btn-icon-tiny:hover {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: white;
-}
-
-.material-actions .btn-icon-tiny.danger:hover {
-    background: #ef4444;
-    border-color: #ef4444;
-    color: white;
-}
-
-.materials-add-section {
-    display: flex;
-    gap: 8px;
-    padding: 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-top: none;
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
-}
-
-.btn-add-material {
-    flex: 1;
-    padding: 10px 12px;
-    background: var(--bg-card);
-    border: 1px dashed var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
-.btn-add-material:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-    background: rgba(99, 102, 241, 0.1);
-}
-
-.material-url-form {
-    display: flex;
-    gap: 8px;
-    padding: 10px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-top: none;
-    align-items: center;
-}
-
-.material-url-form input[type="url"],
-.material-url-form input[type="text"] {
-    flex: 1;
-    padding: 8px 10px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 0.85rem;
-}
-
-.material-url-form input:focus {
-    outline: none;
-    border-color: var(--primary);
-}
-
-/* Task Materials View (in details panel) */
-.task-materials-view {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-color);
-}
-
-.task-materials-view h4 {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 12px 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.task-materials-view h4 i {
-    color: #10b981;
-}
-
-.materials-detail-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.materials-detail-list li {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-    margin-bottom: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.materials-detail-list li:hover {
-    background: var(--bg-tertiary);
-}
-
-.materials-detail-list li i {
-    font-size: 1rem;
-    color: var(--primary);
-    width: 20px;
-    text-align: center;
-}
-
-.materials-detail-list li span {
-    flex: 1;
-    font-size: 0.85rem;
-    color: var(--text-primary);
 }

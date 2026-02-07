@@ -178,6 +178,12 @@
     color: inherit;
 }
 
+/* Prevent textLayer container itself from showing selection — only spans should highlight */
+.page .textLayer::selection,
+.page .textLayer::-moz-selection {
+    background: transparent;
+}
+
 /* ========== Focus States ========== */
 :focus {
     outline: none;
@@ -834,6 +840,8 @@ body {
 .page .textLayer {
     z-index: 2 !important;
     opacity: 1 !important;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* Highlights - pointer events OFF by default to allow text selection */
@@ -848,10 +856,19 @@ body {
     white-space: pre;
     pointer-events: all;
     cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+    line-height: 1.0;
+    overflow: hidden;
 }
 
+/* Single unified selection color for text spans */
 .page .textLayer span::selection {
-    background: rgba(0, 100, 255, 0.3);
+    background: rgba(99, 102, 241, 0.3);
+}
+
+.page .textLayer span::-moz-selection {
+    background: rgba(99, 102, 241, 0.3);
 }
 
 /* ========== PDF Highlights ========== */

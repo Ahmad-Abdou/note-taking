@@ -21,9 +21,10 @@
     pointer-events: none;
     /* Allow text selection through highlights by default */
     cursor: pointer;
+    mix-blend-mode: multiply;
 }
 
-/* Highlight container - position above text layer for visibility */
+/* Highlight container - position below text layer */
 .highlight-container {
     position: absolute;
     top: 0;
@@ -31,7 +32,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 4 !important;
+    z-index: 1 !important;
     overflow: visible;
 }
 

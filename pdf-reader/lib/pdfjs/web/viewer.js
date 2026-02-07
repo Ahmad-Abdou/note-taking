@@ -728,14 +728,19 @@ async function renderPageImmediate(num) {
         const ctx = canvas.getContext('2d');
         ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-        pageDiv.appendChild(canvas);
+        // Wrap canvas in canvasWrapper for consistent z-index layering
+        const canvasWrapper = document.createElement('div');
+        canvasWrapper.className = 'canvasWrapper';
+        canvasWrapper.appendChild(canvas);
+        pageDiv.appendChild(canvasWrapper);
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-        // Add text layer
+        // Add text layer with proper --scale-factor for alignment
         const textContent = await page.getTextContent();
         const textLayerDiv = document.createElement('div');
         textLayerDiv.className = 'textLayer';
+        textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
         pageDiv.appendChild(textLayerDiv);

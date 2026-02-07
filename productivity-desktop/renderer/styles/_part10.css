@@ -423,6 +423,8 @@
     border-radius: 50%;
     border: 2px solid transparent;
     cursor: pointer;
+    padding: 0;
+    box-sizing: border-box;
     transition: all 0.2s;
 }
 
@@ -804,6 +806,46 @@
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
+}
+
+/* Dashboard Task Item Actions */
+.task-list-compact .task-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+}
+
+.task-list-compact .task-item-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.task-list-compact .task-item:hover .task-item-actions {
+    opacity: 1;
+}
+
+.task-list-compact .task-item-actions .btn-icon.tiny {
+    width: 24px;
+    height: 24px;
+    font-size: 0.7rem;
+}
+
+.task-list-compact .task-item-actions .btn-icon.highlight-green {
+    color: #10b981;
+}
+
+.task-list-compact .task-item-actions .btn-icon.highlight-green:hover {
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.task-list-compact .task-item-actions .btn-icon.danger:hover {
+    background: var(--danger-light);
+    color: var(--danger);
 }
 
 .today-tasks-quick-add {

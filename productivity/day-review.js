@@ -210,12 +210,12 @@
         clockEl.appendChild(overlay);
 
         const rect = clockEl.getBoundingClientRect();
-        const size = Math.min(rect.width || 340, rect.height || 340);
+        const size = Math.min(rect.width || 400, rect.height || 400);
         const cx = size / 2;
         const cy = size / 2;
         // Ring sits inside with room for labels
-        const outerR = (size / 2) - 50; // Leave 50px for labels outside
-        const innerR = outerR - 50;
+        const outerR = (size / 2) - 54; // Leave room for labels outside
+        const innerR = outerR - 56;
 
         const NS = 'http://www.w3.org/2000/svg';
         const svg = document.createElementNS(NS, 'svg');
@@ -274,7 +274,7 @@
             if (extraClass) dot.classList.add(extraClass);
             dot.setAttribute('cx', String(pos.x));
             dot.setAttribute('cy', String(pos.y));
-            dot.setAttribute('r', '3.6');
+            dot.setAttribute('r', '3.2');
             dot.dataset.minutes = String(minutes);
 
             const title = document.createElementNS(NS, 'title');
@@ -284,25 +284,35 @@
             svg.appendChild(dot);
         }
 
-        function addLabel({ radius, angleDeg, text, extraClass }) {
+        function setOverlayMask(outerEdge, innerEdge) {
+            const overlayR = (size - 20) / 2; // overlay has inset: 10px
+            const innerPct = ((innerEdge / overlayR) * 100).toFixed(1);
+            const outerPct = ((outerEdge / overlayR) * 100).toFixed(1);
+            const fadeIn = (parseFloat(innerPct) - 0.5).toFixed(1);
+            const fadeOut = (parseFloat(outerPct) + 0.5).toFixed(1);
+            const maskVal = `radial-gradient(circle at center, transparent 0 ${fadeIn}%, #000 ${innerPct}% ${outerPct}%, transparent ${fadeOut}% 100%)`;
+            overlay.style.webkitMask = maskVal;
+            overlay.style.mask = maskVal;
+        }
+
+        function addHTMLLabel({ radius, angleDeg, text, extraClass }) {
             const pos = polarToCartesian(cx, cy, radius, angleDeg);
-            const label = document.createElementNS(NS, 'text');
-            label.classList.add('dayreview-label');
-            if (extraClass) label.classList.add(extraClass);
-            label.setAttribute('x', String(pos.x));
-            label.setAttribute('y', String(pos.y));
-            label.setAttribute('text-anchor', 'middle');
-            label.setAttribute('dominant-baseline', 'central');
-            const isDark = document.documentElement.dataset.theme === 'dark';
-            label.style.fill = isDark ? '#e0e0ee' : '#333';
+            const pctX = (pos.x / size) * 100;
+            const pctY = (pos.y / size) * 100;
+            const label = document.createElement('div');
+            label.className = 'dayreview-hour-label' + (extraClass ? ' ' + extraClass : '');
             label.textContent = String(text);
-            svg.appendChild(label);
+            label.style.position = 'absolute';
+            label.style.left = pctX + '%';
+            label.style.top = pctY + '%';
+            label.style.transform = 'translate(-50%, -50%)';
+            clockEl.appendChild(label);
         }
 
         // 24h look: single connected donut ring with half-hour segments
         if (DayReview.clockFormat === '24') {
-            const thickness = 24;
-            const labelRadius = outerR + 20; // Outside the ring, in the reserved 50px gap
+            const thickness = 36;
+            const labelRadius = outerR + 26; // Outside the ring, in the reserved gap
 
             addRingBase(outerR, thickness);
 
@@ -314,14 +324,15 @@
                 addSegment({ radius: outerR, thickness, startAngleDeg: start, endAngleDeg: end, minutes, extraClass: null });
             }
 
-            // Hour labels outside the ring
+            // Hour labels as HTML pill elements positioned around the ring
             for (let hour24 = 0; hour24 < 24; hour24++) {
                 const angle = (hour24 / 24) * 360 - 90;
-                addLabel({
+                const cls = 'layout-24' + (hour24 % 6 === 0 ? ' every-6' : '');
+                addHTMLLabel({
                     radius: labelRadius,
                     angleDeg: angle,
                     text: String(hour24),
-                    extraClass: 'layout-24'
+                    extraClass: cls
                 });
             }
 
@@ -331,7 +342,10 @@
                 addDot({ radius: outerR, angleDeg: angle, minutes: (hour24 * 60) + 30, extraClass: null });
             }
 
+            setOverlayMask(outerR + thickness / 2, outerR - thickness / 2);
+
             clockEl.appendChild(svg);
+            drawNeedle(clockEl, svg, cx, cy, outerR);
             return;
         }
 
@@ -345,10 +359,10 @@
         clockEl.appendChild(pmLabel);
         clockEl.appendChild(amLabel);
 
-        const thicknessOuter = 22;
-        const thicknessInner = 20;
-        const amLabelRadius = innerR - thicknessInner - 12; // Labels inside AM ring (towards center)
-        const pmLabelRadius = outerR + 18; // Labels outside PM ring, in the reserved 50px gap
+        const thicknessOuter = 30;
+        const thicknessInner = 26;
+        const amLabelRadius = innerR - thicknessInner - 14; // Labels inside AM ring (towards center)
+        const pmLabelRadius = outerR + 22; // Labels outside PM ring, in the reserved gap
 
         addRingBase(outerR, thicknessOuter);
         addRingBase(innerR, thicknessInner);
@@ -368,14 +382,15 @@
             addDot({ radius: innerR, angleDeg: angle, minutes: (hour24 * 60) + 30, extraClass: 'ring-am' });
         }
 
-        // AM labels inside (towards center)
+        // AM labels inside (towards center) — HTML pill labels
         for (let h12 = 1; h12 <= 12; h12++) {
             const angle = ((h12 % 12) / 12) * 360 - 90;
-            addLabel({
+            const cls = 'ring-am' + (h12 % 3 === 0 ? ' every-6' : '');
+            addHTMLLabel({
                 radius: amLabelRadius,
                 angleDeg: angle,
                 text: String(h12),
-                extraClass: 'ring-am'
+                extraClass: cls
             });
         }
 
@@ -394,18 +409,70 @@
             addDot({ radius: outerR, angleDeg: angle, minutes: (hour24 * 60) + 30, extraClass: 'ring-pm' });
         }
 
-        // PM labels outside the ring
+        // PM labels outside the ring — HTML pill labels
         for (let h12 = 1; h12 <= 12; h12++) {
             const angle = ((h12 % 12) / 12) * 360 - 90;
-            addLabel({
+            const cls = 'ring-pm' + (h12 % 3 === 0 ? ' every-6' : '');
+            addHTMLLabel({
                 radius: pmLabelRadius,
                 angleDeg: angle,
                 text: String(h12),
-                extraClass: 'ring-pm'
+                extraClass: cls
             });
         }
 
+        setOverlayMask(outerR + thicknessOuter / 2, innerR - thicknessInner / 2);
+
         clockEl.appendChild(svg);
+
+        // Draw current-time needle (red hand from center to ring edge)
+        drawNeedle(clockEl, svg, cx, cy, outerR);
+    }
+
+    function drawNeedle(clockEl, svg, cx, cy, outerR) {
+        const NS = 'http://www.w3.org/2000/svg';
+        // Remove previous needle elements
+        svg.querySelectorAll('.dayreview-needle, .dayreview-needle-dot, .dayreview-needle-center').forEach(el => el.remove());
+
+        const now = new Date();
+        const minuteOfDay = now.getHours() * 60 + now.getMinutes();
+        const angleDeg = (minuteOfDay / MINUTES_PER_DAY) * 360 - 90;
+        const angleRad = (angleDeg * Math.PI) / 180;
+
+        const innerTip = outerR - 22; // Start slightly inside center of ring
+        const outerTip = outerR + 10; // Extend slightly past ring
+
+        const x1 = cx + innerTip * 0.25 * Math.cos(angleRad);
+        const y1 = cy + innerTip * 0.25 * Math.sin(angleRad);
+        const x2 = cx + outerTip * Math.cos(angleRad);
+        const y2 = cy + outerTip * Math.sin(angleRad);
+
+        const line = document.createElementNS(NS, 'line');
+        line.classList.add('dayreview-needle');
+        line.setAttribute('x1', String(x1));
+        line.setAttribute('y1', String(y1));
+        line.setAttribute('x2', String(x2));
+        line.setAttribute('y2', String(y2));
+        line.setAttribute('stroke-width', '2.5');
+        svg.appendChild(line);
+
+        // Dot at the tip (on the ring)
+        const tipX = cx + outerR * Math.cos(angleRad);
+        const tipY = cy + outerR * Math.sin(angleRad);
+        const dot = document.createElementNS(NS, 'circle');
+        dot.classList.add('dayreview-needle-dot');
+        dot.setAttribute('cx', String(tipX));
+        dot.setAttribute('cy', String(tipY));
+        dot.setAttribute('r', '5');
+        svg.appendChild(dot);
+
+        // Small center dot
+        const center = document.createElementNS(NS, 'circle');
+        center.classList.add('dayreview-needle-center');
+        center.setAttribute('cx', String(cx));
+        center.setAttribute('cy', String(cy));
+        center.setAttribute('r', '4');
+        svg.appendChild(center);
     }
 
     function hourCellOverlapsRange(hour, startMin, endMin) {
@@ -512,25 +579,11 @@
         }
 
         clock.querySelectorAll('.dayreview-seg').forEach((btn) => {
-            const m = parseInt(btn.dataset.minutes || '0', 10);
-            const segEnd = m + 30;
-            btn.classList.toggle('start', selection.startMin != null && m <= selection.startMin && selection.startMin < segEnd);
-            btn.classList.toggle('end', selection.endMin != null && m <= selection.endMin && selection.endMin < segEnd);
-            btn.classList.toggle('in-range', selection.startMin != null && selection.endMin != null && (() => {
-                const segs = rangeToSegments(selection.startMin, selection.endMin);
-                return segs.some(([a, b]) => segmentsOverlap([a, b], [m, segEnd]));
-            })());
+            btn.classList.remove('start', 'end', 'in-range');
         });
 
         clock.querySelectorAll('.dayreview-dot').forEach((dot) => {
-            const m = parseInt(dot.dataset.minutes || '0', 10);
-            dot.classList.toggle('start', selection.startMin != null && m === selection.startMin);
-            dot.classList.toggle('end', selection.endMin != null && m === selection.endMin);
-            dot.classList.toggle('in-range', (() => {
-                if (selection.startMin == null || selection.endMin == null) return false;
-                const segs = rangeToSegments(selection.startMin, selection.endMin);
-                return segs.some(([a, b]) => segmentsOverlap([a, b], [m, m + 1]));
-            })());
+            dot.classList.remove('start', 'end', 'in-range');
         });
 
         renderClockEntries();
@@ -665,8 +718,36 @@
 
             row.appendChild(main);
             row.appendChild(actions);
+
+            // Cross-highlight: hovering an entry highlights its clock segments
+            row.addEventListener('mouseenter', () => highlightEntryOnClock(entry));
+            row.addEventListener('mouseleave', () => clearEntryHighlight());
+
             entriesEl.appendChild(row);
         }
+    }
+
+    function highlightEntryOnClock(entry) {
+        const { clock } = getEls();
+        if (!clock) return;
+        const segs = rangeToSegments(entry.startMin, entry.endMin);
+        clock.querySelectorAll('.dayreview-seg').forEach((seg) => {
+            const m = parseInt(seg.dataset.minutes || '0', 10);
+            const segEnd = m + 30;
+            const hit = segs.some(([a, b]) => segmentsOverlap([a, b], [m, segEnd]));
+            seg.classList.toggle('entry-hover', hit);
+            if (hit && entry.color) seg.style.setProperty('--entry-color', entry.color);
+        });
+    }
+
+    function clearEntryHighlight() {
+        const { clock } = getEls();
+        if (!clock) return;
+        clock.querySelectorAll('.dayreview-seg.entry-hover').forEach((seg) => {
+            seg.classList.remove('entry-hover');
+        });
+        // Re-render to restore correct entry colors
+        renderClockEntries();
     }
 
     function startEdit(entry) {
@@ -695,6 +776,9 @@
         if (DayReview.editingId && String(DayReview.editingId) === id) {
             DayReview.editingId = null;
         }
+
+        DayReview.selection.startMin = null;
+        DayReview.selection.endMin = null;
 
         renderTimeline();
         renderEntries();
@@ -871,8 +955,8 @@
             }
 
             // 12h: decide AM vs PM by radius (inner vs outer)
-            const outerR = (size / 2) - 26;
-            const innerR = outerR - 64;
+            const outerR = (size / 2) - 28;
+            const innerR = outerR - 70;
             const mid = (outerR + innerR) / 2;
             const isInner = dist < mid;
             const hourOffset = isInner ? 0 : 12;
@@ -896,13 +980,8 @@
         }
 
         els.clock?.addEventListener('pointerdown', (e) => {
-            const target = e.target;
-            if (!(target instanceof Element)) return;
-
-            const hit = target.closest && target.closest('.dayreview-seg, .dayreview-dot');
-            if (!(hit instanceof Element)) return;
-
-            const anchor = minFromHit(hit);
+            // Accept clicks anywhere on the clock face (including on labels)
+            const anchor = pointToMinute(els.clock, e.clientX, e.clientY);
             if (anchor == null) return;
 
             dragState.active = true;
