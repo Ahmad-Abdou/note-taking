@@ -295,26 +295,12 @@ async function handleSmartFocusStart() {
         const firstTask = todayTasks[0] || incompleteTasks[0];
 
         if (firstTask) {
-            const taskId = firstTask.id;
-            const taskTitle = firstTask.title || '';
-
-            // Silently pre-select the task without opening any modal.
-            try {
-                if (window.FocusState) {
-                    window.FocusState.pendingLinkedTaskId = taskId;
-                    window.FocusState.pendingLinkedTaskTitle = taskTitle;
-                } else {
-                    localStorage.setItem('focusTaskId', taskId);
-                    localStorage.setItem('focusTaskTitle', taskTitle);
-                }
-            } catch (_) {
-                // ignore
-            }
-
-            // Update the task dropdown if available.
+            // Only update the task dropdown — do NOT set localStorage or
+            // FocusState, as that triggers checkAutoStartFromTask() which
+            // auto-starts a session and shows the boredom modal.
             try {
                 const dropdown = document.getElementById('focus-task-dropdown');
-                if (dropdown) dropdown.value = taskId;
+                if (dropdown) dropdown.value = firstTask.id;
             } catch (_) {
                 // ignore
             }
@@ -1289,8 +1275,14 @@ async function loadDashboardBestRecord() {
     if (!container) return;
 
     try {
-        const allStats = await ProductivityData.DataStore.get('productivity_daily_stats', {});
         const today = new Date().toISOString().split('T')[0];
+
+        // Reconcile today's stats from actual session records before rendering
+        try {
+            await ProductivityData.DataStore.reconcileDailyStatsRange(today, today);
+        } catch (_) { /* ignore */ }
+
+        const allStats = await ProductivityData.DataStore.get('productivity_daily_stats', {});
         const todayStats = allStats[today] || { focusMinutes: 0, focusSessions: 0, tasksCompleted: 0, productivityScore: 0 };
 
         let bestDay = null;
@@ -1542,6 +1534,7 @@ async function renderDashboardChallengesWidget() {
 
     try {
         await window.ChallengeManager?.ensureLoaded?.();
+        await window.ChallengeManager?.resetExpiredChallenges?.();
         const challenges = Array.isArray(window.ChallengeManager?.challenges)
             ? window.ChallengeManager.challenges
             : [];

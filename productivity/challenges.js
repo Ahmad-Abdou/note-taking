@@ -113,6 +113,51 @@ const ChallengeManager = {
         }
     },
 
+    /**
+     * Reset daily/weekly challenges whose period has elapsed.
+     * Called on load and when the challenges page is opened.
+     */
+    async resetExpiredChallenges() {
+        await this.ensureLoaded();
+        const today = getTodayYMD();
+        let didChange = false;
+
+        for (const challenge of this.challenges) {
+            if (!challenge) continue;
+
+            // Daily challenges: reset if lastProgressDate is not today
+            if (challenge.type === 'daily' && challenge.lastProgressDate !== today) {
+                if (challenge.currentProgress > 0 || challenge.status === 'completed') {
+                    challenge.currentProgress = 0;
+                    challenge.status = 'active';
+                    challenge.completedAt = null;
+                    didChange = true;
+                }
+            }
+
+            // Weekly challenges: reset if we're in a new week (Monday-based)
+            if (challenge.type === 'weekly' && challenge.lastProgressDate) {
+                const lastDate = new Date(challenge.lastProgressDate + 'T00:00:00');
+                const todayDate = new Date(today + 'T00:00:00');
+                const getWeekStart = (d) => {
+                    const day = d.getDay();
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                    return new Date(d.getFullYear(), d.getMonth(), diff).toISOString().split('T')[0];
+                };
+                if (getWeekStart(lastDate) !== getWeekStart(todayDate)) {
+                    if (challenge.currentProgress > 0 || challenge.status === 'completed') {
+                        challenge.currentProgress = 0;
+                        challenge.status = 'active';
+                        challenge.completedAt = null;
+                        didChange = true;
+                    }
+                }
+            }
+        }
+
+        if (didChange) await this.save();
+    },
+
     async create({ metric, type, targetCount, options }) {
         await this.ensureLoaded();
 
@@ -230,6 +275,7 @@ window.ChallengeManager = ChallengeManager;
 async function loadChallengesPage() {
     try {
         await window.ChallengeManager?.ensureLoaded?.();
+        await window.ChallengeManager?.resetExpiredChallenges?.();
         ChallengeState.challenges = window.ChallengeManager?.challenges || [];
         setupChallengeListeners();
         renderChallenges();
