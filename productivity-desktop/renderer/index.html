@@ -183,23 +183,31 @@
                     </div>
                 </header>
 
-                <!-- Today's Tasks (Primary Widget) -->
-                <div class="dash-card today-tasks-card" style="margin-bottom: 20px;">
-                    <div class="dash-card-header">
-                        <h3><i class="fas fa-list-check"></i> Today's Tasks</h3>
-                        <a href="#" class="view-link" data-page="tasks">View All <i class="fas fa-arrow-right"></i></a>
-                    </div>
-                    <div class="dash-card-content">
-                        <div class="today-tasks-quick-add" id="today-tasks-quick-add">
-                            <input type="text" id="today-tasks-input" placeholder="Add a task for today..."
-                                autocomplete="off">
-                            <button class="btn-icon small" id="today-tasks-add-btn" title="Add">
-                                <i class="fas fa-plus"></i>
-                            </button>
+                <!-- Dashboard Top Row: Today's Tasks + Personal Best -->
+                <div class="dashboard-top-row">
+                    <!-- Today's Tasks (Primary Widget) -->
+                    <div class="dash-card today-tasks-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-list-check"></i> Today's Tasks</h3>
+                            <a href="#" class="view-link" data-page="tasks">View All <i class="fas fa-arrow-right"></i></a>
                         </div>
-                        <ul class="task-list-compact" id="today-tasks-list">
-                            <!-- Today's tasks injected here -->
-                        </ul>
+                        <div class="dash-card-content">
+                            <div class="today-tasks-quick-add" id="today-tasks-quick-add">
+                                <input type="text" id="today-tasks-input" placeholder="Add a task for today..."
+                                    autocomplete="off">
+                                <button class="btn-icon small" id="today-tasks-add-btn" title="Add">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <ul class="task-list-compact" id="today-tasks-list">
+                                <!-- Today's tasks injected here -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Best Record (Dashboard) -->
+                    <div class="best-record-section" id="dashboard-best-record">
+                        <!-- Dynamically rendered by app.js -->
                     </div>
                 </div>
 
@@ -224,11 +232,6 @@
                             <!-- Populated dynamically -->
                         </div>
                     </div>
-                </div>
-
-                <!-- Best Record (Dashboard) -->
-                <div class="best-record-section" id="dashboard-best-record">
-                    <!-- Dynamically rendered by app.js -->
                 </div>
 
                 <!-- Main Dashboard Grid -->
@@ -274,7 +277,7 @@
                         </div>
                     </div>
 
-                    <!-- Active Goals - Full Width -->
+                    <!-- Active Goals -->
                     <div class="dash-card goals-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-trophy"></i> Goals</h3>
@@ -284,6 +287,20 @@
                         <div class="dash-card-content">
                             <div class="goals-preview-compact" id="goals-preview">
                                 <!-- Goals preview injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Challenges -->
+                    <div class="dash-card challenges-card">
+                        <div class="dash-card-header">
+                            <h3><i class="fas fa-flag-checkered"></i> Challenges</h3>
+                            <a href="#" class="view-link" data-page="challenges">View All <i
+                                    class="fas fa-arrow-right"></i></a>
+                        </div>
+                        <div class="dash-card-content">
+                            <div id="dashboard-challenges">
+                                <!-- Active challenges injected here -->
                             </div>
                         </div>
                     </div>
@@ -306,20 +323,6 @@
                                     <span class="stat-value" id="week-avg-hours">0h</span>
                                     <span class="stat-label">Daily Avg</span>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Challenges - Compact -->
-                    <div class="dash-card challenges-card">
-                        <div class="dash-card-header">
-                            <h3><i class="fas fa-flag-checkered"></i> Challenges</h3>
-                            <a href="#" class="view-link" data-page="challenges">View All <i
-                                    class="fas fa-arrow-right"></i></a>
-                        </div>
-                        <div class="dash-card-content">
-                            <div id="dashboard-challenges">
-                                <!-- Active challenges injected here -->
                             </div>
                         </div>
                     </div>

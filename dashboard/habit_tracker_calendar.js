@@ -43,7 +43,7 @@
                 activeView: 'monthly', // 'weekly' | 'monthly' | 'yearly' | 'custom'
                 isManageOpen: false,
                 editingGoalId: null,
-                data: { version: 2, goalsMeta: [], goals: {} }
+                data: { version: 2, goalsMeta: [], goals: {}, dismissedSyncIds: [] }
             };
 
             this._handleGoalChange = this._handleGoalChange.bind(this);
@@ -97,7 +97,8 @@
                 this.state.data = {
                     version: stored.version === 2 ? 2 : 1,
                     goalsMeta: Array.isArray(stored.goalsMeta) ? stored.goalsMeta : [],
-                    goals: stored.goals && typeof stored.goals === 'object' ? stored.goals : {}
+                    goals: stored.goals && typeof stored.goals === 'object' ? stored.goals : {},
+                    dismissedSyncIds: Array.isArray(stored.dismissedSyncIds) ? stored.dismissedSyncIds : []
                 };
             }
         }
@@ -144,9 +145,11 @@
             const existingMeta = Array.isArray(this.state.data.goalsMeta) ? this.state.data.goalsMeta : [];
             const metaById = new Map();
 
-            // 1) start with defaults (keep stable ordering)
+            // 1) start with defaults (keep stable ordering), skip dismissed
+            const dismissed = Array.isArray(this.state.data.dismissedSyncIds) ? this.state.data.dismissedSyncIds : [];
             for (const g of this.defaultGoals) {
                 if (!g || typeof g.id !== 'string') continue;
+                if (dismissed.includes(g.id)) continue;
                 const label = typeof g.label === 'string' ? g.label : this._humanizeId(g.id);
                 metaById.set(g.id, { id: g.id, label });
             }
@@ -838,6 +841,14 @@
 
             this.state.data.goalsMeta = goals.filter((g) => g.id !== goalId);
             delete this.state.data.goals[goalId];
+
+            // Track dismissed default goals so they don't get re-added
+            if (!Array.isArray(this.state.data.dismissedSyncIds)) {
+                this.state.data.dismissedSyncIds = [];
+            }
+            if (!this.state.data.dismissedSyncIds.includes(goalId)) {
+                this.state.data.dismissedSyncIds.push(goalId);
+            }
 
             if (this.state.activeGoalId === goalId) {
                 this.state.activeGoalId = this._getGoalsList()[0]?.id;

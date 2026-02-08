@@ -295,16 +295,10 @@ async function handleSmartFocusStart() {
         const firstTask = todayTasks[0] || incompleteTasks[0];
 
         if (firstTask) {
-            // Prefer native focus linking flow if available (no extra navigation).
             const taskId = firstTask.id;
             const taskTitle = firstTask.title || '';
 
-            if (typeof window.openFocusDurationForTask === 'function') {
-                setTimeout(() => window.openFocusDurationForTask(taskId, taskTitle), 200);
-                return;
-            }
-
-            // Fallback: set pending task + start immediately if possible.
+            // Silently pre-select the task without opening any modal.
             try {
                 if (window.FocusState) {
                     window.FocusState.pendingLinkedTaskId = taskId;
@@ -317,8 +311,12 @@ async function handleSmartFocusStart() {
                 // ignore
             }
 
-            if (typeof window.startFocusSession === 'function') {
-                setTimeout(() => window.startFocusSession(null), 250);
+            // Update the task dropdown if available.
+            try {
+                const dropdown = document.getElementById('focus-task-dropdown');
+                if (dropdown) dropdown.value = taskId;
+            } catch (_) {
+                // ignore
             }
         } else {
             // No tasks - show prompt to create one

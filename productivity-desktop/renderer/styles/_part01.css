@@ -53,6 +53,26 @@
 }
 
 /* ============================================================================
+   DASHBOARD TOP ROW (Today's Tasks + Personal Best)
+   ============================================================================ */
+
+.dashboard-top-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-lg);
+    margin-bottom: 20px;
+}
+
+.dashboard-top-row .today-tasks-card {
+    margin-bottom: 0;
+}
+
+.dashboard-top-row .best-record-section {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============================================================================
    DASHBOARD GRID
    ============================================================================ */
 
@@ -80,7 +100,11 @@
 }
 
 .goals-card {
-    grid-column: 1 / -1;
+    grid-column: span 2;
+}
+
+.challenges-card {
+    grid-column: span 1;
 }
 
 .goals-preview-card {

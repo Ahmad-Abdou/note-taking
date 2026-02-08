@@ -36,6 +36,10 @@
     .dashboard-grid-modern {
         grid-template-columns: 1fr;
     }
+
+    .dashboard-top-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ============================================================================

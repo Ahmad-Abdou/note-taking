@@ -424,95 +424,94 @@
 }
 
 /* ============================================================================
-   DASHBOARD QUICK WIDGETS (Items to Review & Today's Tasks)
+   NEW DASHBOARD WIDGETS - Items to Review & Today's Tasks
    ============================================================================ */
 
-/* Review Widget */
-.review-widget {
-    background: linear-gradient(135deg, var(--bg-card), rgba(139, 92, 246, 0.05));
-    border-left: 3px solid #8b5cf6;
-    overflow: hidden;
+/* Widget Common Styles */
+.review-widget,
+.todays-tasks-widget {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
 }
 
-.review-widget-header,
-.today-tasks-header {
+.widget-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.widget-header span {
     font-weight: 600;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.review-widget-header span i,
-.today-tasks-header span i {
-    margin-right: 8px;
+.widget-header span i {
     color: var(--primary);
 }
 
-.review-widget-header .view-link,
-.today-tasks-header .view-link {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--text-muted);
+.widget-header .view-link {
+    font-size: 0.8rem;
+    color: var(--primary);
     text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.review-widget-header .view-link:hover,
-.today-tasks-header .view-link:hover {
-    color: var(--primary);
+.widget-header .view-link:hover {
+    text-decoration: underline;
 }
 
-.review-widget-content,
-.today-tasks-content {
+.widget-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 240px;
-    overflow: auto;
-    padding-right: 4px;
+    gap: var(--spacing-sm);
 }
 
-.empty-review-state,
-.empty-tasks-state {
+.widget-empty {
     text-align: center;
-    color: var(--text-muted);
-    font-size: 0.85rem;
     padding: var(--spacing-md);
+    color: var(--text-muted);
 }
 
-.empty-review-state i,
-.empty-tasks-state i {
-    margin-right: 6px;
+.widget-empty i {
+    font-size: 1.5rem;
+    margin-bottom: var(--spacing-xs);
     color: var(--success);
 }
 
-.review-widget-item,
-.today-task-item {
+.widget-empty p {
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.widget-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
+    padding: var(--spacing-sm) var(--spacing-md);
     background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    transition: background 0.2s;
+    gap: var(--spacing-sm);
 }
 
-.review-widget-item:hover,
-.today-task-item:hover {
-    background: var(--bg-tertiary);
-}
-
-.review-item-content,
-.today-task-content {
+.widget-item-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.review-item-title,
-.today-task-title {
-    display: block;
+.widget-item-title {
     font-size: 0.9rem;
     font-weight: 500;
     color: var(--text-primary);
@@ -521,51 +520,43 @@
     text-overflow: ellipsis;
 }
 
-.review-item-due {
-    font-size: 0.75rem;
-    color: var(--warning);
-    font-weight: 500;
-}
-
-.today-task-time {
+.widget-item-meta {
     font-size: 0.75rem;
     color: var(--text-muted);
 }
 
-.today-task-time i {
-    margin-right: 4px;
+.widget-item-meta.priority-urgent {
+    color: #ef4444;
 }
 
-.review-item-focus,
-.today-task-focus {
-    flex-shrink: 0;
+.widget-item-meta.priority-high {
+    color: #f59e0b;
+}
+
+.widget-item-meta.priority-medium {
+    color: #3b82f6;
+}
+
+.widget-item-meta.priority-low {
+    color: #64748b;
+}
+
+.widget-focus-btn {
     width: 32px;
     height: 32px;
-    border-radius: var(--radius-full);
-    background: var(--primary);
-    color: white;
+    border-radius: 8px;
     border: none;
+    background: linear-gradient(135deg, var(--primary), var(--info));
+    color: white;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
-    margin-left: 12px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
 }
 
-.review-item-focus:hover,
-.today-task-focus:hover {
-    background: var(--primary-dark);
+.widget-focus-btn:hover {
     transform: scale(1.1);
-}
-
-.review-item-focus i,
-.today-task-focus i {
-    font-size: 0.75rem;
-}
-
-/* Today's Tasks Widget */
-.today-tasks-widget {
-    background: linear-gradient(135deg, var(--bg-card), rgba(59, 130, 246, 0.05));
-    border-left: 3px solid #3b82f6;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
