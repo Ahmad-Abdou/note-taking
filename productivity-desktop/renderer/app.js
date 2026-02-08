@@ -3566,8 +3566,20 @@ function setupAppUpdater() {
                 statusEl.textContent = 'Checking for updates…';
                 if (checkBtn) checkBtn.disabled = true;
                 break;
-            case 'available':
-                statusEl.textContent = message || 'A new update is available. Downloading…';
+            case 'available': {
+                const ver = payload?.version ? ` (v${payload.version})` : '';
+                statusEl.textContent = `A new update is available${ver}.`;
+                if (updateBtn) {
+                    updateBtn.style.display = 'inline-flex';
+                    updateBtn.disabled = false;
+                    updateBtn.textContent = 'Download & Install';
+                }
+                if (checkBtn) checkBtn.disabled = true;
+                break;
+            }
+            case 'download-starting':
+                statusEl.textContent = 'Starting download…';
+                if (checkBtn) checkBtn.disabled = true;
                 break;
             case 'not-available':
                 statusEl.textContent = 'You are on the latest version.';
@@ -3607,11 +3619,11 @@ function setupAppUpdater() {
         });
     }
 
-    // "Update Now" / "Restart & Install" button
+    // "Update Now" / "Download & Install" / "Restart & Install" button
     if (updateBtn) {
         updateBtn.addEventListener('click', () => {
             updateBtn.disabled = true;
-            if (statusEl) statusEl.textContent = 'Restarting to install update…';
+            if (statusEl) statusEl.textContent = 'Downloading and installing update…';
             api.updateNow().catch(() => {
                 if (statusEl) statusEl.textContent = 'Failed to install update.';
                 updateBtn.disabled = false;

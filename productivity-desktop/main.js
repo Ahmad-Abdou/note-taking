@@ -962,7 +962,16 @@ ipcMain.handle('updater-check', async () => {
     if (!cfg.ok) return { ok: false, error: cfg.error };
 
     try {
-        await autoUpdater.checkForUpdates();
+        const result = await autoUpdater.checkForUpdates();
+        const available = !!result?.updateInfo?.version;
+        if (available) {
+            // Auto-start download so the user isn't stuck at "available".
+            sendUpdaterStatus({ state: 'download-starting' });
+            autoUpdater.downloadUpdate().catch((dlErr) => {
+                const dlMsg = sanitizeUpdaterError(dlErr);
+                sendUpdaterStatus({ state: 'error', message: dlMsg });
+            });
+        }
         return { ok: true };
     } catch (err) {
         const msg = sanitizeUpdaterError(err);
