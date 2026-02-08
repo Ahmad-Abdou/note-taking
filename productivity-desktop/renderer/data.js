@@ -2115,7 +2115,8 @@ const DataStore = {
             idleRecords: await this.get(STORAGE_KEYS.IDLE_RECORDS, []),
             idleCategories: await this.get(STORAGE_KEYS.IDLE_CATEGORIES, []),
             websiteTimeLimits: await this.get(STORAGE_KEYS.WEBSITE_TIME_LIMITS, []),
-            websiteDailyUsage: await this.get(STORAGE_KEYS.WEBSITE_DAILY_USAGE, {})
+            websiteDailyUsage: await this.get(STORAGE_KEYS.WEBSITE_DAILY_USAGE, {}),
+            importedCalendarsMeta: await this.get('importedCalendarsMeta', {})
         };
 
         return JSON.stringify(data, null, 2);
@@ -2178,6 +2179,29 @@ const DataStore = {
             await mergeOrReplace(STORAGE_KEYS.IDLE_CATEGORIES, data.idleCategories);
             await mergeOrReplace(STORAGE_KEYS.WEBSITE_TIME_LIMITS, data.websiteTimeLimits);
             await mergeOrReplaceObj(STORAGE_KEYS.WEBSITE_DAILY_USAGE, data.websiteDailyUsage);
+            await mergeOrReplaceObj('importedCalendarsMeta', data.importedCalendarsMeta);
+
+            // Deduplicate imported schedule events by content signature
+            if (merge) {
+                const dedup = async (key) => {
+                    const events = await this.get(key, []);
+                    const seen = new Set();
+                    const unique = [];
+                    for (const ev of events) {
+                        if (ev.isImported) {
+                            const sig = `${ev.title}|${ev.date}|${ev.startTime}|${ev.endTime}`;
+                            if (seen.has(sig)) continue;
+                            seen.add(sig);
+                        }
+                        unique.push(ev);
+                    }
+                    if (unique.length !== events.length) {
+                        await this.set(key, unique);
+                    }
+                };
+                await dedup(STORAGE_KEYS.SCHEDULE_SCHOOL);
+                await dedup(STORAGE_KEYS.SCHEDULE_PERSONAL);
+            }
 
             return { success: true, version: data.version, source: data.source, exportDate: data.exportDate };
         } catch (error) {

@@ -260,9 +260,6 @@ async function loadFocusPage() {
     // Update session counts (today, week, total)
     await updateSessionCounts();
 
-    // Load and display best records
-    await loadBestRecords();
-
     // Load tasks for linking
     await loadTaskOptions();
 
