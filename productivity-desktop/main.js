@@ -162,6 +162,10 @@ let mainWindow;
 let tray;
 let isQuitting = false;
 
+// ===== Pinned Widget Windows =====
+// Map<cardId, BrowserWindow> — tracks all open widget windows.
+const widgetWindows = new Map();
+
 // Prevent infinite relaunch loops if the renderer is repeatedly crashing.
 let rendererCrashRelaunchInProgress = false;
 let rendererCrashRelaunchCount = 0;
@@ -253,6 +257,12 @@ function startApp() {
     registerShortcuts();
     initAutoUpdater();
 
+    // Restore any pinned widget windows from previous session
+    // Delay slightly so the main window has time to initialize
+    setTimeout(() => {
+        restorePinnedWidgets();
+    }, 2000);
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -262,6 +272,21 @@ function startApp() {
 
 function prepareToQuit(reason = 'quit') {
     isQuitting = true;
+
+    // Persist all widget window positions before quitting
+    try {
+        const all = store.get('pinned-widgets') || {};
+        for (const [cardId, win] of widgetWindows) {
+            if (!win.isDestroyed()) {
+                const bounds = win.getBounds();
+                if (all[cardId]) {
+                    all[cardId].x = bounds.x;
+                    all[cardId].y = bounds.y;
+                }
+            }
+        }
+        store.set('pinned-widgets', all);
+    } catch (_) { /* ignore */ }
 
     // Best-effort: close UI surfaces that might keep the app "alive" in user perception.
     try {
@@ -843,6 +868,201 @@ ipcMain.handle('store-clear', () => {
 });
 
 // ===== IPC Handlers for Notifications =====
+
+// ===== Pinned Widget Windows =====
+
+function createWidgetWindow(cardId, opts = {}) {
+    if (widgetWindows.has(cardId)) {
+        const existing = widgetWindows.get(cardId);
+        if (!existing.isDestroyed()) {
+            existing.focus();
+            return existing;
+        }
+        widgetWindows.delete(cardId);
+    }
+
+    const saved = store.get('pinned-widgets') || {};
+    const savedState = saved[cardId] || {};
+
+    const expanded = opts.expanded ?? savedState.expanded ?? false;
+    const x = opts.x ?? savedState.x;
+    const y = opts.y ?? savedState.y;
+    const width = savedState.width || 340;
+    const height = expanded ? (savedState.expandedHeight || 420) : (savedState.collapsedHeight || 90);
+
+    const winOpts = {
+        width,
+        height,
+        minWidth: 280,
+        minHeight: 70,
+        frame: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        transparent: true,
+        backgroundColor: '#00000000',
+        hasShadow: true,
+        icon: path.join(__dirname, 'assets', 'icon.png'),
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
+        }
+    };
+
+    if (typeof x === 'number' && typeof y === 'number') {
+        winOpts.x = x;
+        winOpts.y = y;
+    }
+
+    const win = new BrowserWindow(winOpts);
+
+    const widgetPath = path.join(__dirname, 'renderer', 'widget.html');
+    win.loadFile(widgetPath, { query: { card: cardId } }).catch((e) => {
+        diagError('widget loadFile failed', e);
+    });
+
+    widgetWindows.set(cardId, win);
+
+    // Persist position on move
+    win.on('moved', () => {
+        try {
+            if (win.isDestroyed()) return;
+            const bounds = win.getBounds();
+            const all = store.get('pinned-widgets') || {};
+            all[cardId] = { ...(all[cardId] || {}), x: bounds.x, y: bounds.y };
+            store.set('pinned-widgets', all);
+        } catch (_) { /* ignore */ }
+    });
+
+    // Clean up on close
+    win.on('closed', () => {
+        widgetWindows.delete(cardId);
+    });
+
+    // Save pinned state
+    const all = store.get('pinned-widgets') || {};
+    all[cardId] = { ...(all[cardId] || {}), pinned: true, expanded };
+    if (typeof x === 'number' && typeof y === 'number') {
+        all[cardId].x = x;
+        all[cardId].y = y;
+    }
+    store.set('pinned-widgets', all);
+
+    return win;
+}
+
+function destroyWidgetWindow(cardId) {
+    const win = widgetWindows.get(cardId);
+    if (win && !win.isDestroyed()) {
+        // Save position before destroying
+        try {
+            const bounds = win.getBounds();
+            const all = store.get('pinned-widgets') || {};
+            if (all[cardId]) {
+                all[cardId].x = bounds.x;
+                all[cardId].y = bounds.y;
+            }
+            // Remove pinned status
+            delete all[cardId];
+            store.set('pinned-widgets', all);
+        } catch (_) { /* ignore */ }
+        win.destroy();
+    }
+    widgetWindows.delete(cardId);
+}
+
+function restorePinnedWidgets() {
+    try {
+        const all = store.get('pinned-widgets') || {};
+        for (const [cardId, state] of Object.entries(all)) {
+            if (state.pinned) {
+                createWidgetWindow(cardId, state);
+            }
+        }
+    } catch (e) {
+        diagError('restorePinnedWidgets failed', e);
+    }
+}
+
+// Broadcast a data-changed event to all widget windows and main window
+function broadcastDataChanged(sourceCardId) {
+    try {
+        // Notify all widget windows
+        for (const [cid, win] of widgetWindows) {
+            if (!win.isDestroyed()) {
+                win.webContents.send('widget-data-changed', { sourceCardId });
+            }
+        }
+        // Notify main window
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('widget-data-changed', { sourceCardId });
+        }
+    } catch (_) { /* ignore */ }
+}
+
+// IPC: Pin a card as a widget
+ipcMain.handle('pin-widget', (event, cardId, opts) => {
+    try {
+        createWidgetWindow(cardId, opts || {});
+        return { success: true };
+    } catch (e) {
+        diagError('pin-widget failed', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// IPC: Unpin a card widget
+ipcMain.handle('unpin-widget', (event, cardId) => {
+    try {
+        destroyWidgetWindow(cardId);
+        // Notify main window to update pin button state
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('widget-unpinned', { cardId });
+        }
+        return { success: true };
+    } catch (e) {
+        diagError('unpin-widget failed', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// IPC: Resize widget window (expand/collapse)
+ipcMain.handle('widget-resize', (event, cardId, width, height, expanded) => {
+    try {
+        const win = widgetWindows.get(cardId);
+        if (win && !win.isDestroyed()) {
+            win.setSize(width, height, true);
+        }
+        // Persist expanded state and dimensions
+        const all = store.get('pinned-widgets') || {};
+        all[cardId] = {
+            ...(all[cardId] || {}),
+            width,
+            expanded,
+            [expanded ? 'expandedHeight' : 'collapsedHeight']: height
+        };
+        store.set('pinned-widgets', all);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// IPC: Get all pinned widgets state
+ipcMain.handle('get-pinned-widgets', () => {
+    return store.get('pinned-widgets') || {};
+});
+
+// IPC: Widget notifies that data changed (relay to all other windows)
+ipcMain.on('widget-data-written', (event, payload) => {
+    broadcastDataChanged(payload?.cardId);
+});
+
+// IPC: Main renderer notifies data changed
+ipcMain.on('main-data-written', (event, payload) => {
+    broadcastDataChanged(payload?.cardId);
+});
 
 ipcMain.handle('show-notification', (event, title, options) => {
     try {

@@ -795,6 +795,62 @@
     text-decoration: underline;
 }
 
+/* ===== Pin Card as Widget Button ===== */
+
+.dash-card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.pin-card-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    transition: all 0.2s;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.dash-card:hover .pin-card-btn,
+.motivation-card:hover .pin-card-btn,
+.review-widget:hover .pin-card-btn {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.pin-card-btn:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.pin-card-btn.pinned {
+    opacity: 1;
+    pointer-events: all;
+    color: var(--primary);
+    transform: rotate(45deg);
+}
+
+.pin-card-btn.pinned:hover {
+    color: var(--danger);
+    background: var(--danger-light);
+}
+
+/* For the review widget which uses .widget-header */
+.widget-header .dash-card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
 .dash-card-content {
     padding: var(--spacing-lg);
     min-height: 180px;

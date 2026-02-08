@@ -107,6 +107,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Load dashboard data
         await loadDashboard();
 
+        // Initialize pin-card widget buttons (desktop only)
+        await initPinCardButtons();
+
         // Initialize motivation system (streaks, XP, achievements)
         if (window.MotivationSystem) {
             await window.MotivationSystem.init();
@@ -2282,6 +2285,9 @@ async function toggleTask(taskId) {
             }
         }
 
+        // Notify widget windows of data change
+        notifyWidgetsDataChanged();
+
     } catch (error) {
         console.error('[App] Failed to toggle task:', error);
         showToast('error', 'Error', 'Failed to update task status.');
@@ -2290,6 +2296,107 @@ async function toggleTask(taskId) {
 
 // Make toggleTask globally available
 window.toggleTask = toggleTask;
+
+/**
+ * Notify all pinned widget windows that data has changed.
+ * Call this after any data mutation in the main renderer.
+ */
+function notifyWidgetsDataChanged() {
+    try {
+        if (window.electronAPI?.widgets?.notifyMainDataChanged) {
+            window.electronAPI.widgets.notifyMainDataChanged();
+        }
+    } catch (_) { /* ignore */ }
+}
+window.notifyWidgetsDataChanged = notifyWidgetsDataChanged;
+
+// ============================================================================
+// PINNED WIDGET CARDS
+// ============================================================================
+
+/**
+ * Initialize pin-card buttons on the dashboard.
+ * Handles click events and keeps pin button state in sync.
+ */
+async function initPinCardButtons() {
+    // Only works in Electron desktop app
+    if (!window.electronAPI?.widgets) return;
+
+    // Get current pinned state to set active buttons
+    let pinnedState = {};
+    try {
+        pinnedState = await window.electronAPI.widgets.getPinned() || {};
+    } catch (_) { /* ignore */ }
+
+    // Set initial active state on buttons
+    document.querySelectorAll('.pin-card-btn').forEach(btn => {
+        const cid = btn.dataset.card;
+        if (cid && pinnedState[cid]?.pinned) {
+            btn.classList.add('pinned');
+            btn.title = 'Unpin widget';
+        }
+    });
+
+    // Event delegation on the page container
+    const dashPage = document.getElementById('page-dashboard');
+    if (dashPage && !dashPage.dataset.pinBound) {
+        dashPage.dataset.pinBound = '1';
+        dashPage.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.pin-card-btn');
+            if (!btn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const cid = btn.dataset.card;
+            if (!cid) return;
+
+            const isPinned = btn.classList.contains('pinned');
+
+            if (isPinned) {
+                // Unpin
+                await window.electronAPI.widgets.unpin(cid);
+                btn.classList.remove('pinned');
+                btn.title = 'Pin as widget';
+            } else {
+                // Pin
+                await window.electronAPI.widgets.pin(cid);
+                btn.classList.add('pinned');
+                btn.title = 'Unpin widget';
+            }
+        });
+    }
+
+    // Listen for unpin events from widget windows (user closed via widget's X button)
+    if (!window._widgetUnpinListenerBound) {
+        window._widgetUnpinListenerBound = true;
+        window.electronAPI.widgets.onUnpinned((payload) => {
+            const btn = document.querySelector(`.pin-card-btn[data-card="${payload?.cardId}"]`);
+            if (btn) {
+                btn.classList.remove('pinned');
+                btn.title = 'Pin as widget';
+            }
+        });
+    }
+
+    // Listen for data changes from widget windows
+    if (!window._widgetDataListenerBound) {
+        window._widgetDataListenerBound = true;
+        window.electronAPI.widgets.onDataChanged(async (payload) => {
+            // Refresh dashboard if we're on it
+            if (App.currentPage === 'dashboard') {
+                await loadDashboard();
+            }
+            // Refresh tasks page if we're on it
+            if (App.currentPage === 'tasks' && typeof loadTasks === 'function') {
+                await loadTasks();
+            }
+        });
+    }
+}
+
+// Expose globally so it can be called after loadDashboard
+window.initPinCardButtons = initPinCardButtons;
 
 // ============================================================================
 // SETTINGS

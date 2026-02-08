@@ -189,7 +189,10 @@
                     <div class="dash-card today-tasks-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-list-check"></i> Today's Tasks</h3>
-                            <a href="#" class="view-link" data-page="tasks">View All <i class="fas fa-arrow-right"></i></a>
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="today-tasks" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                                <a href="#" class="view-link" data-page="tasks">View All <i class="fas fa-arrow-right"></i></a>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <div class="today-tasks-quick-add" id="today-tasks-quick-add">
@@ -225,8 +228,11 @@
                     <div class="motivation-card review-widget" id="review-widget">
                         <div class="widget-header">
                             <span><i class="fas fa-brain"></i> Items to Review</span>
-                            <a href="#" class="view-link" data-page="revisions">View All <i
-                                    class="fas fa-arrow-right"></i></a>
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="review" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                                <a href="#" class="view-link" data-page="revisions">View All <i
+                                        class="fas fa-arrow-right"></i></a>
+                            </div>
                         </div>
                         <div class="widget-content" id="review-widget-content">
                             <!-- Populated dynamically -->
@@ -241,8 +247,11 @@
                     <div class="dash-card schedule-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-calendar-day"></i> Today's Schedule</h3>
-                            <a href="#" class="view-link" data-page="schedule">View All <i
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="schedule" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                                <a href="#" class="view-link" data-page="schedule">View All <i
                                     class="fas fa-arrow-right"></i></a>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <div class="timeline-compact" id="today-schedule">
@@ -255,8 +264,11 @@
                     <div class="dash-card tasks-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-bolt"></i> Priority Tasks</h3>
-                            <a href="#" class="view-link" data-page="tasks">View All <i
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="priority-tasks" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                                <a href="#" class="view-link" data-page="tasks">View All <i
                                     class="fas fa-arrow-right"></i></a>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <ul class="task-list-compact" id="priority-tasks">
@@ -269,6 +281,9 @@
                     <div class="dash-card deadlines-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-hourglass-half"></i> Deadlines</h3>
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="deadlines" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <ul class="deadline-list-compact" id="upcoming-deadlines">
@@ -281,8 +296,11 @@
                     <div class="dash-card goals-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-trophy"></i> Goals</h3>
-                            <a href="#" class="view-link" data-page="goals">View All <i
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="goals" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                                <a href="#" class="view-link" data-page="goals">View All <i
                                     class="fas fa-arrow-right"></i></a>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <div class="goals-preview-compact" id="goals-preview">
@@ -295,8 +313,11 @@
                     <div class="dash-card challenges-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-flag-checkered"></i> Challenges</h3>
-                            <a href="#" class="view-link" data-page="challenges">View All <i
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="challenges" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                                <a href="#" class="view-link" data-page="challenges">View All <i
                                     class="fas fa-arrow-right"></i></a>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <div id="dashboard-challenges">
@@ -309,6 +330,9 @@
                     <div class="dash-card progress-card">
                         <div class="dash-card-header">
                             <h3><i class="fas fa-chart-line"></i> This Week</h3>
+                            <div class="dash-card-header-actions">
+                                <button class="pin-card-btn" data-card="progress" title="Pin as widget"><i class="fas fa-thumbtack"></i></button>
+                            </div>
                         </div>
                         <div class="dash-card-content">
                             <div class="weekly-chart-modern" id="weekly-chart">

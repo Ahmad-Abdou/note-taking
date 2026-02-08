@@ -66,6 +66,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Event listeners from main process
     onStartFocus: (callback) => {
         ipcRenderer.on('start-focus', (event, minutes) => callback(minutes));
+    },
+
+    // Pinned Widget Windows
+    widgets: {
+        pin: (cardId, opts) => ipcRenderer.invoke('pin-widget', cardId, opts),
+        unpin: (cardId) => ipcRenderer.invoke('unpin-widget', cardId),
+        resize: (cardId, width, height, expanded) => ipcRenderer.invoke('widget-resize', cardId, width, height, expanded),
+        getPinned: () => ipcRenderer.invoke('get-pinned-widgets'),
+        notifyDataChanged: (cardId) => ipcRenderer.send('widget-data-written', { cardId }),
+        notifyMainDataChanged: (cardId) => ipcRenderer.send('main-data-written', { cardId }),
+        onDataChanged: (callback) => {
+            const listener = (event, payload) => callback(payload);
+            ipcRenderer.on('widget-data-changed', listener);
+            return () => ipcRenderer.removeListener('widget-data-changed', listener);
+        },
+        onUnpinned: (callback) => {
+            const listener = (event, payload) => callback(payload);
+            ipcRenderer.on('widget-unpinned', listener);
+            return () => ipcRenderer.removeListener('widget-unpinned', listener);
+        },
+        getCardId: () => {
+            // Widget pages are loaded with ?card=<cardId>
+            try {
+                const params = new URLSearchParams(window.location.search);
+                return params.get('card');
+            } catch (_) {
+                return null;
+            }
+        }
     }
 });
 

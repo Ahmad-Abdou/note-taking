@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Widget</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="widget.css">
+</head>
+
+<body>
+    <div class="widget-container" id="widget-container">
+        <!-- Title bar (draggable) -->
+        <div class="widget-titlebar" id="widget-titlebar">
+            <div class="widget-titlebar-left">
+                <i class="fas fa-thumbtack widget-pin-icon"></i>
+                <span class="widget-title" id="widget-title">Widget</span>
+            </div>
+            <div class="widget-titlebar-right">
+                <button class="widget-btn expand-btn" id="widget-expand-btn" title="Expand / Collapse">
+                    <i class="fas fa-chevron-down" id="widget-expand-icon"></i>
+                </button>
+                <button class="widget-btn close-btn" id="widget-close-btn" title="Unpin">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Card content area -->
+        <div class="widget-body" id="widget-body">
+            <div class="widget-content" id="widget-content">
+                <!-- Rendered by widget.js -->
+            </div>
+        </div>
+    </div>
+
+    <script src="storage-polyfill.js"></script>
+    <script src="utils.js"></script>
+    <script src="data.js"></script>
+    <script src="widget.js"></script>
+</body>
+
+</html>
