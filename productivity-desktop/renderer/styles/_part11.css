@@ -54,9 +54,12 @@
     .schedule-card,
     .tasks-card,
     .deadlines-card,
-    .progress-card,
     .goals-preview-card {
         grid-column: span 1;
+    }
+
+    .progress-card {
+        grid-column: 1 / -1;
     }
 
     .quick-actions-card {

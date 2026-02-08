@@ -591,17 +591,8 @@ function renderTodayTasksCard(allTasks) {
             <div class="empty-state">
                 <i class="fas fa-list-check"></i>
                 <p>No tasks planned for today</p>
-                <button class="btn-secondary" id="today-tasks-open-modal-btn" style="margin-top:10px;">Add a task</button>
             </div>
         `;
-        list.querySelector('#today-tasks-open-modal-btn')?.addEventListener('click', () => {
-            const input = document.getElementById('today-tasks-input');
-            if (input) {
-                input.focus();
-                return;
-            }
-            window.openTaskModal?.(null, 'not-started', { dueDate: today });
-        });
         return;
     }
 
@@ -1300,7 +1291,20 @@ async function loadDashboardBestRecord() {
         }
 
         if (!bestDay || bestDay.focusMinutes === 0) {
-            container.innerHTML = '';
+            container.innerHTML = `
+                <div class="best-record-card">
+                    <div class="best-record-header">
+                        <div class="best-record-icon">🏅</div>
+                        <div class="best-record-heading">
+                            <h3>Personal Best</h3>
+                            <span class="best-record-date">No records yet</span>
+                        </div>
+                    </div>
+                    <div class="best-record-empty">
+                        <p>Start a focus session to set your first personal record!</p>
+                    </div>
+                </div>
+            `;
             return;
         }
 
