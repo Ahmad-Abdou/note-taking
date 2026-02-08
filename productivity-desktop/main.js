@@ -1032,7 +1032,10 @@ ipcMain.handle('widget-resize', (event, cardId, width, height, expanded) => {
     try {
         const win = widgetWindows.get(cardId);
         if (win && !win.isDestroyed()) {
-            win.setSize(width, height, true);
+            // Use setBounds to preserve position; avoid setSize + animate
+            // which can fail on transparent frameless windows on Windows.
+            const bounds = win.getBounds();
+            win.setBounds({ x: bounds.x, y: bounds.y, width, height });
         }
         // Persist expanded state and dimensions
         const all = store.get('pinned-widgets') || {};
@@ -1062,6 +1065,17 @@ ipcMain.on('widget-data-written', (event, payload) => {
 // IPC: Main renderer notifies data changed
 ipcMain.on('main-data-written', (event, payload) => {
     broadcastDataChanged(payload?.cardId);
+});
+
+// IPC: Widget requests focus on a task — show & focus the main window, then relay
+ipcMain.on('widget-start-focus', (event, payload) => {
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            if (!mainWindow.isVisible()) mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('start-focus-on-task', payload);
+        }
+    } catch (_) { /* ignore */ }
 });
 
 ipcMain.handle('show-notification', (event, title, options) => {

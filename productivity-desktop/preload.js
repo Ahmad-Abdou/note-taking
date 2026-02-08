@@ -68,6 +68,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('start-focus', (event, minutes) => callback(minutes));
     },
 
+    // Focus on a specific task (sent from widget windows)
+    onStartFocusOnTask: (callback) => {
+        ipcRenderer.on('start-focus-on-task', (event, payload) => callback(payload));
+    },
+
     // Pinned Widget Windows
     widgets: {
         pin: (cardId, opts) => ipcRenderer.invoke('pin-widget', cardId, opts),
@@ -76,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getPinned: () => ipcRenderer.invoke('get-pinned-widgets'),
         notifyDataChanged: (cardId) => ipcRenderer.send('widget-data-written', { cardId }),
         notifyMainDataChanged: (cardId) => ipcRenderer.send('main-data-written', { cardId }),
+        startFocus: (taskId) => ipcRenderer.send('widget-start-focus', { taskId }),
         onDataChanged: (callback) => {
             const listener = (event, payload) => callback(payload);
             ipcRenderer.on('widget-data-changed', listener);

@@ -546,10 +546,9 @@
 
             if (action === 'focus') {
                 e.stopPropagation();
-                // Send focus start to main window via main process
-                // The main window will handle the focus session
-                if (window.electronAPI?.widgets?.notifyDataChanged) {
-                    window.electronAPI.widgets.notifyDataChanged(cardId);
+                // Send focus request to main window via main process
+                if (window.electronAPI?.widgets?.startFocus) {
+                    window.electronAPI.widgets.startFocus(taskId);
                 }
                 return;
             }

@@ -138,8 +138,7 @@ if (!chrome.storage.local) {
 if (!chrome.storage.onChanged) {
     chrome.storage.onChanged = {
         addListener: function(callback) {
-            // Stub for compatibility - not fully implemented
-            console.warn('chrome.storage.onChanged.addListener is not fully supported in polyfill');
+            // Stub — not fully supported in desktop polyfill
         },
         removeListener: function(callback) {
             // Stub for compatibility
@@ -156,8 +155,7 @@ if (!chrome.runtime) {
 if (!chrome.runtime.onMessage) {
     chrome.runtime.onMessage = {
         addListener: function(callback) {
-            // Stub for compatibility - in a real extension this would handle messages
-            console.warn('chrome.runtime.onMessage.addListener is not fully supported in polyfill');
+            // Stub — not fully supported in desktop polyfill
             return true;
         },
         removeListener: function(callback) {

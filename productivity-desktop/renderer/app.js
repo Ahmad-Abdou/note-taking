@@ -110,6 +110,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Initialize pin-card widget buttons (desktop only)
         await initPinCardButtons();
 
+        // Listen for focus requests from widget windows (desktop only)
+        if (window.electronAPI?.onStartFocusOnTask) {
+            window.electronAPI.onStartFocusOnTask((payload) => {
+                if (payload?.taskId) {
+                    if (typeof startFocusOnTask === 'function' || typeof window.startFocusOnTask === 'function') {
+                        (window.startFocusOnTask || startFocusOnTask)(payload.taskId);
+                    } else {
+                        navigateTo('focus');
+                    }
+                }
+            });
+        }
+
         // Initialize motivation system (streaks, XP, achievements)
         if (window.MotivationSystem) {
             await window.MotivationSystem.init();

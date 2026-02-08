@@ -297,7 +297,7 @@ function renderWeeklyChart(data) {
     
     // Ensure data is an array
     if (!Array.isArray(data)) {
-        console.warn('renderWeeklyChart: data is not an array', data);
+        console.debug('renderWeeklyChart: data is not an array — using empty fallback');
         data = [];
     }
     
