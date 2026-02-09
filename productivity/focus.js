@@ -429,8 +429,8 @@ async function checkActiveSession() {
                     status: 'in-progress'
                 };
                 
-                // Show a subtle indicator that there's a paused session
-                showToast('info', 'Paused Session', 'You have a paused focus session. Start focus to resume or start fresh.');
+                // Don't show any toast here — the user will be prompted only when
+                // they try to start a new session (via checkPausedSessionBeforeStart).
                 return;
             }
 
