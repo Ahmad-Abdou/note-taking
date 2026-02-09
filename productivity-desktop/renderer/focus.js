@@ -390,6 +390,20 @@ async function checkActiveSession() {
             // If session was paused, DON'T auto-restore - let user browse app freely
             // They will see resume options when they try to start a new focus session
             if (savedState.isPaused) {
+                // Validate that this is a real paused session with meaningful progress,
+                // not a ghost state left over from a completed extra-time session.
+                const remaining = savedState.pausedRemainingSeconds ?? savedState.remainingSeconds ?? 0;
+                const elapsed = savedState.pausedElapsedSeconds ?? savedState.elapsedSeconds ?? 0;
+                const hasElapsedTime = savedState.isOpenEnded && elapsed > 0;
+                // A timed session with 0 remaining was already completed — it's stale
+                const isStaleTimedSession = !savedState.isOpenEnded && remaining <= 0;
+
+                if (isStaleTimedSession || (!hasElapsedTime && elapsed <= 0 && remaining <= 0)) {
+                    // Stale/ghost paused state — discard it silently
+                    chrome.storage.local.remove(['focusState', 'focusSession']);
+                    return;
+                }
+
                 // Just restore the in-memory state but don't show overlay
                 FocusState.isActive = true;
                 FocusState.isPaused = true;
@@ -415,8 +429,8 @@ async function checkActiveSession() {
                     status: 'in-progress'
                 };
                 
-                // Show a subtle indicator that there's a paused session
-                showToast('info', 'Paused Session', 'You have a paused focus session. Start focus to resume or start fresh.');
+                // Don't show any toast here — the user will be prompted only when
+                // they try to start a new session (via checkPausedSessionBeforeStart).
                 return;
             }
 
@@ -2132,6 +2146,12 @@ async function finalizeExtraTimeSession(addExtraTime) {
     clearInterval(FocusState.timerInterval);
     FocusState.timerInterval = null;
 
+    // Cancel any pending throttled sync so it can't re-write stale state after cleanup
+    if (_syncThrottleTimer) {
+        clearTimeout(_syncThrottleTimer);
+        _syncThrottleTimer = null;
+    }
+
     // Prevent the background completion alarm from double-saving
     try {
         FocusState.isPaused = true;
@@ -2179,6 +2199,31 @@ async function finalizeExtraTimeSession(addExtraTime) {
     FocusState.isExtraTime = false;
     FocusState.extraTimeSeconds = 0;
     FocusState._completing = false;
+
+    // Full cleanup: clear session state so next start doesn't see a ghost paused session
+    FocusState.isActive = false;
+    FocusState.isPaused = false;
+    FocusState.isBreak = false;
+    FocusState.isOpenEnded = false;
+    FocusState.elapsedSeconds = 0;
+    FocusState.remainingSeconds = 0;
+    FocusState.startTimestamp = null;
+    FocusState.endTimestamp = null;
+    FocusState.pausedRemainingSeconds = null;
+    FocusState.pausedElapsedSeconds = null;
+    FocusState.currentSession = null;
+    FocusState.isStopping = false;
+
+    // Clear persisted state so popup/background don't restore a stale session.
+    // Await to ensure it completes before any subsequent loadFocusPage reads storage.
+    await chrome.storage.local.remove(['focusState', 'focusSession']);
+
+    // Stop ambient sound & hide overlay since the session is over
+    stopAmbientSound();
+    hideFocusOverlay();
+
+    // Reset page title
+    document.title = 'Student Productivity Hub';
 }
 
 
