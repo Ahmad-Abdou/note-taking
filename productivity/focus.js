@@ -392,10 +392,13 @@ async function checkActiveSession() {
             if (savedState.isPaused) {
                 // Validate that this is a real paused session with meaningful progress,
                 // not a ghost state left over from a completed extra-time session.
-                const hasRemainingTime = !savedState.isOpenEnded && (savedState.pausedRemainingSeconds ?? savedState.remainingSeconds) > 0;
-                const hasElapsedTime = savedState.isOpenEnded && (savedState.pausedElapsedSeconds ?? savedState.elapsedSeconds ?? 0) > 0;
+                const remaining = savedState.pausedRemainingSeconds ?? savedState.remainingSeconds ?? 0;
+                const elapsed = savedState.pausedElapsedSeconds ?? savedState.elapsedSeconds ?? 0;
+                const hasElapsedTime = savedState.isOpenEnded && elapsed > 0;
+                // A timed session with 0 remaining was already completed — it's stale
+                const isStaleTimedSession = !savedState.isOpenEnded && remaining <= 0;
 
-                if (!hasRemainingTime && !hasElapsedTime) {
+                if (isStaleTimedSession || (!hasElapsedTime && elapsed <= 0 && remaining <= 0)) {
                     // Stale/ghost paused state — discard it silently
                     chrome.storage.local.remove(['focusState', 'focusSession']);
                     return;
@@ -2143,6 +2146,12 @@ async function finalizeExtraTimeSession(addExtraTime) {
     clearInterval(FocusState.timerInterval);
     FocusState.timerInterval = null;
 
+    // Cancel any pending throttled sync so it can't re-write stale state after cleanup
+    if (_syncThrottleTimer) {
+        clearTimeout(_syncThrottleTimer);
+        _syncThrottleTimer = null;
+    }
+
     // Prevent the background completion alarm from double-saving
     try {
         FocusState.isPaused = true;
@@ -2205,8 +2214,9 @@ async function finalizeExtraTimeSession(addExtraTime) {
     FocusState.currentSession = null;
     FocusState.isStopping = false;
 
-    // Clear persisted state so popup/background don't restore a stale session
-    chrome.storage.local.remove(['focusState', 'focusSession']);
+    // Clear persisted state so popup/background don't restore a stale session.
+    // Await to ensure it completes before any subsequent loadFocusPage reads storage.
+    await chrome.storage.local.remove(['focusState', 'focusSession']);
 
     // Stop ambient sound & hide overlay since the session is over
     stopAmbientSound();
