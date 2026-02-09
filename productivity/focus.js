@@ -2179,6 +2179,30 @@ async function finalizeExtraTimeSession(addExtraTime) {
     FocusState.isExtraTime = false;
     FocusState.extraTimeSeconds = 0;
     FocusState._completing = false;
+
+    // Full cleanup: clear session state so next start doesn't see a ghost paused session
+    FocusState.isActive = false;
+    FocusState.isPaused = false;
+    FocusState.isBreak = false;
+    FocusState.isOpenEnded = false;
+    FocusState.elapsedSeconds = 0;
+    FocusState.remainingSeconds = 0;
+    FocusState.startTimestamp = null;
+    FocusState.endTimestamp = null;
+    FocusState.pausedRemainingSeconds = null;
+    FocusState.pausedElapsedSeconds = null;
+    FocusState.currentSession = null;
+    FocusState.isStopping = false;
+
+    // Clear persisted state so popup/background don't restore a stale session
+    chrome.storage.local.remove(['focusState', 'focusSession']);
+
+    // Stop ambient sound & hide overlay since the session is over
+    stopAmbientSound();
+    hideFocusOverlay();
+
+    // Reset page title
+    document.title = 'Student Productivity Hub';
 }
 
 
