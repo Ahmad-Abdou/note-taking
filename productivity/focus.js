@@ -390,6 +390,17 @@ async function checkActiveSession() {
             // If session was paused, DON'T auto-restore - let user browse app freely
             // They will see resume options when they try to start a new focus session
             if (savedState.isPaused) {
+                // Validate that this is a real paused session with meaningful progress,
+                // not a ghost state left over from a completed extra-time session.
+                const hasRemainingTime = !savedState.isOpenEnded && (savedState.pausedRemainingSeconds ?? savedState.remainingSeconds) > 0;
+                const hasElapsedTime = savedState.isOpenEnded && (savedState.pausedElapsedSeconds ?? savedState.elapsedSeconds ?? 0) > 0;
+
+                if (!hasRemainingTime && !hasElapsedTime) {
+                    // Stale/ghost paused state — discard it silently
+                    chrome.storage.local.remove(['focusState', 'focusSession']);
+                    return;
+                }
+
                 // Just restore the in-memory state but don't show overlay
                 FocusState.isActive = true;
                 FocusState.isPaused = true;
