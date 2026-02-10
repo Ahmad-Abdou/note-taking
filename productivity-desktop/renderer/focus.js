@@ -2838,7 +2838,7 @@ function showWebNotification(title, body) {
     if (Notification.permission === 'granted') {
         const iconUrl = (typeof chrome !== 'undefined' && chrome?.runtime?.getURL)
             ? chrome.runtime.getURL('icons/icon48.png')
-            : '../icons/icon48.png';
+            : '../assets/icon48.png';
         new Notification(title, {
             body,
             icon: iconUrl,

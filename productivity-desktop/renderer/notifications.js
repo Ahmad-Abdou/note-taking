@@ -580,7 +580,7 @@ async function showDesktopNotification(title, options = {}) {
             }
             const defaultIcon = (typeof chrome !== 'undefined' && chrome?.runtime?.getURL)
                 ? chrome.runtime.getURL('icons/icon48.png')
-                : 'icons/icon48.png';
+                : '../assets/icon48.png';
             const notification = new Notification('📌 ' + title, {
                 body: options.body,
                 icon: options.icon || defaultIcon,

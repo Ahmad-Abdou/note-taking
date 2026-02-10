@@ -158,7 +158,7 @@ const ChallengeManager = {
         if (didChange) await this.save();
     },
 
-    async create({ metric, type, targetCount, options }) {
+    async create({ metric, type, targetCount, options, name }) {
         await this.ensureLoaded();
 
         const normalizedMetric = normalizeMetric(metric);
@@ -168,12 +168,15 @@ const ChallengeManager = {
             ? { minMinutes: Math.max(0, Number(options?.minMinutes) || 0) }
             : {};
 
+        const customName = (typeof name === 'string' && name.trim()) ? name.trim() : '';
+
         const challenge = {
             id: createChallengeId(),
             metric: normalizedMetric,
             type: safeType,
             options: safeOptions,
-            title: buildChallengeTitle(normalizedMetric, target, safeOptions),
+            title: customName || buildChallengeTitle(normalizedMetric, target, safeOptions),
+            customTitle: !!customName,
             description: buildChallengeDescription(normalizedMetric, target, safeOptions),
             targetProgress: target,
             currentProgress: 0,
@@ -186,6 +189,36 @@ const ChallengeManager = {
         };
 
         this.challenges.push(challenge);
+        await this.save();
+        return challenge;
+    },
+
+    async update(id, updates) {
+        await this.ensureLoaded();
+        const challenge = this.challenges.find(c => c.id === id);
+        if (!challenge) return null;
+
+        const { metric, type, targetCount, options, name } = updates;
+
+        if (metric !== undefined) challenge.metric = normalizeMetric(metric);
+        if (type !== undefined) challenge.type = ['daily', 'weekly', 'custom'].includes(type) ? type : challenge.type;
+        if (targetCount !== undefined) challenge.targetProgress = Math.max(1, Number(targetCount) || 1);
+        if (options !== undefined) {
+            challenge.options = (normalizeMetric(challenge.metric) === 'focus_sessions')
+                ? { minMinutes: Math.max(0, Number(options?.minMinutes) || 0) }
+                : {};
+        }
+
+        const customName = (typeof name === 'string' && name.trim()) ? name.trim() : '';
+        if (customName) {
+            challenge.title = customName;
+            challenge.customTitle = true;
+        } else {
+            challenge.title = buildChallengeTitle(challenge.metric, challenge.targetProgress, challenge.options);
+            challenge.customTitle = false;
+        }
+        challenge.description = buildChallengeDescription(challenge.metric, challenge.targetProgress, challenge.options);
+
         await this.save();
         return challenge;
     },
@@ -359,6 +392,12 @@ function renderChallenges() {
             e.stopPropagation();
             deleteChallenge(id);
         });
+
+        card.querySelector('.edit-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const challenge = ChallengeState.challenges.find(c => c.id === id);
+            if (challenge) openChallengeModal(challenge);
+        });
     });
 }
 
@@ -381,9 +420,14 @@ function renderChallengeCard(challenge) {
                     <span>${challenge.type}</span>
                 </div>
                 ${streakBadge}
-                <button class="btn-icon tiny delete-btn" title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
+                <div class="challenge-actions">
+                    ${!isCompleted ? `<button class="btn-icon tiny edit-btn" title="Edit">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>` : ''}
+                    <button class="btn-icon tiny delete-btn" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
             <div class="challenge-body">
                 <h3 class="challenge-title">${escapeHtml(challenge.title)}</h3>
@@ -426,83 +470,117 @@ function updateChallengeStats() {
 // ============================================================================
 
 async function deleteChallenge(challengeId) {
-    if (!confirm('Delete this challenge?')) return;
+    const confirmed = await showConfirmModal('Delete this challenge?');
+    if (!confirmed) return;
 
     await window.ChallengeManager?.delete?.(challengeId);
     ChallengeState.challenges = window.ChallengeManager?.challenges || [];
     renderChallenges();
     updateChallengeStats();
+
+    // Also remove the synced habit for this challenge
+    _removeSyncedHabitForChallenge(challengeId);
+
     showToast?.('success', 'Deleted', 'Challenge removed');
+}
+
+/** Remove the daily-challenge habit entry for a deleted challenge */
+function _removeSyncedHabitForChallenge(challengeId) {
+    try {
+        const ht = window.habitTrackerInstance;
+        if (!ht?.state?.data) return;
+        const habitId = `daily-challenge--${challengeId}`;
+        const goals = ht.state.data.goalsMeta || [];
+        if (!goals.some(g => g.id === habitId)) return;
+
+        ht.state.data.goalsMeta = goals.filter(g => g.id !== habitId);
+        delete ht.state.data.goals[habitId];
+        if (!Array.isArray(ht.state.data.dismissedSyncIds)) ht.state.data.dismissedSyncIds = [];
+        if (!ht.state.data.dismissedSyncIds.includes(habitId)) {
+            ht.state.data.dismissedSyncIds.push(habitId);
+        }
+        ht._save?.();
+        ht.render?.();
+    } catch (e) {
+        console.warn('[Challenges] Failed to remove synced habit:', e);
+    }
 }
 
 // ============================================================================
 // CHALLENGE MODAL
 // ============================================================================
 
-function openChallengeModal() {
+function openChallengeModal(existingChallenge) {
+    const isEdit = !!existingChallenge;
+
     // Check if modal exists, create if not
     let modal = document.getElementById('challenge-modal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'challenge-modal';
         modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2><i class="fas fa-trophy"></i> Create Challenge</h2>
-                    <button class="close-modal-btn">&times;</button>
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-trophy"></i> ${isEdit ? 'Edit Challenge' : 'Create Challenge'}</h2>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form id="challenge-form" class="modal-body">
+                <div class="form-group">
+                    <label>Challenge Name <span style="opacity:0.6;font-weight:normal;">(optional)</span></label>
+                    <input type="text" id="challenge-name" placeholder="e.g. Morning Focus Sprint" maxlength="80">
                 </div>
-                <form id="challenge-form" class="modal-body">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Goal</label>
-                            <select id="challenge-metric">
-                                <option value="focus_sessions">Focus sessions</option>
-                                <option value="focus_time">Focus minutes</option>
-                                <option value="tasks">Tasks completed</option>
-                                <option value="reviews">Reviews completed</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Target</label>
-                            <input type="number" id="challenge-target" value="5" min="1" required>
-                        </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Goal</label>
+                        <select id="challenge-metric">
+                            <option value="focus_sessions">Focus sessions</option>
+                            <option value="focus_time">Focus minutes</option>
+                            <option value="tasks">Tasks completed</option>
+                            <option value="reviews">Reviews completed</option>
+                        </select>
                     </div>
-                    <div class="form-row" id="challenge-focus-opts" style="display:none;">
-                        <div class="form-group">
-                            <label>Min minutes per session (optional)</label>
-                            <input type="number" id="challenge-min-minutes" value="0" min="0" step="5">
-                        </div>
-                        <div class="form-group">
-                            <label>Type</label>
-                            <select id="challenge-type">
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="custom" selected>Custom</option>
-                            </select>
-                        </div>
+                    <div class="form-group">
+                        <label>Target</label>
+                        <input type="number" id="challenge-target" value="5" min="1" required>
                     </div>
-                    <div class="form-group" id="challenge-type-row">
+                </div>
+                <div class="form-row" id="challenge-focus-opts" style="display:none;">
+                    <div class="form-group">
+                        <label>Min minutes per session (optional)</label>
+                        <input type="number" id="challenge-min-minutes" value="0" min="0" step="5">
+                    </div>
+                    <div class="form-group">
                         <label>Type</label>
-                        <select id="challenge-type-simple">
+                        <select id="challenge-type">
                             <option value="daily">Daily</option>
                             <option value="weekly">Weekly</option>
                             <option value="custom" selected>Custom</option>
                         </select>
                     </div>
-                    <div class="form-group" style="opacity:0.9;">
-                        <label>Preview</label>
-                        <div id="challenge-preview" style="line-height:1.4"></div>
-                    </div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn-secondary close-modal-btn">Cancel</button>
-                        <button type="submit" class="btn-primary">Create Challenge</button>
-                    </div>
-                </form>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
+                </div>
+                <div class="form-group" id="challenge-type-row">
+                    <label>Type</label>
+                    <select id="challenge-type-simple">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="custom" selected>Custom</option>
+                    </select>
+                </div>
+                <div class="form-group" style="opacity:0.9;">
+                    <label>Preview</label>
+                    <div id="challenge-preview" style="line-height:1.4"></div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn-primary">${isEdit ? 'Save Changes' : 'Create Challenge'}</button>
+                </div>
+            </form>
+        </div>
+    `;
 
     modal.classList.add('active');
 
@@ -516,12 +594,7 @@ function openChallengeModal() {
     });
 
     const form = document.getElementById('challenge-form');
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        await createChallenge();
-        modal.classList.remove('active');
-    };
-
+    const nameEl = document.getElementById('challenge-name');
     const metricEl = document.getElementById('challenge-metric');
     const targetEl = document.getElementById('challenge-target');
     const focusOpts = document.getElementById('challenge-focus-opts');
@@ -530,6 +603,31 @@ function openChallengeModal() {
     const typeRow = document.getElementById('challenge-type-row');
     const typeSimpleEl = document.getElementById('challenge-type-simple');
     const typeFocusEl = document.getElementById('challenge-type');
+
+    // Pre-populate for edit mode
+    if (isEdit) {
+        if (nameEl) nameEl.value = existingChallenge.customTitle ? existingChallenge.title : '';
+        if (metricEl) metricEl.value = existingChallenge.metric || 'focus_sessions';
+        if (targetEl) targetEl.value = existingChallenge.targetProgress || 5;
+        if (minMinutesEl) minMinutesEl.value = existingChallenge.options?.minMinutes || 0;
+        const curType = existingChallenge.type || 'custom';
+        if (typeSimpleEl) typeSimpleEl.value = curType;
+        if (typeFocusEl) typeFocusEl.value = curType;
+    }
+
+    // Store editing challenge ID for the submit handler
+    form.dataset.editId = isEdit ? existingChallenge.id : '';
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const editId = form.dataset.editId;
+        if (editId) {
+            await updateChallenge(editId);
+        } else {
+            await createChallenge();
+        }
+        modal.classList.remove('active');
+    };
 
     const syncMetricUi = () => {
         const metric = normalizeMetric(metricEl?.value);
@@ -541,11 +639,12 @@ function openChallengeModal() {
 
     const syncPreview = () => {
         if (!previewEl) return;
+        const customName = (nameEl?.value || '').trim();
         const metric = normalizeMetric(metricEl?.value);
         const target = Math.max(1, Number(targetEl?.value) || 1);
         const minMinutes = Math.max(0, Number(minMinutesEl?.value) || 0);
         const options = metric === 'focus_sessions' ? { minMinutes } : {};
-        const title = buildChallengeTitle(metric, target, options);
+        const title = customName || buildChallengeTitle(metric, target, options);
         const desc = buildChallengeDescription(metric, target, options);
         previewEl.innerHTML = `<strong>${escapeHtml(title)}</strong><div style="opacity:0.85;margin-top:4px;">${escapeHtml(desc)}</div>`;
     };
@@ -555,11 +654,13 @@ function openChallengeModal() {
     minMinutesEl?.addEventListener('input', syncPreview);
     typeSimpleEl?.addEventListener('change', syncPreview);
     typeFocusEl?.addEventListener('change', syncPreview);
+    nameEl?.addEventListener('input', syncPreview);
 
     syncMetricUi();
 }
 
 async function createChallenge() {
+    const name = (document.getElementById('challenge-name')?.value || '').trim();
     const metric = normalizeMetric(document.getElementById('challenge-metric')?.value);
     const target = Math.max(1, parseInt(document.getElementById('challenge-target')?.value) || 1);
     const minMinutes = Math.max(0, parseInt(document.getElementById('challenge-min-minutes')?.value) || 0);
@@ -575,13 +676,53 @@ async function createChallenge() {
         metric,
         type,
         targetCount: target,
-        options: isFocus ? { minMinutes } : {}
+        options: isFocus ? { minMinutes } : {},
+        name
     });
 
     ChallengeState.challenges = window.ChallengeManager?.challenges || [];
     renderChallenges();
     updateChallengeStats();
+
+    // Sync new daily challenge to habit tracker immediately
+    if (type === 'daily' && window.habitTrackerInstance?.syncExternalDailyItems) {
+        window.habitTrackerInstance.syncExternalDailyItems();
+    }
+
     showToast?.('success', 'Challenge Created', 'Challenge is now active and will update automatically.');
+}
+
+async function updateChallenge(challengeId) {
+    const name = (document.getElementById('challenge-name')?.value || '').trim();
+    const metric = normalizeMetric(document.getElementById('challenge-metric')?.value);
+    const target = Math.max(1, parseInt(document.getElementById('challenge-target')?.value) || 1);
+    const minMinutes = Math.max(0, parseInt(document.getElementById('challenge-min-minutes')?.value) || 0);
+
+    const isFocus = metric === 'focus_sessions';
+    const type = isFocus
+        ? (document.getElementById('challenge-type')?.value || 'custom')
+        : (document.getElementById('challenge-type-simple')?.value || 'custom');
+
+    if (!metric) return;
+
+    await window.ChallengeManager?.update?.(challengeId, {
+        metric,
+        type,
+        targetCount: target,
+        options: isFocus ? { minMinutes } : {},
+        name
+    });
+
+    ChallengeState.challenges = window.ChallengeManager?.challenges || [];
+    renderChallenges();
+    updateChallengeStats();
+
+    // Re-sync habits to pick up updated label
+    if (window.habitTrackerInstance?.syncExternalDailyItems) {
+        window.habitTrackerInstance.syncExternalDailyItems();
+    }
+
+    showToast?.('success', 'Challenge Updated', 'Your changes have been saved.');
 }
 
 // Escape HTML helper
@@ -592,9 +733,52 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ============================================================================
+// SHARED CONFIRM MODAL (replaces native confirm() for Electron compatibility)
+// ============================================================================
+
+function showConfirmModal(message) {
+    return new Promise((resolve) => {
+        let overlay = document.getElementById('confirm-modal-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'confirm-modal-overlay';
+            overlay.className = 'modal';
+            document.body.appendChild(overlay);
+        }
+        overlay.innerHTML = `
+            <div class="modal-content" style="max-width:380px;">
+                <div class="modal-header">
+                    <h2><i class="fas fa-exclamation-triangle"></i> Confirm</h2>
+                </div>
+                <div class="modal-body" style="padding:16px 20px;">
+                    <p style="margin:0 0 16px;">${escapeHtml(message)}</p>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" data-confirm="cancel">Cancel</button>
+                        <button type="button" class="btn-primary btn-danger" data-confirm="ok">Delete</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        overlay.classList.add('active');
+
+        const cleanup = (result) => {
+            overlay.classList.remove('active');
+            resolve(result);
+        };
+
+        overlay.querySelector('[data-confirm="ok"]').addEventListener('click', () => cleanup(true));
+        overlay.querySelector('[data-confirm="cancel"]').addEventListener('click', () => cleanup(false));
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+    });
+}
+window.showConfirmModal = showConfirmModal;
+
 // Export for global access
 window.loadChallengesPage = loadChallengesPage;
 window.openChallengeModal = openChallengeModal;
+window.updateChallenge = updateChallenge;
+window._removeSyncedHabitForChallenge = _removeSyncedHabitForChallenge;
 
 // Best-effort background init so recordProgress works immediately.
 window.ChallengeManager?.ensureLoaded?.();

@@ -288,7 +288,6 @@
     background: rgba(245, 158, 11, 0.12);
     padding: 4px 10px;
     border-radius: 6px;
-    margin-left: auto;
 }
 
 .challenge-card .streak-badge i {
@@ -296,14 +295,43 @@
     font-size: 11px;
 }
 
-.challenge-card .delete-btn {
+.challenge-card .challenge-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.challenge-card .delete-btn,
+.challenge-card .edit-btn {
     opacity: 0;
     transition: opacity 0.2s ease;
     flex-shrink: 0;
 }
 
-.challenge-card:hover .delete-btn {
+.challenge-card:hover .delete-btn,
+.challenge-card:hover .edit-btn {
     opacity: 1;
+}
+
+.challenge-card .edit-btn:hover {
+    color: var(--primary);
+}
+
+.challenge-card .delete-btn:hover {
+    color: var(--danger-color, #ef4444);
+}
+
+/* Confirm Modal */
+#confirm-modal-overlay .btn-danger {
+    background: var(--danger-color, #ef4444);
+    border-color: var(--danger-color, #ef4444);
+}
+
+#confirm-modal-overlay .btn-danger:hover {
+    background: #dc2626;
+    border-color: #dc2626;
 }
 
 /* Challenge Body */

@@ -136,10 +136,14 @@ if (!chrome.storage.local) {
 
 // Polyfill chrome.storage.onChanged if needed
 if (!chrome.storage.onChanged) {
+    let _warnedOnChanged = false;
     chrome.storage.onChanged = {
         addListener: function(callback) {
             // Stub for compatibility - not fully implemented
-            console.warn('chrome.storage.onChanged.addListener is not fully supported in polyfill');
+            if (!_warnedOnChanged) {
+                console.warn('chrome.storage.onChanged.addListener is not fully supported in polyfill');
+                _warnedOnChanged = true;
+            }
         },
         removeListener: function(callback) {
             // Stub for compatibility
@@ -154,10 +158,14 @@ if (!chrome.runtime) {
 
 // Polyfill chrome.runtime.onMessage if it doesn't exist
 if (!chrome.runtime.onMessage) {
+    let _warnedOnMessage = false;
     chrome.runtime.onMessage = {
         addListener: function(callback) {
             // Stub for compatibility - in a real extension this would handle messages
-            console.warn('chrome.runtime.onMessage.addListener is not fully supported in polyfill');
+            if (!_warnedOnMessage) {
+                console.warn('chrome.runtime.onMessage.addListener is not fully supported in polyfill');
+                _warnedOnMessage = true;
+            }
             return true;
         },
         removeListener: function(callback) {
@@ -168,8 +176,12 @@ if (!chrome.runtime.onMessage) {
 
 // Polyfill chrome.runtime.sendMessage if it doesn't exist
 if (!chrome.runtime.sendMessage) {
+    let _warnedSendMessage = false;
     chrome.runtime.sendMessage = function(message, callback) {
-        console.warn('chrome.runtime.sendMessage is not fully supported in polyfill');
+        if (!_warnedSendMessage) {
+            console.warn('chrome.runtime.sendMessage is not fully supported in polyfill');
+            _warnedSendMessage = true;
+        }
         if (callback) {
             callback();
         }

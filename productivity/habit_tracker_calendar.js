@@ -853,7 +853,7 @@
         }
 
         async _handleImport() {
-            const raw = prompt('Paste exported Habit Tracker JSON:');
+            const raw = await this._showInputModal('Import Habit Data', 'Paste exported Habit Tracker JSON here...');
             if (!raw) return;
 
             try {
@@ -999,7 +999,7 @@
             }
 
             const goal = goals.find(g => g.id === goalId);
-            const ok = confirm(`Delete habit "${goal?.label || goalId}"? This will remove its history.`);
+            const ok = await this._showConfirmDialog(`Delete habit "${goal?.label || goalId}"? This will remove its history.`);
             if (!ok) return;
 
             // Track all dismissed habit IDs so they don't reappear (defaults + synced)
@@ -1013,6 +1013,22 @@
 
             if (this.state.activeGoalId === goalId) {
                 this.state.activeGoalId = this._getGoalsList()[0]?.id;
+            }
+
+            // Cascade: if this is a synced challenge habit, also delete the challenge
+            if (goalId.startsWith('daily-challenge--')) {
+                const challengeId = goalId.replace('daily-challenge--', '');
+                try {
+                    await window.ChallengeManager?.delete?.(challengeId);
+                    // Update challenges UI if visible
+                    if (typeof ChallengeState !== 'undefined' && document.getElementById('challenges-grid')) {
+                        ChallengeState.challenges = window.ChallengeManager?.challenges || [];
+                        if (typeof renderChallenges === 'function') renderChallenges();
+                        if (typeof updateChallengeStats === 'function') updateChallengeStats();
+                    }
+                } catch (e) {
+                    console.warn('[HabitTracker] Failed to cascade-delete challenge:', e);
+                }
             }
 
             await this._save();
@@ -1060,7 +1076,96 @@
 
         _promptCopy(text) {
             // Fallback for environments without Clipboard API permissions.
-            prompt('Copy this JSON:', text);
+            this._showCopyModal(text);
+        }
+
+        // --- Custom Dialogs (replace native prompt/confirm for Electron compatibility) ---
+
+        _showConfirmDialog(message) {
+            // Use shared confirm modal if available (from challenges.js)
+            if (typeof window.showConfirmModal === 'function') {
+                return window.showConfirmModal(message);
+            }
+            // Fallback: try native confirm (works in browser extension context)
+            return Promise.resolve(confirm(message));
+        }
+
+        _showInputModal(title, placeholder) {
+            return new Promise((resolve) => {
+                let overlay = document.getElementById('ht-input-modal');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'ht-input-modal';
+                    overlay.className = 'modal';
+                    document.body.appendChild(overlay);
+                }
+                overlay.innerHTML = `
+                    <div class="modal-content" style="max-width:480px;">
+                        <div class="modal-header">
+                            <h2>${title}</h2>
+                            <button class="close-modal-btn">&times;</button>
+                        </div>
+                        <div class="modal-body" style="padding:16px 20px;">
+                            <textarea id="ht-input-textarea" rows="8" style="width:100%;resize:vertical;font-family:monospace;font-size:12px;" placeholder="${placeholder || ''}"></textarea>
+                            <div class="modal-actions" style="margin-top:12px;">
+                                <button type="button" class="btn-secondary" data-action="cancel">Cancel</button>
+                                <button type="button" class="btn-primary" data-action="submit">Import</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                overlay.classList.add('active');
+
+                const textarea = overlay.querySelector('#ht-input-textarea');
+                textarea?.focus();
+
+                const cleanup = (val) => {
+                    overlay.classList.remove('active');
+                    resolve(val);
+                };
+
+                overlay.querySelector('[data-action="submit"]').addEventListener('click', () => cleanup(textarea?.value || ''));
+                overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => cleanup(null));
+                overlay.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', () => cleanup(null)));
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+            });
+        }
+
+        _showCopyModal(text) {
+            let overlay = document.getElementById('ht-copy-modal');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'ht-copy-modal';
+                overlay.className = 'modal';
+                document.body.appendChild(overlay);
+            }
+            overlay.innerHTML = `
+                <div class="modal-content" style="max-width:480px;">
+                    <div class="modal-header">
+                        <h2>Copy JSON</h2>
+                        <button class="close-modal-btn">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding:16px 20px;">
+                        <textarea readonly rows="10" style="width:100%;resize:vertical;font-family:monospace;font-size:12px;">${text?.replace?.(/</g, '&lt;') || ''}</textarea>
+                        <div class="modal-actions" style="margin-top:12px;">
+                            <button type="button" class="btn-primary" data-action="copy">Copy to Clipboard</button>
+                            <button type="button" class="btn-secondary close-modal-btn">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            overlay.classList.add('active');
+
+            const cleanup = () => overlay.classList.remove('active');
+            overlay.querySelectorAll('.close-modal-btn').forEach(b => b.addEventListener('click', cleanup));
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+            overlay.querySelector('[data-action="copy"]')?.addEventListener('click', async () => {
+                const ok = await this._copyToClipboard(text);
+                if (ok) {
+                    this._flashInfo('Copied to clipboard!');
+                    cleanup();
+                }
+            });
         }
 
         // --- Helpers ---

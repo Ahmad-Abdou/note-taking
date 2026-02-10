@@ -140,7 +140,7 @@ if (typeof chrome.runtime === 'undefined') {
         onMessage: {
             addListener: () => { }
         },
-        getURL: (path) => path
+        getURL: (path) => {\n            // Map extension icon paths to desktop asset paths\n            if (path === 'icons/icon48.png') return '../assets/icon48.png';\n            if (path === 'icons/icon128.png') return '../assets/icon128.png';\n            return path;\n        }
     };
 }
 
