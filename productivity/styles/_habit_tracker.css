@@ -55,14 +55,18 @@
     display: flex;
     align-items: flex-end;
     gap: var(--spacing-xs);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     max-width: 100%;
     min-width: 0;
     flex: 1 1 520px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
 }
 
 #habit-tracker-root .habit-tracker-controls > * {
     min-width: 0;
+    flex-shrink: 0;
 }
 
 #habit-tracker-root .habit-view-tabs {

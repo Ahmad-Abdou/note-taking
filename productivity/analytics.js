@@ -1619,13 +1619,23 @@ function formatMinutesLong(minutes) {
 // ============================================================================
 async function renderCommitmentStats() {
     try {
-        const stats = await ProductivityData.DataStore.getCommitmentStats();
         const checkinStreak = await ProductivityData.DataStore.getCheckinStreak();
+        const [goals, challenges, tasks] = await Promise.all([
+            ProductivityData.DataStore.getGoals(),
+            ProductivityData.DataStore.getChallenges(),
+            ProductivityData.DataStore.getTasks()
+        ]);
+
+        const goalsCompletedCount = goals.filter(goal => goal?.status === 'completed').length;
+        const challengesCompletedCount = challenges.filter(challenge => challenge?.status === 'completed').length;
+        const tasksCompletedCount = tasks.filter(task => task?.status === 'completed').length;
+
+        const combinedTotal = goals.length + challenges.length + tasks.length;
+        const combinedCompleted = goalsCompletedCount + challengesCompletedCount + tasksCompletedCount;
 
         // Calculate commitment score
-        const totalGoals = (stats.totalGoalsCompleted || 0) + (stats.totalGoalsAbandoned || 0);
-        const commitmentScore = totalGoals > 0
-            ? Math.round(((stats.totalGoalsCompleted || 0) / totalGoals) * 100)
+        const commitmentScore = combinedTotal > 0
+            ? Math.round((combinedCompleted / combinedTotal) * 100)
             : 100;
 
         // Update score circle
@@ -1633,14 +1643,14 @@ async function renderCommitmentStats() {
         const scoreFill = document.getElementById('commitment-score-fill');
         const scoreDesc = document.getElementById('commitment-score-description');
 
-        if (scoreValue) scoreValue.textContent = totalGoals > 0 ? commitmentScore : '--';
+        if (scoreValue) scoreValue.textContent = combinedTotal > 0 ? commitmentScore : '--';
 
         if (scoreFill) {
             // SVG circle progress (circumference = 2 * PI * 45 ≈ 283)
             const circumference = 283;
             const offset = circumference - (circumference * commitmentScore / 100);
             scoreFill.style.strokeDasharray = circumference;
-            scoreFill.style.strokeDashoffset = totalGoals > 0 ? offset : circumference;
+            scoreFill.style.strokeDashoffset = combinedTotal > 0 ? offset : circumference;
 
             // Color based on score
             if (commitmentScore >= 80) {
@@ -1653,8 +1663,8 @@ async function renderCommitmentStats() {
         }
 
         if (scoreDesc) {
-            if (totalGoals === 0) {
-                scoreDesc.textContent = 'Complete goals to build your commitment score';
+            if (combinedTotal === 0) {
+                scoreDesc.textContent = 'Complete goals, challenges, and tasks to build your commitment score';
             } else if (commitmentScore >= 80) {
                 scoreDesc.textContent = 'Excellent! You follow through on your commitments';
             } else if (commitmentScore >= 50) {
@@ -1670,9 +1680,9 @@ async function renderCommitmentStats() {
         const xpLostEl = document.getElementById('xp-lost-total');
         const streakEl = document.getElementById('checkin-streak-count');
 
-        if (completedEl) completedEl.textContent = stats.totalGoalsCompleted || 0;
-        if (abandonedEl) abandonedEl.textContent = stats.totalGoalsAbandoned || 0;
-        if (xpLostEl) xpLostEl.textContent = (stats.totalXPLostToDecay || 0) + (stats.totalXPLostToStakes || 0);
+        if (completedEl) completedEl.textContent = goalsCompletedCount;
+        if (abandonedEl) abandonedEl.textContent = challengesCompletedCount;
+        if (xpLostEl) xpLostEl.textContent = tasksCompletedCount;
         if (streakEl) streakEl.textContent = checkinStreak;
 
     } catch (error) {

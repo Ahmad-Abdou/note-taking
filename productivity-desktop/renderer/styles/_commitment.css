@@ -381,6 +381,154 @@
     justify-content: center;
 }
 
+/* ============================================================================
+   CHECK-IN HISTORY MODAL
+   ============================================================================ */
+.checkin-history-header {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+    color: white !important;
+}
+
+.checkin-history-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-md, 16px);
+    margin-bottom: var(--spacing-lg, 24px);
+}
+
+.history-stat {
+    text-align: center;
+    padding: var(--spacing-md, 16px);
+    background: var(--bg-tertiary, #2a2a2a);
+    border-radius: var(--radius-md, 8px);
+}
+
+.history-stat .stat-value {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--primary, #6366f1);
+}
+
+.history-stat .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted, #888);
+}
+
+.checkin-history-list {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md, 16px);
+}
+
+.no-checkins {
+    text-align: center;
+    padding: var(--spacing-xl, 32px);
+    color: var(--text-muted, #888);
+}
+
+.no-checkins i {
+    font-size: 3rem;
+    opacity: 0.3;
+    margin-bottom: var(--spacing-md, 16px);
+}
+
+.checkin-history-item {
+    display: flex;
+    gap: var(--spacing-md, 16px);
+    padding: var(--spacing-md, 16px);
+    background: var(--bg-tertiary, #2a2a2a);
+    border-radius: var(--radius-md, 8px);
+    border-left: 3px solid var(--primary, #6366f1);
+}
+
+.checkin-date-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    padding: var(--spacing-sm, 8px);
+    background: var(--bg-secondary, #1a1a1a);
+    border-radius: var(--radius-md, 8px);
+}
+
+.checkin-date-badge .date-day {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+    line-height: 1;
+}
+
+.checkin-date-badge .date-month {
+    font-size: 0.7rem;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+}
+
+.checkin-details {
+    flex: 1;
+}
+
+.checkin-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm, 8px);
+    margin-bottom: var(--spacing-xs, 4px);
+}
+
+.checkin-mood {
+    font-size: 1.25rem;
+}
+
+.checkin-time {
+    font-size: 0.8rem;
+    color: var(--text-muted, #888);
+}
+
+.checkin-reflection {
+    font-style: italic;
+    color: var(--text-secondary, #aaa);
+    font-size: 0.9rem;
+    margin: var(--spacing-xs, 4px) 0;
+    padding-left: var(--spacing-sm, 8px);
+    border-left: 2px solid var(--border-color, #333);
+}
+
+.checkin-commitment {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs, 4px);
+    font-size: 0.85rem;
+    color: var(--success, #10b981);
+    margin: var(--spacing-xs, 4px) 0;
+}
+
+.checkin-commitment i {
+    font-size: 0.75rem;
+}
+
+.checkin-stats-mini {
+    display: flex;
+    gap: var(--spacing-md, 16px);
+    margin-top: var(--spacing-sm, 8px);
+    font-size: 0.75rem;
+    color: var(--text-muted, #888);
+}
+
+.checkin-stats-mini span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.checkin-stats-mini i {
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
 /* === Responsive === */
 @media (max-width: 768px) {
     .commitment-stats-card {

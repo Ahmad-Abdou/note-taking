@@ -622,18 +622,40 @@
     background: var(--bg-secondary);
     border-radius: var(--radius-md);
     margin: 0 20px 16px;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
     animation: slideDown 0.2s ease;
 }
 
 .new-list-inline input[type="text"] {
-    flex: 1;
+    flex: 1 1 180px;
     padding: 8px 12px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card);
     color: var(--text-primary);
     font-size: 0.85rem;
+}
+
+.new-list-inline .color-options {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 260px;
+    overflow: visible;
+}
+
+.new-list-inline .color-btn {
+    width: 24px;
+    height: 24px;
+}
+
+.new-list-inline .color-btn.active,
+.new-list-inline .color-btn[aria-pressed="true"] {
+    transform: scale(1.08);
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.28);
 }
 
 .new-list-inline input[type="color"] {

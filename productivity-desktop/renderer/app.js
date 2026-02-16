@@ -531,6 +531,28 @@ function normalizeYMD(value) {
     return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
 }
 
+function isDailyRecurringTaskForDate(task, targetYmd) {
+    if (!task || !targetYmd) return false;
+
+    const isRecurring = !!(task.isRecurring || task.recurring);
+    const repeatType = String(task.repeatType || task.recurrence || '').toLowerCase();
+    if (!isRecurring || repeatType !== 'daily') return false;
+
+    const start = normalizeYMD(task.startDate);
+    if (start && start > targetYmd) return false;
+
+    const endType = String(task.repeatEndType || '').toLowerCase();
+    const endDate = normalizeYMD(task.repeatEndDate || task.recurrenceEndDate);
+    if (endType === 'date' && endDate && endDate < targetYmd) return false;
+
+    if (endType === 'count') {
+        const remaining = Number(task.repeatRemaining);
+        if (Number.isFinite(remaining) && remaining <= 0) return false;
+    }
+
+    return true;
+}
+
 function normalizeTaskLinkUrlInDashboard(raw) {
     if (!raw || typeof raw !== 'string') return null;
     let value = raw.trim();
@@ -592,7 +614,7 @@ function renderTodayTasksCard(allTasks) {
             if (t.status === 'completed') return false;
             const due = normalizeYMD(t.dueDate);
             const start = normalizeYMD(t.startDate);
-            return due === today || start === today;
+            return due === today || start === today || isDailyRecurringTaskForDate(t, today);
         })
         .sort((a, b) => {
             const pa = (a.priorityWeight ?? 0);
@@ -1490,12 +1512,17 @@ async function renderTodayTasksWidget() {
 
     try {
         const tasks = await ProductivityData.DataStore.getTasks();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getDashboardTodayYMD();
 
         // Get today's pending tasks
-        const todayTasks = tasks.filter(t =>
-            t.dueDate === today && t.status !== 'completed'
-        ).slice(0, 3);
+        const todayTasks = tasks
+            .filter(t => {
+                if (!t || t.status === 'completed') return false;
+                const due = normalizeYMD(t.dueDate);
+                const start = normalizeYMD(t.startDate);
+                return due === today || start === today || isDailyRecurringTaskForDate(t, today);
+            })
+            .slice(0, 3);
 
         if (todayTasks.length === 0) {
             container.innerHTML = `

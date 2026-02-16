@@ -603,6 +603,18 @@ img {
     align-items: center;
 }
 
+#page-goals > .page-header {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: var(--spacing-md);
+}
+
+#page-goals > .page-header .header-actions {
+    justify-content: center;
+}
+
 /* ============================================================================
    BUTTONS
    ============================================================================ */

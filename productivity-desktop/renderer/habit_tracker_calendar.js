@@ -357,7 +357,7 @@
 
         render() {
             this.mountEl.innerHTML = '';
-            this.mountEl.classList.add('habit-tracker-card');
+            this.mountEl.classList.remove('habit-tracker-card');
 
             const header = document.createElement('div');
             header.className = 'habit-tracker-header';

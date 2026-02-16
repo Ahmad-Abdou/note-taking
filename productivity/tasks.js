@@ -1857,6 +1857,14 @@ async function createNewTaskList(name, color) {
 
         await ProductivityData.DataStore.saveTaskList(newList);
         await loadTaskListsForModal(newList.id);
+
+        const listSelect = document.getElementById('task-list-select');
+        if (listSelect) listSelect.value = newList.id;
+
+        const taskColorInput = document.getElementById('task-color');
+        if (taskColorInput) taskColorInput.value = newList.color;
+        document.getElementById('task-color-options')?.__setFixedColor?.(newList.color);
+
         showToast('success', 'List Created', `"${name}" list created`);
     } catch (error) {
         console.error('Failed to create list:', error);
@@ -2115,6 +2123,14 @@ async function saveTask(e) {
             console.warn('refreshCalendarTasks not available');
         }
 
+        if (window.habitTrackerInstance?.syncExternalDailyItems) {
+            await window.habitTrackerInstance.syncExternalDailyItems();
+        }
+
+        if (window.App?.currentPage === 'dashboard' && typeof window.loadDashboard === 'function') {
+            await window.loadDashboard();
+        }
+
         if (TaskState.editingTask) {
             showToast('success', 'Task Updated', title);
         } else if (typeof window.showToast === 'function') {
@@ -2161,6 +2177,10 @@ async function toggleTask(taskId) {
         // Refresh calendar (completed tasks are hidden from calendar)
         if (typeof window.refreshCalendarTasks === 'function') {
             window.refreshCalendarTasks();
+        }
+
+        if (window.App?.currentPage === 'dashboard' && typeof window.loadDashboard === 'function') {
+            await window.loadDashboard();
         }
 
         if (newStatus === 'completed') {

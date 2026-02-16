@@ -296,9 +296,15 @@
 }
 
 .color-btn:hover,
-.color-btn.active {
+.color-btn.active,
+.color-btn[aria-pressed="true"] {
     transform: scale(1.1);
     border-color: white;
+}
+
+.color-btn.active,
+.color-btn[aria-pressed="true"] {
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.26);
 }
 
 .color-btn[data-color="#6366f1"] {

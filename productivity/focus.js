@@ -23,6 +23,9 @@ const FocusState = {
     isActive: false,
     isPaused: false,
     isBreak: false,
+    _completing: false,
+        _completingSession: false,
+        _completingBreak: false,
     isOpenEnded: false,  // New: for count-up timer mode
     isStopping: false,
     isExtraTime: false,      // Extra time mode after countdown session completes
@@ -2342,6 +2345,7 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
 
     // Check if extra time is running
     const hasExtraTime = FocusState.isExtraTime;
+    let extraTimeResolved = !hasExtraTime;
 
     // Show completion modal with options
     const modal = createModal('session-complete-modal', `
@@ -2442,18 +2446,33 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
         }, autoStartDelayMs);
     }
 
+    function setExtraTimeResolvedState(kind) {
+        extraTimeResolved = true;
+        const addBtn = modal.querySelector('[data-action="add-extra-time"]');
+        const discardBtn = modal.querySelector('[data-action="discard-extra-time"]');
+        if (addBtn) addBtn.disabled = true;
+        if (discardBtn) discardBtn.disabled = true;
+
+        const infoStrong = modal.querySelector('[data-extra-time-counter]');
+        if (infoStrong) {
+            infoStrong.textContent = kind === 'added' ? 'Added to stats' : 'Discarded';
+        }
+    }
+
     // Extra time button handlers
     modal.querySelector('[data-action="add-extra-time"]')?.addEventListener('click', async () => {
+        if (extraTimeResolved) return;
         const extraMins = Math.floor(FocusState.extraTimeSeconds / 60);
-        await finalizeAndThen(null, true);
-        showToast('success', '⏱️ Extra Time Added', `${extraMins} extra minute${extraMins === 1 ? '' : 's'} added to your stats.`);
-        loadFocusPage();
+        await finalizeExtraTimeSession(true);
+        setExtraTimeResolvedState('added');
+        showToast('success', '⏱️ Extra Time Added', `${extraMins} extra minute${extraMins === 1 ? '' : 's'} added. Choose your next step.`);
     });
 
     modal.querySelector('[data-action="discard-extra-time"]')?.addEventListener('click', async () => {
-        await finalizeAndThen(null, false);
-        showToast('info', '⏱️ Extra Time Discarded', 'Only the original session time was saved.');
-        loadFocusPage();
+        if (extraTimeResolved) return;
+        await finalizeExtraTimeSession(false);
+        setExtraTimeResolvedState('discarded');
+        showToast('info', '⏱️ Extra Time Discarded', 'Only the original session time was saved. Choose your next step.');
     });
 
     // Main action handlers

@@ -97,6 +97,7 @@ function createFixedColorPicker(containerEl, valueInputEl, options = {}) {
         valueInputEl.value = color;
         containerEl.querySelectorAll('button[data-color]').forEach(btn => {
             btn.classList.toggle(activeClass, btn.dataset.color === color);
+            btn.setAttribute('aria-pressed', btn.dataset.color === color ? 'true' : 'false');
         });
         if (typeof options.onChange === 'function') {
             options.onChange(color);
@@ -106,7 +107,7 @@ function createFixedColorPicker(containerEl, valueInputEl, options = {}) {
     containerEl.innerHTML = colors.map(color => {
         const isActive = normalizePaletteColor(valueInputEl.value || colors[0]) === color;
         return `
-            <button type="button" class="${buttonClass}${isActive ? ` ${activeClass}` : ''}" data-color="${color}" style="background: ${color}" aria-label="${ariaLabel}: ${color}"></button>
+            <button type="button" class="${buttonClass}${isActive ? ` ${activeClass}` : ''}" data-color="${color}" style="background: ${color}" aria-label="${ariaLabel}: ${color}" aria-pressed="${isActive ? 'true' : 'false'}"></button>
         `;
     }).join('');
 
