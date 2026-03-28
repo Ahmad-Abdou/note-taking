@@ -100,6 +100,8 @@
                     goals: stored.goals && typeof stored.goals === 'object' ? stored.goals : {},
                     dismissedSyncIds: Array.isArray(stored.dismissedSyncIds) ? stored.dismissedSyncIds : []
                 };
+                if (stored.activeView) this.state.activeView = stored.activeView;
+                if (stored.activeGoalId) this.state.activeGoalId = stored.activeGoalId;
             }
         }
 
@@ -130,6 +132,8 @@
 
         async _save() {
             const storage = this._getStorageApi();
+            this.state.data.activeView = this.state.activeView;
+            this.state.data.activeGoalId = this.state.activeGoalId;
             await storage.set({
                 [this.storageKey]: this.state.data
             });
@@ -170,11 +174,6 @@
 
             this.state.data.goalsMeta = Array.from(metaById.values());
             this.state.data.version = 2;
-
-            if (!this._getGoalsList().length) {
-                // Ensure at least one habit exists
-                this.state.data.goalsMeta = [{ id: 'habit', label: 'Habit' }];
-            }
 
             for (const goal of this._getGoalsList()) {
                 if (!this.state.data.goals[goal.id]) {
@@ -664,8 +663,7 @@
             const isDone = !!goalData.completed[iso];
             const isPast = iso < today;
 
-            // If it's a past day and not done, it's missed - don't allow changes
-            if (isPast && !isDone) return;
+            // If it's a past day and not done, we now allow changes.
 
             const next = !isDone;
             if (next) goalData.completed[iso] = 1;
@@ -830,10 +828,6 @@
             if (!goalId) return;
 
             const goals = this._getGoalsList();
-            if (goals.length <= 1) {
-                this._flashError('Keep at least one habit.');
-                return;
-            }
 
             const goal = goals.find((g) => g.id === goalId);
             const ok = confirm(`Delete habit "${goal?.label || goalId}"? This will remove its history.`);

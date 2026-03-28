@@ -2452,6 +2452,19 @@ function initializeSettings() {
     document.getElementById('import-data-btn')?.addEventListener('click', triggerImport);
     document.getElementById('clear-data-btn')?.addEventListener('click', confirmClearData);
 
+    // Auto-start setting change listener
+    const autoStartToggle = document.getElementById('settings-auto-start');
+    if (autoStartToggle && window.electronAPI?.autoStart) {
+        autoStartToggle.addEventListener('change', async (e) => {
+            try {
+                const result = await window.electronAPI.autoStart.set(e.target.checked);
+                e.target.checked = result;
+            } catch (err) {
+                console.error('Failed to set auto-start', err);
+            }
+        });
+    }
+
     // Sync buttons
     document.getElementById('sync-export-btn')?.addEventListener('click', syncExport);
     document.getElementById('sync-import-btn')?.addEventListener('click', syncImport);
@@ -2769,6 +2782,14 @@ function loadSettingsPage() {
 
     const notifDesktop = document.getElementById('settings-notif-desktop');
     if (notifDesktop) notifDesktop.checked = notifPrefs.desktop !== false;
+
+    // Auto start
+    const autoStartToggle = document.getElementById('settings-auto-start');
+    if (autoStartToggle && window.electronAPI?.autoStart) {
+        window.electronAPI.autoStart.get().then(enabled => {
+            autoStartToggle.checked = enabled;
+        }).catch(err => console.error('Failed to get auto-start', err));
+    }
 }
 
 // ============================================================================

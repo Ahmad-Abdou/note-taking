@@ -869,6 +869,19 @@ ipcMain.handle('store-clear', () => {
 
 // ===== IPC Handlers for Notifications =====
 
+// ===== IPC Handlers for Auto Start =====
+ipcMain.handle('get-auto-start', () => {
+    return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('set-auto-start', (event, enable) => {
+    app.setLoginItemSettings({
+        openAtLogin: enable,
+        path: app.getPath('exe')
+    });
+    return app.getLoginItemSettings().openAtLogin;
+});
+
 // ===== Pinned Widget Windows =====
 
 function createWidgetWindow(cardId, opts = {}) {

@@ -230,11 +230,15 @@
                     goals: stored.goals && typeof stored.goals === 'object' ? stored.goals : {},
                     dismissedSyncIds: Array.isArray(stored.dismissedSyncIds) ? stored.dismissedSyncIds : []
                 };
+                if (stored.activeView) this.state.activeView = stored.activeView;
+                if (stored.activeGoalId) this.state.activeGoalId = stored.activeGoalId;
             }
         }
 
         async _save() {
             const storage = this._getStorageApi();
+            this.state.data.activeView = this.state.activeView;
+            this.state.data.activeGoalId = this.state.activeGoalId;
             await storage.set({
                 [this.storageKey]: this.state.data
             });
@@ -324,11 +328,6 @@
             this.state.data.version = 2;
 
             const goalsList = this._getGoalsList();
-            if (!goalsList.length) {
-                // Ensure at least one habit exists
-                const fallback = { id: 'habit', label: 'Habit' };
-                this.state.data.goalsMeta = [fallback];
-            }
 
             for (const goal of this._getGoalsList()) {
                 if (!this.state.data.goals[goal.id]) {
@@ -822,8 +821,8 @@
             const isDone = !!goalData.completed[iso];
             const isPast = iso < today;
 
-            // If it's a past day and not done, it's missed - don't allow changes
-            if (isPast && !isDone) return;
+            // If it's a past day and not done, we used to block changing it,
+            // but now we allow users to click it to mark completion retroactively.
 
             const next = !isDone;
             if (next) goalData.completed[iso] = 1;
@@ -993,10 +992,6 @@
             if (!goalId) return;
 
             const goals = this._getGoalsList();
-            if (goals.length <= 1) {
-                this._flashError('Keep at least one habit.');
-                return;
-            }
 
             const goal = goals.find(g => g.id === goalId);
             const ok = await this._showConfirmDialog(`Delete habit "${goal?.label || goalId}"? This will remove its history.`);

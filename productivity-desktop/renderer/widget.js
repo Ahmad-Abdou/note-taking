@@ -133,6 +133,28 @@
         return m > 0 ? `${h}h ${m}m` : `${h}h`;
     }
 
+    function isDailyRecurringTaskForDate(task, targetYmd) {
+        if (!task || !targetYmd) return false;
+
+        const isRecurring = !!(task.isRecurring || task.recurring);
+        const repeatType = String(task.repeatType || task.recurrence || '').toLowerCase();
+        if (!isRecurring || repeatType !== 'daily') return false;
+
+        const start = normalizeYMD(task.startDate);
+        if (start && start > targetYmd) return false;
+
+        const endType = String(task.repeatEndType || '').toLowerCase();
+        const endDate = normalizeYMD(task.repeatEndDate || task.recurrenceEndDate);
+        if (endType === 'date' && endDate && endDate < targetYmd) return false;
+
+        if (endType === 'count') {
+            const remaining = Number(task.repeatRemaining);
+            if (Number.isFinite(remaining) && remaining <= 0) return false;
+        }
+
+        return true;
+    }
+
     const DS = () => window.ProductivityData?.DataStore;
 
     // ===== Renderers =====
@@ -153,7 +175,7 @@
                 if (t.status === 'completed') return false;
                 const due = normalizeYMD(t.dueDate);
                 const start = normalizeYMD(t.startDate);
-                return due === today || start === today;
+                return due === today || start === today || isDailyRecurringTaskForDate(t, today);
             })
             .sort((a, b) => {
                 const pa = (a.priorityWeight ?? 0);

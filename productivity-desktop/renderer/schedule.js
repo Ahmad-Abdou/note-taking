@@ -2116,6 +2116,9 @@ async function renderImportedCalendars() {
                                     <i class="fas fa-sync-alt"></i>
                                 </button>
                             ` : ''}
+                            <button class="btn-icon-tiny" data-edit-calendar="${calId}" title="Edit this calendar">
+                                <i class="fas fa-pencil-alt"></i>
+                            </button>
                             <button class="btn-icon-tiny btn-danger-hover" data-delete-calendar="${calId}" title="Delete this calendar">
                                 <i class="fas fa-trash"></i>
                             </button>
@@ -2150,6 +2153,16 @@ async function renderImportedCalendars() {
         container.querySelector('#show-imported')?.addEventListener('change', async (e) => {
             ScheduleState.filters.showImported = e.target.checked;
             await renderCurrentView();
+        });
+
+        // Attach edit button handlers
+        container.querySelectorAll('[data-edit-calendar]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const calId = btn.dataset.editCalendar;
+                await editImportedCalendar(calId);
+            });
         });
 
         // Attach delete button handlers
@@ -3913,6 +3926,135 @@ function openImportScheduleModal() {
         console.error('[Schedule] Error in openImportScheduleModal:', error);
         showToast('error', 'Error', 'Failed to open import modal. Please try again.');
     }
+}
+
+async function editImportedCalendar(calId) {
+    const meta = ScheduleState.importedCalendarsMeta[calId];
+    if (!meta) return;
+
+    // Remove any existing modal
+    const existingModal = document.getElementById('edit-imported-calendar-modal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'edit-imported-calendar-modal';
+    modal.className = 'modal active';
+    modal.innerHTML = `
+        <div class="modal-backdrop" data-action="close-edit"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-pencil-alt"></i> Edit Calendar</h3>
+                <button class="btn-icon" data-action="close-edit">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="edit-calendar-name">Calendar Name *</label>
+                    <input type="text" id="edit-calendar-name" value="${escapeHtml(meta.name || '')}" required>
+                </div>
+                <div class="form-group">
+                    <label>Default Event Type</label>
+                    <select id="edit-event-type">
+                        <option value="class" ${meta.eventType === 'class' ? 'selected' : ''}>📚 Class/Lecture</option>
+                        <option value="study" ${meta.eventType === 'study' ? 'selected' : ''}>📖 Study Session</option>
+                        <option value="meeting" ${meta.eventType === 'meeting' ? 'selected' : ''}>👥 Meeting</option>
+                        <option value="deadline" ${meta.eventType === 'deadline' ? 'selected' : ''}>⚠️ Deadline</option>
+                        <option value="personal" ${meta.eventType === 'personal' ? 'selected' : ''}>🏠 Personal</option>
+                        <option value="work" ${meta.eventType === 'work' ? 'selected' : ''}>💼 Work</option>
+                        <option value="other" ${meta.eventType === 'other' ? 'selected' : ''}>📌 Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Calendar Color</label>
+                    <div class="color-picker-row" style="align-items: center; gap: 10px;">
+                        <div class="color-options" id="edit-custom-color-options"></div>
+                        <input type="hidden" id="edit-custom-color" value="${meta.color || '#6366f1'}">
+                    </div>
+                </div>
+                ${meta.sourceUrl !== undefined ? `
+                <div class="form-group">
+                    <label for="edit-calendar-url">Calendar URL ${meta.sourceUrl ? '' : '(Optional)'}</label>
+                    <input type="url" id="edit-calendar-url" value="${escapeHtml(meta.sourceUrl || '')}" placeholder="https://...">
+                    <small class="form-hint">URL for fetching updates.</small>
+                </div>
+                ` : ''}
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn-secondary" data-action="close-edit">Cancel</button>
+                <button class="btn-primary" data-action="save-edit">Save Changes</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const editColorOptions = document.getElementById('edit-custom-color-options');
+    const editColorValue = document.getElementById('edit-custom-color');
+    if (editColorOptions && editColorValue && typeof createFixedColorPicker === 'function') {
+        createFixedColorPicker(editColorOptions, editColorValue, {
+            defaultColor: meta.color || '#6366f1'
+        });
+    }
+
+    modal.querySelectorAll('[data-action="close-edit"]').forEach(el => {
+        el.addEventListener('click', () => modal.remove());
+    });
+
+    const saveBtn = modal.querySelector('[data-action="save-edit"]');
+    saveBtn.addEventListener('click', async () => {
+        const nameInput = document.getElementById('edit-calendar-name');
+        const typeSelect = document.getElementById('edit-event-type');
+        const colorInput = document.getElementById('edit-custom-color');
+        const urlInput = document.getElementById('edit-calendar-url');
+
+        if (!nameInput.value.trim()) {
+            showToast('warning', 'Missing Name', 'Please provide a calendar name.');
+            return;
+        }
+
+        // Update meta
+        meta.name = nameInput.value.trim();
+        meta.eventType = typeSelect.value;
+        meta.color = colorInput.value;
+        
+        if (urlInput) {
+            meta.sourceUrl = urlInput.value.trim() || null;
+        }
+
+        // Save to storage
+        await chrome.storage.local.set({ importedCalendarsMeta: ScheduleState.importedCalendarsMeta });
+        
+        // Optionally update any events that belong to this calendar
+        // Since getImportedCalendarColor uses meta.color dynamically, the map is enough for colors
+        // For type changes, we update them explicitly
+        const eventsToUpdate = ScheduleState.events.filter(e => e.importedCalendarId === calId);
+        let eventsChanged = false;
+        
+        eventsToUpdate.forEach(e => {
+            if (e.type !== meta.eventType) {
+                e.type = meta.eventType;
+                eventsChanged = true;
+            }
+        });
+        
+        if (eventsChanged) {
+            // Re-save events
+            const allStorageEvents = await ProductivityData.DataStore.getScheduleEvents();
+            allStorageEvents.forEach(se => {
+                if (se.importedCalendarId === calId) {
+                    se.type = meta.eventType;
+                }
+            });
+            await ProductivityData.DataStore.saveScheduleEvents(allStorageEvents);
+        }
+        
+        showToast('success', 'Calendar Updated', 'Calendar settings saved successfully.');
+        modal.remove();
+
+        renderImportedCalendars();
+        renderCurrentView();
+    });
 }
 
 // Load a demo schedule for testing
