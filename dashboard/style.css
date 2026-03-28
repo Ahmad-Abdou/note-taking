@@ -85,30 +85,6 @@ body {
     font-size: 14px;
     color: var(--text-secondary);
     display: flex;
-.habit-manage-panel {
-    border: 1px dashed rgba(99, 102, 241, 0.45);
-    background: rgba(99, 102, 241, 0.06);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-sm);
-}
-
-.habit-manage-header {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-bottom: var(--spacing-xs);
-}
-
-.habit-manage-title {
-    font-size: 13px;
-    font-weight: 800;
-    color: var(--text-primary);
-}
-
-.habit-manage-hint {
-    font-size: 12px;
-    color: var(--text-muted);
-}
     align-items: center;
     gap: 10px;
     min-height: 32px;
@@ -292,39 +268,34 @@ body {
     color: var(--text-muted);
     margin-top: 2px;
 }
-.habit-manage-name {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 13px;
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 
-.habit-manage-rename-input {
-    width: 100%;
-    min-width: 160px;
-    height: 32px;
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: 0 10px;
-    font-size: 13px;
-    color: var(--text-primary);
-    outline: none;
-}
-
-.habit-manage-actions {
+.habit-manage-panel {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-card);
+    z-index: 20;
+    padding: var(--spacing-lg);
     display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
+    flex-direction: column;
+    border-radius: var(--radius-lg);
 }
 
-.habit-manage-save {
-    height: 32px;
-    padding: 0 12px;
+.habit-manage-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: var(--spacing-md);
+}
+
+.habit-manage-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.habit-manage-hint {
+    font-size: 13px;
+    color: var(--text-muted);
 }
 
 .habit-tracker-controls {
@@ -629,6 +600,174 @@ body {
 
 .habit-swatch-missed::after {
     content: '✗';
+}
+
+/* Habit Tracker Chart */
+.habit-tracker-chart {
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.habit-chart-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.habit-chart-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 24px;
+}
+
+.habit-chart-label {
+    width: 130px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.habit-chart-bar-bg {
+    flex: 1;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    cursor: help;
+}
+
+.habit-chart-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.8), rgba(168, 85, 247, 0.8));
+    border-radius: 6px;
+    transition: width 0.4s ease;
+}
+
+.habit-chart-pct {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    width: 35px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* Modal Updates (Manage panel additional css) */
+.habit-manage-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-md);
+}
+
+.habit-manage-input {
+    flex: 1 1 220px;
+    min-width: 160px;
+    height: 36px;
+    background: var(--bg-input);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 0 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.habit-manage-input:focus {
+    border-color: rgba(99, 102, 241, 0.6);
+}
+
+.habit-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-grow: 1;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.habit-manage-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    padding: 8px 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.02);
+    transition: background var(--transition-fast);
+}
+
+.habit-manage-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.habit-manage-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.habit-manage-rename-input {
+    width: 100%;
+    min-width: 160px;
+    height: 30px;
+    background: var(--bg-input);
+    border: 1px solid rgba(99, 102, 241, 0.5);
+    border-radius: var(--radius-sm);
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.habit-manage-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.habit-manage-save {
+    height: 30px;
+    padding: 0 12px;
+}
+
+.habit-manage-add {
+    padding: 0 20px;
+    height: 36px;
+    font-size: 13px;
+    border-radius: var(--radius-md);
+}
+
+.habit-manage-delete {
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.habit-manage-delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
 }
 
 /* Page Content */

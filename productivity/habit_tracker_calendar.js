@@ -654,10 +654,13 @@
                 panel.appendChild(manageHeader);
                 panel.appendChild(row);
                 panel.appendChild(list);
-                body.appendChild(panel);
+                this.mountEl.appendChild(panel); // append to mountEl for overlay styling
             }
 
             body.appendChild(gridWrap);
+            
+            // Add comparative bar chart
+            body.appendChild(this._buildBarChart());
 
             this.mountEl.appendChild(header);
             this.mountEl.appendChild(body);
@@ -736,6 +739,60 @@
             const pct = days > 0 ? Math.round((doneCount / days) * 100) : 0;
 
             return `${doneCount}/${days} days complete (${pct}%)`;
+        }
+
+        _buildBarChart() {
+            const chartWrap = document.createElement('div');
+            chartWrap.className = 'habit-tracker-chart';
+
+            const title = document.createElement('div');
+            title.className = 'habit-chart-title';
+            title.textContent = 'Performance Overview (Selected Period)';
+            chartWrap.appendChild(title);
+
+            const { startDate, endDate } = this._getActiveGoalRange();
+            const start = this._parseIso(startDate);
+            const end = this._parseIso(endDate);
+
+            if (!start || !end || start > end) return chartWrap;
+
+            const days = Math.floor((end - start) / 86400000) + 1;
+            if (days <= 0) return chartWrap;
+
+            for (const goal of this._getGoalsList()) {
+                const goalData = this.state.data.goals[goal.id];
+                const completed = goalData?.completed || {};
+                const doneCount = Object.keys(completed).filter((iso) => iso >= startDate && iso <= endDate).length;
+                const pct = Math.round((doneCount / days) * 100);
+
+                const barRow = document.createElement('div');
+                barRow.className = 'habit-chart-row';
+
+                const label = document.createElement('div');
+                label.className = 'habit-chart-label';
+                label.textContent = goal.label;
+
+                const barBg = document.createElement('div');
+                barBg.className = 'habit-chart-bar-bg';
+                barBg.title = `${doneCount}/${days} days (${pct}%)`;
+
+                const barFill = document.createElement('div');
+                barFill.className = 'habit-chart-bar-fill';
+                barFill.style.width = `${pct}%`;
+
+                barBg.appendChild(barFill);
+                barRow.appendChild(label);
+                barRow.appendChild(barBg);
+                
+                const pctLabel = document.createElement('div');
+                pctLabel.className = 'habit-chart-pct';
+                pctLabel.textContent = `${pct}%`;
+                barRow.appendChild(pctLabel);
+
+                chartWrap.appendChild(barRow);
+            }
+
+            return chartWrap;
         }
 
         // --- Events ---
