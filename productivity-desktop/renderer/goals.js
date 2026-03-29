@@ -40,6 +40,8 @@ async function loadGoals() {
 
     // Render UI
     renderGoalsGrid(getFilteredGoals());
+    renderGoalProgressChart(GoalsState.goals);
+    renderGoalAchievements(GoalsState.goals);
     renderAchievements(GoalsState.achievements);
 
     // Setup filters and event delegation
@@ -48,23 +50,7 @@ async function loadGoals() {
 }
 
 function setupGoalEventDelegation() {
-    const container = document.getElementById('goals-grid');
-    if (!container || container.dataset.delegationSetup) return;
-
-    container.dataset.delegationSetup = 'true';
-
-    container.addEventListener('click', (e) => {
-        const target = e.target.closest('[data-action]');
-        if (!target) {
-            // Check if clicking on goal card itself
-            const card = e.target.closest('.goal-card');
-            if (card && !e.target.closest('.goal-actions') && !e.target.closest('.milestone-dot') && !e.target.closest('.btn-ghost')) {
-                viewGoalDetails(card.dataset.goalId);
-            }
-            return;
-        }
-
-        e.stopPropagation();
+    const dispatchGoalAction = (target) => {
         const goalId = target.dataset.goalId;
         const milestoneId = target.dataset.milestoneId;
 
@@ -94,7 +80,34 @@ function setupGoalEventDelegation() {
                 cancelGoalAbandonment(goalId);
                 break;
         }
-    });
+    };
+
+    const bindContainer = (containerId, withCardClick = false) => {
+        const container = document.getElementById(containerId);
+        if (!container || container.dataset.delegationSetup) return;
+
+        container.dataset.delegationSetup = 'true';
+        container.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (target) {
+                e.stopPropagation();
+                dispatchGoalAction(target);
+                return;
+            }
+
+            if (!withCardClick) return;
+
+            // Allow tapping the goal card body to open details.
+            const card = e.target.closest('.goal-card');
+            if (card && !e.target.closest('.goal-actions') && !e.target.closest('.milestone-dot') && !e.target.closest('.btn-ghost')) {
+                viewGoalDetails(card.dataset.goalId);
+            }
+        });
+    };
+
+    bindContainer('goals-grid', true);
+    bindContainer('goals-progress-chart');
+    bindContainer('goal-achievements-list');
 }
 
 function updateGoalStats() {
@@ -143,6 +156,165 @@ function setupGoalFilters() {
             renderGoalsGrid(getFilteredGoals());
         });
     });
+}
+
+function getGoalProgressPercent(goal) {
+    const fallback = Number(goal?.progress || 0);
+
+    let progress = fallback;
+    if (typeof goal?.calculateProgress === 'function') {
+        try {
+            progress = Number(goal.calculateProgress());
+        } catch (_) {
+            progress = fallback;
+        }
+    }
+
+    if (!Number.isFinite(progress)) return 0;
+    return Math.max(0, Math.min(100, Math.round(progress)));
+}
+
+function getGoalMilestoneSummary(goal) {
+    const milestones = Array.isArray(goal?.milestones) ? goal.milestones : [];
+    const completed = milestones.filter(m => m?.isCompleted).length;
+    const total = milestones.length;
+
+    return {
+        total,
+        completed,
+        remaining: Math.max(0, total - completed)
+    };
+}
+
+function getGoalStartDate(goal) {
+    return goal?.createdAt || goal?.startedAt || goal?.startDate || null;
+}
+
+function renderGoalProgressChart(goals) {
+    const container = document.getElementById('goals-progress-chart');
+    if (!container) return;
+
+    const goalList = Array.isArray(goals) ? goals : [];
+    if (goalList.length === 0) {
+        container.innerHTML = `
+            <div class="goal-insight-empty">
+                <i class="fas fa-chart-bar"></i>
+                <p>Create a goal to see completion and remaining progress.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const sorted = [...goalList].sort((a, b) => {
+        const aDone = a.status === 'completed' ? 1 : 0;
+        const bDone = b.status === 'completed' ? 1 : 0;
+        if (aDone !== bDone) return aDone - bDone;
+
+        return getGoalProgressPercent(b) - getGoalProgressPercent(a);
+    });
+
+    container.innerHTML = sorted.map(goal => {
+        const progress = getGoalProgressPercent(goal);
+        const remainingPercent = Math.max(0, 100 - progress);
+        const milestone = getGoalMilestoneSummary(goal);
+        const isCompleted = goal.status === 'completed' || progress >= 100;
+        const startLabel = getGoalStartDate(goal) ? formatGoalDate(getGoalStartDate(goal)) : 'Not set';
+        const endLabel = isCompleted && goal.completedAt ? formatGoalDate(goal.completedAt) : 'In progress';
+        const subLabel = isCompleted
+            ? `Completed (${milestone.completed}/${milestone.total} milestones)`
+            : `${remainingPercent}% left • ${milestone.remaining} milestones remaining`;
+
+        return `
+            <article class="goal-progress-row ${isCompleted ? 'completed' : ''}">
+                <div class="goal-progress-row-top">
+                    <div>
+                        <h4>${escapeHtml(goal.title)}</h4>
+                        <p>${subLabel}</p>
+                    </div>
+                    <div class="goal-progress-row-actions">
+                        <button class="btn-icon small" data-action="view-goal" data-goal-id="${goal.id}" title="View Goal">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn-icon small" data-action="edit-goal" data-goal-id="${goal.id}" title="Edit Goal">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-icon small danger" data-action="delete-goal" data-goal-id="${goal.id}" title="Delete Goal">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="goal-progress-inline-stats">
+                    <span><strong>${progress}%</strong> done</span>
+                    <span><strong>${remainingPercent}%</strong> left</span>
+                </div>
+
+                <div class="goal-progress-track" aria-label="${progress}% complete">
+                    <div class="goal-progress-track-done" style="width:${progress}%"></div>
+                    <div class="goal-progress-track-left" style="width:${remainingPercent}%"></div>
+                </div>
+
+                <div class="goal-progress-dates">
+                    <span>Start: ${startLabel}</span>
+                    <span>${isCompleted ? `End: ${endLabel}` : 'End: --'}</span>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+function renderGoalAchievements(goals) {
+    const container = document.getElementById('goal-achievements-list');
+    if (!container) return;
+
+    const goalList = Array.isArray(goals) ? goals : [];
+    const completedGoals = goalList
+        .filter(goal => goal.status === 'completed' || getGoalProgressPercent(goal) >= 100)
+        .sort((a, b) => {
+            const aTime = new Date(a.completedAt || 0).getTime();
+            const bTime = new Date(b.completedAt || 0).getTime();
+            return bTime - aTime;
+        });
+
+    if (completedGoals.length === 0) {
+        container.innerHTML = `
+            <div class="goal-insight-empty">
+                <i class="fas fa-trophy"></i>
+                <p>When you finish a goal, it appears here as an achievement.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = completedGoals.map(goal => {
+        const startLabel = getGoalStartDate(goal) ? formatGoalDate(getGoalStartDate(goal)) : 'Not set';
+        const endLabel = goal.completedAt ? formatGoalDate(goal.completedAt) : 'Completed';
+
+        return `
+            <article class="goal-achievement-item">
+                <div class="goal-achievement-main">
+                    <div class="goal-achievement-icon">
+                        <i class="fas fa-trophy"></i>
+                    </div>
+                    <div class="goal-achievement-content">
+                        <h4>${escapeHtml(goal.title)}</h4>
+                        <p>Start: ${startLabel} • End: ${endLabel}</p>
+                    </div>
+                </div>
+                <div class="goal-achievement-actions">
+                    <button class="btn-icon small" data-action="view-goal" data-goal-id="${goal.id}" title="View Goal">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="btn-icon small" data-action="edit-goal" data-goal-id="${goal.id}" title="Edit Goal">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon small danger" data-action="delete-goal" data-goal-id="${goal.id}" title="Delete Goal">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </article>
+        `;
+    }).join('');
 }
 
 // ============================================================================

@@ -3833,6 +3833,26 @@ function setupAppUpdater() {
     const checkBtn    = document.getElementById('app-update-check-btn');
     const updateBtn   = document.getElementById('app-update-now-btn');
 
+    function toFriendlyUpdaterError(errorValue) {
+        const raw = String(errorValue || '').trim();
+        if (!raw) return '';
+
+        if (raw === 'portable_not_supported') {
+            return 'Auto-update is not supported in portable mode. Use the Setup (NSIS) build for in-app updates.';
+        }
+        if (raw === 'not_packaged') {
+            return 'Updates are available only in packaged desktop builds.';
+        }
+        if (raw === 'missing_app_update_yml') {
+            return 'Update configuration is missing. Reinstall the Setup build and try again.';
+        }
+        if (raw === 'no_config_path') {
+            return 'Update configuration path is unavailable on this build.';
+        }
+
+        return raw;
+    }
+
     console.log('[Updater] setup — checkBtn:', !!checkBtn, 'updateBtn:', !!updateBtn, 'versionEl:', !!versionEl, 'statusEl:', !!statusEl);
 
     // Show current version
@@ -3885,7 +3905,7 @@ function setupAppUpdater() {
                 if (checkBtn) checkBtn.disabled = false;
                 break;
             case 'error':
-                statusEl.textContent = message || 'Update check failed.';
+                statusEl.textContent = toFriendlyUpdaterError(message || payload?.error) || 'Update check failed.';
                 if (checkBtn) checkBtn.disabled = false;
                 break;
             default:
@@ -3896,25 +3916,51 @@ function setupAppUpdater() {
 
     // "Check for Updates" button
     if (checkBtn) {
-        checkBtn.addEventListener('click', () => {
+        checkBtn.addEventListener('click', async () => {
             if (statusEl) statusEl.textContent = 'Checking for updates…';
             checkBtn.disabled = true;
-            api.check().catch(() => {
-                if (statusEl) statusEl.textContent = 'Update check failed.';
+
+            try {
+                const result = await api.check();
+                if (result && result.ok === false) {
+                    const stillChecking = statusEl && (statusEl.textContent || '').includes('Checking for updates');
+                    const friendly = toFriendlyUpdaterError(result.error);
+
+                    if (statusEl && stillChecking) {
+                        statusEl.textContent = friendly || 'Update check failed.';
+                    }
+                    checkBtn.disabled = false;
+                }
+            } catch (err) {
+                const message = toFriendlyUpdaterError(err?.message || err);
+                if (statusEl) statusEl.textContent = message || 'Update check failed.';
                 checkBtn.disabled = false;
-            });
+            }
         });
     }
 
     // "Update Now" / "Download & Install" / "Restart & Install" button
     if (updateBtn) {
-        updateBtn.addEventListener('click', () => {
+        updateBtn.addEventListener('click', async () => {
             updateBtn.disabled = true;
             if (statusEl) statusEl.textContent = 'Downloading and installing update…';
-            api.updateNow().catch(() => {
-                if (statusEl) statusEl.textContent = 'Failed to install update.';
+
+            try {
+                const result = await api.updateNow();
+                if (result && result.ok === false) {
+                    const stillInstalling = statusEl && (statusEl.textContent || '').includes('Downloading and installing update');
+                    const friendly = toFriendlyUpdaterError(result.error);
+
+                    if (statusEl && stillInstalling) {
+                        statusEl.textContent = friendly || 'Failed to install update.';
+                    }
+                    updateBtn.disabled = false;
+                }
+            } catch (err) {
+                const message = toFriendlyUpdaterError(err?.message || err);
+                if (statusEl) statusEl.textContent = message || 'Failed to install update.';
                 updateBtn.disabled = false;
-            });
+            }
         });
     }
 }
