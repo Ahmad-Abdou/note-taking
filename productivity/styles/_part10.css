@@ -622,6 +622,14 @@
     margin-bottom: var(--spacing-xl);
 }
 
+.dashboard-goals-row {
+    margin-bottom: var(--spacing-xl);
+}
+
+.dashboard-goals-row .goals-card {
+    width: 100%;
+}
+
 .dashboard-hero {
     display: grid;
     grid-template-columns: 1fr auto;

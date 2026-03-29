@@ -432,6 +432,9 @@ class Goal {
         this.linkedTaskIds = data.linkedTaskIds || [];
         this.priority = data.priority || 'medium';
         this.reflection = data.reflection || ''; // Notes on progress/learnings
+        this.trackingType = normalizeTrackedGoalType(data.trackingType);
+        this.trackingTarget = toFiniteGoalNumber(data.trackingTarget ?? data.targetValue ?? data.targetHours ?? data.targetTasks, 0);
+        this.trackingCurrent = toFiniteGoalNumber(data.trackingCurrent ?? data.currentValue, 0);
         this.createdAt = data.createdAt || new Date().toISOString();
         this.updatedAt = data.updatedAt || new Date().toISOString();
         this.completedAt = data.completedAt || null;
@@ -460,6 +463,15 @@ class Goal {
 
     // Calculate progress based on milestones
     calculateProgress() {
+        if (this.trackingType === 'focus_hours' || this.trackingType === 'tasks_completed' || this.trackingType === 'website_minutes') {
+            const target = toFiniteGoalNumber(this.trackingTarget, 0);
+            const current = toFiniteGoalNumber(this.trackingCurrent, 0);
+            if (target <= 0) {
+                return Math.max(0, Math.min(100, Math.round(toFiniteGoalNumber(this.progress, 0))));
+            }
+            return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+        }
+
         if (this.milestones.length === 0) return this.progress;
         const completedMilestones = this.milestones.filter(m => m.isCompleted).length;
         return Math.round((completedMilestones / this.milestones.length) * 100);
@@ -487,6 +499,9 @@ class Goal {
             linkedTaskIds: this.linkedTaskIds,
             priority: this.priority,
             reflection: this.reflection,
+            trackingType: this.trackingType,
+            trackingTarget: this.trackingTarget,
+            trackingCurrent: this.trackingCurrent,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
             completedAt: this.completedAt,
@@ -499,6 +514,129 @@ class Goal {
             hoursInvested: this.hoursInvested
         };
     }
+}
+
+function normalizeTrackedGoalType(value) {
+    const candidate = String(value || '').trim().toLowerCase();
+    if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes') return candidate;
+    return 'milestones';
+}
+
+function toFiniteGoalNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function toGoalTimestamp(value) {
+    if (value === undefined || value === null) return null;
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.getTime();
+    }
+
+    const text = String(value).trim();
+    if (!text) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        const ts = new Date(`${text}T00:00:00`).getTime();
+        return Number.isFinite(ts) ? ts : null;
+    }
+
+    const parsed = new Date(text).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getGoalTrackingStartTs(goal) {
+    return toGoalTimestamp(goal?.createdAt)
+        ?? toGoalTimestamp(goal?.startDate)
+        ?? toGoalTimestamp(goal?.targetDate)
+        ?? 0;
+}
+
+function getWebsiteUsageMinutesTotal(websiteUsage) {
+    if (!websiteUsage || typeof websiteUsage !== 'object') return 0;
+    const sites = websiteUsage.sites;
+    if (!sites || typeof sites !== 'object') return 0;
+
+    let total = 0;
+    for (const value of Object.values(sites)) {
+        const mins = toFiniteGoalNumber(value, 0);
+        if (mins > 0) total += mins;
+    }
+    return Math.max(0, Math.round(total));
+}
+
+function applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsage) {
+    const goalList = Array.isArray(goals) ? goals : [];
+    const taskList = Array.isArray(tasks) ? tasks : [];
+    const sessionList = Array.isArray(sessions) ? sessions : [];
+    const websiteMinutesToday = getWebsiteUsageMinutesTotal(websiteUsage);
+    const nowIso = new Date().toISOString();
+
+    for (const goal of goalList) {
+        if (!goal || typeof goal !== 'object') continue;
+
+        const trackingType = normalizeTrackedGoalType(goal.trackingType);
+        goal.trackingType = trackingType;
+
+        if (trackingType === 'milestones') {
+            continue;
+        }
+
+        const minTarget = trackingType === 'focus_hours' ? 0.5 : 1;
+        const normalizedTarget = Math.max(minTarget, toFiniteGoalNumber(goal.trackingTarget, 0));
+        goal.trackingTarget = trackingType === 'focus_hours'
+            ? Math.round(normalizedTarget * 10) / 10
+            : Math.round(normalizedTarget);
+
+        const startTs = getGoalTrackingStartTs(goal);
+        let currentValue = 0;
+
+        if (trackingType === 'focus_hours') {
+            let totalMinutes = 0;
+            for (const session of sessionList) {
+                if (!session || String(session.status || '').toLowerCase() === 'active') continue;
+
+                const sessionTs = toGoalTimestamp(session.endTime)
+                    ?? toGoalTimestamp(session.startTime)
+                    ?? toGoalTimestamp(session.date);
+
+                if (sessionTs !== null && sessionTs < startTs) continue;
+
+                const mins = toFiniteGoalNumber(session.actualDurationMinutes, 0);
+                if (mins > 0) totalMinutes += mins;
+            }
+
+            currentValue = Math.round((totalMinutes / 60) * 10) / 10;
+            goal.hoursInvested = currentValue;
+        } else if (trackingType === 'tasks_completed') {
+            for (const task of taskList) {
+                if (!task || String(task.status || '').toLowerCase() !== 'completed') continue;
+
+                const taskTs = toGoalTimestamp(task.completedAt)
+                    ?? toGoalTimestamp(task.updatedAt)
+                    ?? toGoalTimestamp(task.dueDate)
+                    ?? toGoalTimestamp(task.createdAt);
+
+                if (taskTs !== null && taskTs < startTs) continue;
+                currentValue += 1;
+            }
+
+            currentValue = Math.round(currentValue);
+        } else if (trackingType === 'website_minutes') {
+            currentValue = websiteMinutesToday;
+        }
+
+        goal.trackingCurrent = currentValue;
+        goal.progress = Math.max(0, Math.min(100, Math.round((currentValue / goal.trackingTarget) * 100)));
+
+        if (trackingType !== 'website_minutes' && goal.status === 'active' && goal.progress >= 100) {
+            goal.status = 'completed';
+            if (!goal.completedAt) goal.completedAt = nowIso;
+        }
+    }
+
+    return goalList;
 }
 
 /**
@@ -1440,9 +1578,21 @@ const DataStore = {
             ? rawGoals
             : (rawGoals && typeof rawGoals === 'object' ? Object.values(rawGoals) : []);
 
-        return goalList
+        const goals = goalList
             .filter(g => g && typeof g === 'object')
             .map(g => new Goal(g));
+
+        try {
+            const [tasks, sessions, websiteUsage] = await Promise.all([
+                this.getTasks(),
+                this.getFocusSessions(),
+                this.get(STORAGE_KEYS.WEBSITE_DAILY_USAGE, {})
+            ]);
+            return applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsage);
+        } catch (error) {
+            console.warn('[DataStore] Failed to enrich tracked goals from activity:', error);
+            return goals;
+        }
     },
 
     async saveGoal(goal) {

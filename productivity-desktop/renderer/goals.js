@@ -129,8 +129,8 @@ function updateGoalStats() {
     document.getElementById('goals-active')?.setAttribute('data-value', stats.active);
     document.getElementById('goals-completed')?.setAttribute('data-value', stats.completed);
 
-    const milestoneProgress = stats.totalMilestones > 0
-        ? Math.round((stats.completedMilestones / stats.totalMilestones) * 100)
+    const milestoneProgress = stats.total > 0
+        ? Math.round(GoalsState.goals.reduce((sum, goal) => sum + getGoalProgressPercent(goal), 0) / stats.total)
         : 0;
 
     const progressBar = document.getElementById('overall-goal-progress');
@@ -190,6 +190,56 @@ function getGoalStartDate(goal) {
     return goal?.createdAt || goal?.startedAt || goal?.startDate || null;
 }
 
+function normalizeGoalTrackingTypeValue(value) {
+    const candidate = String(value || '').trim().toLowerCase();
+    if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes') return candidate;
+    return 'milestones';
+}
+
+function getGoalTrackingMetrics(goal) {
+    const type = normalizeGoalTrackingTypeValue(goal?.trackingType);
+    const rawTarget = Number(goal?.trackingTarget);
+    const rawCurrent = Number(goal?.trackingCurrent);
+
+    const target = Number.isFinite(rawTarget)
+        ? (type === 'focus_hours' ? Math.max(0, Math.round(rawTarget * 10) / 10) : Math.max(0, Math.round(rawTarget)))
+        : 0;
+
+    const current = Number.isFinite(rawCurrent)
+        ? (type === 'focus_hours' ? Math.max(0, Math.round(rawCurrent * 10) / 10) : Math.max(0, Math.round(rawCurrent)))
+        : 0;
+
+    return { type, target, current };
+}
+
+function formatGoalTrackingNumber(value, decimals = 1) {
+    if (!Number.isFinite(value)) return '0';
+    if (Math.abs(value - Math.round(value)) < 0.001) return String(Math.round(value));
+    return Number(value).toFixed(decimals);
+}
+
+function getGoalTrackingSummary(goal) {
+    const tracking = getGoalTrackingMetrics(goal);
+    if (tracking.type === 'focus_hours') {
+        return `${formatGoalTrackingNumber(tracking.current)} / ${formatGoalTrackingNumber(tracking.target)} hours`;
+    }
+    if (tracking.type === 'tasks_completed') {
+        return `${formatGoalTrackingNumber(tracking.current, 0)} / ${formatGoalTrackingNumber(tracking.target, 0)} tasks`;
+    }
+    if (tracking.type === 'website_minutes') {
+        return `${formatGoalTrackingNumber(tracking.current, 0)} / ${formatGoalTrackingNumber(tracking.target, 0)} minutes`;
+    }
+    return '';
+}
+
+function getGoalTrackingIcon(goal) {
+    const type = normalizeGoalTrackingTypeValue(goal?.trackingType);
+    if (type === 'focus_hours') return 'fa-clock';
+    if (type === 'tasks_completed') return 'fa-list-check';
+    if (type === 'website_minutes') return 'fa-globe';
+    return 'fa-flag';
+}
+
 function renderGoalProgressChart(goals) {
     const container = document.getElementById('goals-progress-chart');
     if (!container) return;
@@ -216,13 +266,19 @@ function renderGoalProgressChart(goals) {
     container.innerHTML = sorted.map(goal => {
         const progress = getGoalProgressPercent(goal);
         const remainingPercent = Math.max(0, 100 - progress);
+        const tracking = getGoalTrackingMetrics(goal);
+        const isTracked = tracking.type !== 'milestones';
         const milestone = getGoalMilestoneSummary(goal);
         const isCompleted = goal.status === 'completed' || progress >= 100;
         const startLabel = getGoalStartDate(goal) ? formatGoalDate(getGoalStartDate(goal)) : 'Not set';
         const endLabel = isCompleted && goal.completedAt ? formatGoalDate(goal.completedAt) : 'In progress';
-        const subLabel = isCompleted
-            ? `Completed (${milestone.completed}/${milestone.total} milestones)`
-            : `${remainingPercent}% left • ${milestone.remaining} milestones remaining`;
+        const subLabel = isTracked
+            ? (isCompleted
+                ? `Completed (${getGoalTrackingSummary(goal)})`
+                : `${remainingPercent}% left • ${getGoalTrackingSummary(goal)}`)
+            : (isCompleted
+                ? `Completed (${milestone.completed}/${milestone.total} milestones)`
+                : `${remainingPercent}% left • ${milestone.remaining} milestones remaining`);
 
         return `
             <article class="goal-progress-row ${isCompleted ? 'completed' : ''}">
@@ -356,9 +412,11 @@ function renderGoalsGrid(goals) {
 }
 
 function renderGoalCard(goal) {
-    const progress = goal.calculateProgress();
+    const progress = getGoalProgressPercent(goal);
+    const tracking = getGoalTrackingMetrics(goal);
+    const isTracked = tracking.type !== 'milestones';
     const daysLeft = goal.daysRemaining;
-    const isCompleted = goal.status === 'completed';
+    const isCompleted = goal.status === 'completed' || progress >= 100;
     const isOverdue = daysLeft !== null && daysLeft < 0 && !isCompleted;
     const isUrgent = daysLeft !== null && daysLeft >= 0 && daysLeft < 7 && !isCompleted;
 
@@ -456,8 +514,8 @@ function renderGoalCard(goal) {
                 </div>
             </div>
             
-            <!-- Milestones Preview -->
-            ${goal.milestones.length > 0 ? `
+            <!-- Milestones / Tracking Preview -->
+            ${!isTracked && goal.milestones.length > 0 ? `
                 <div class="goal-milestones-preview">
                     <div class="milestones-header">
                         <span><i class="fas fa-flag"></i> Milestones</span>
@@ -473,11 +531,15 @@ function renderGoalCard(goal) {
                         ${goal.milestones.length > 8 ? `<span class="more-dots">+${goal.milestones.length - 8}</span>` : ''}
                     </div>
                 </div>
-            ` : `
+            ` : !isTracked ? `
                 <div class="goal-no-milestones">
                     <button class="btn-ghost small" data-action="add-milestone-quick" data-goal-id="${goal.id}">
                         <i class="fas fa-plus"></i> Add Milestones
                     </button>
+                </div>
+            ` : `
+                <div class="goal-no-milestones">
+                    <span class="helper-text"><i class="fas ${getGoalTrackingIcon(goal)}"></i> ${escapeHtml(getGoalTrackingSummary(goal))}</span>
                 </div>
             `}
             
@@ -502,6 +564,13 @@ function renderGoalCard(goal) {
                         <span>${goal.linkedTaskIds.length} tasks</span>
                     </div>
                 ` : ''}
+
+                ${isTracked ? `
+                    <div class="goal-linked-tasks">
+                        <i class="fas ${getGoalTrackingIcon(goal)}"></i>
+                        <span>${escapeHtml(getGoalTrackingSummary(goal))}</span>
+                    </div>
+                ` : ''}
             </div>
             
             ${isCompleted ? `
@@ -520,7 +589,9 @@ async function viewGoalDetails(goalId) {
     const goal = GoalsState.goals.find(g => g.id === goalId);
     if (!goal) return;
 
-    const progress = goal.calculateProgress();
+    const progress = getGoalProgressPercent(goal);
+    const tracking = getGoalTrackingMetrics(goal);
+    const isTracked = tracking.type !== 'milestones';
     const daysLeft = goal.daysRemaining;
 
     const modal = document.getElementById('goal-details-modal') || createGoalDetailsModal();
@@ -568,13 +639,23 @@ async function viewGoalDetails(goalId) {
                                 </div>
                             </div>
                         ` : ''}
-                        <div class="stat-item">
-                            <i class="fas fa-flag"></i>
-                            <div>
-                                <span class="stat-value">${goal.milestones.filter(m => m.isCompleted).length}/${goal.milestones.length}</span>
-                                <span class="stat-label">Milestones</span>
+                        ${!isTracked ? `
+                            <div class="stat-item">
+                                <i class="fas fa-flag"></i>
+                                <div>
+                                    <span class="stat-value">${goal.milestones.filter(m => m.isCompleted).length}/${goal.milestones.length}</span>
+                                    <span class="stat-label">Milestones</span>
+                                </div>
                             </div>
-                        </div>
+                        ` : `
+                            <div class="stat-item">
+                                <i class="fas ${getGoalTrackingIcon(goal)}"></i>
+                                <div>
+                                    <span class="stat-value">${getGoalTrackingSummary(goal)}</span>
+                                    <span class="stat-label">Tracked Progress</span>
+                                </div>
+                            </div>
+                        `}
                         <div class="stat-item">
                             <i class="fas fa-tasks"></i>
                             <div>
@@ -593,51 +674,64 @@ async function viewGoalDetails(goalId) {
                     </div>
                 ` : ''}
                 
-                <!-- Milestones Section -->
-                <div class="goal-detail-section milestones-section">
-                    <div class="section-header">
-                        <h4><i class="fas fa-flag"></i> Milestones</h4>
-                        <button class="btn-secondary small" data-action="add-milestone" data-goal-id="${goal.id}">
-                            <i class="fas fa-plus"></i> Add
-                        </button>
-                    </div>
-                    
-                    ${goal.milestones.length > 0 ? `
-                        <ul class="milestones-detail-list">
-                            ${goal.milestones.map((m, index) => `
-                                <li class="milestone-detail-item ${m.isCompleted ? 'completed' : ''}" draggable="true">
-                                    <div class="milestone-drag-handle">
-                                        <i class="fas fa-grip-vertical"></i>
-                                    </div>
-                                    <div class="milestone-checkbox ${m.isCompleted ? 'checked' : ''}"
-                                         data-action="toggle-milestone" data-goal-id="${goal.id}" data-milestone-id="${m.id}">
-                                        ${m.isCompleted ? '<i class="fas fa-check"></i>' : index + 1}
-                                    </div>
-                                    <div class="milestone-content">
-                                        <span class="milestone-title ${m.isCompleted ? 'strikethrough' : ''}">${escapeHtml(m.title)}</span>
-                                        ${m.description ? `<span class="milestone-desc">${escapeHtml(m.description)}</span>` : ''}
-                                        ${m.targetDate ? `<span class="milestone-date"><i class="fas fa-calendar"></i> ${formatGoalDate(m.targetDate)}</span>` : ''}
-                                        ${m.completedAt ? `<span class="milestone-completed-date">Completed ${formatRelativeDate(m.completedAt)}</span>` : ''}
-                                    </div>
-                                    <div class="milestone-actions">
-                                        <button class="btn-icon small" data-action="edit-milestone" data-goal-id="${goal.id}" data-milestone-id="${m.id}" title="Edit">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn-icon small danger" data-action="delete-milestone" data-goal-id="${goal.id}" data-milestone-id="${m.id}" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </li>
-                            `).join('')}
-                        </ul>
-                    ` : `
-                        <div class="empty-milestones">
-                            <i class="fas fa-flag"></i>
-                            <p>No milestones yet</p>
-                            <p class="sub">Break down your goal into smaller steps</p>
+                <!-- Milestones / Tracking Section -->
+                ${!isTracked ? `
+                    <div class="goal-detail-section milestones-section">
+                        <div class="section-header">
+                            <h4><i class="fas fa-flag"></i> Milestones</h4>
+                            <button class="btn-secondary small" data-action="add-milestone" data-goal-id="${goal.id}">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
                         </div>
-                    `}
-                </div>
+                        
+                        ${goal.milestones.length > 0 ? `
+                            <ul class="milestones-detail-list">
+                                ${goal.milestones.map((m, index) => `
+                                    <li class="milestone-detail-item ${m.isCompleted ? 'completed' : ''}" draggable="true">
+                                        <div class="milestone-drag-handle">
+                                            <i class="fas fa-grip-vertical"></i>
+                                        </div>
+                                        <div class="milestone-checkbox ${m.isCompleted ? 'checked' : ''}"
+                                             data-action="toggle-milestone" data-goal-id="${goal.id}" data-milestone-id="${m.id}">
+                                            ${m.isCompleted ? '<i class="fas fa-check"></i>' : index + 1}
+                                        </div>
+                                        <div class="milestone-content">
+                                            <span class="milestone-title ${m.isCompleted ? 'strikethrough' : ''}">${escapeHtml(m.title)}</span>
+                                            ${m.description ? `<span class="milestone-desc">${escapeHtml(m.description)}</span>` : ''}
+                                            ${m.targetDate ? `<span class="milestone-date"><i class="fas fa-calendar"></i> ${formatGoalDate(m.targetDate)}</span>` : ''}
+                                            ${m.completedAt ? `<span class="milestone-completed-date">Completed ${formatRelativeDate(m.completedAt)}</span>` : ''}
+                                        </div>
+                                        <div class="milestone-actions">
+                                            <button class="btn-icon small" data-action="edit-milestone" data-goal-id="${goal.id}" data-milestone-id="${m.id}" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn-icon small danger" data-action="delete-milestone" data-goal-id="${goal.id}" data-milestone-id="${m.id}" title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        ` : `
+                            <div class="empty-milestones">
+                                <i class="fas fa-flag"></i>
+                                <p>No milestones yet</p>
+                                <p class="sub">Break down your goal into smaller steps</p>
+                            </div>
+                        `}
+                    </div>
+                ` : `
+                    <div class="goal-detail-section milestones-section">
+                        <div class="section-header">
+                            <h4><i class="fas ${getGoalTrackingIcon(goal)}"></i> Automated Progress</h4>
+                        </div>
+                        <div class="empty-milestones">
+                            <i class="fas ${getGoalTrackingIcon(goal)}"></i>
+                            <p>${escapeHtml(getGoalTrackingSummary(goal))}</p>
+                            <p class="sub">This goal updates automatically from your app activity.</p>
+                        </div>
+                    </div>
+                `}
                 
                 <!-- Reflection Notes -->
                 <div class="goal-detail-section">
@@ -755,12 +849,16 @@ function openGoalModal(goal = null) {
     const categoryInput = document.getElementById('goal-category-input');
     const priorityInput = document.getElementById('goal-priority-input');
     const dateInput = document.getElementById('goal-target-date-input');
+    const trackingTypeInput = document.getElementById('goal-tracking-type-input');
+    const trackingTargetInput = document.getElementById('goal-tracking-target-input');
 
     if (titleInput) titleInput.value = goal?.title || '';
     if (descInput) descInput.value = goal?.description || '';
     if (categoryInput) categoryInput.value = goal?.category || 'academic';
     if (priorityInput) priorityInput.value = goal?.priority || 'medium';
     if (dateInput) dateInput.value = goal?.targetDate || '';
+    if (trackingTypeInput) trackingTypeInput.value = normalizeGoalTrackingTypeValue(goal?.trackingType);
+    if (trackingTargetInput) trackingTargetInput.value = goal?.trackingTarget || '';
 
     // Populate commitment fields (Why & Stakes)
     const whyInput = document.getElementById('goal-why-input');
@@ -821,6 +919,8 @@ function openGoalModal(goal = null) {
     // Store goal ID for editing
     modal.dataset.goalId = goal?.id || '';
 
+    updateGoalTrackingFormState();
+
     modal.classList.add('active');
     if (titleInput) titleInput.focus();
 }
@@ -880,8 +980,25 @@ function createGoalModal() {
                             <input type="date" id="goal-target-date-input">
                         </div>
                     </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="goal-tracking-type-input">Progress Source</label>
+                            <select id="goal-tracking-type-input">
+                                <option value="milestones">Milestones</option>
+                                <option value="focus_hours">Focus Time (Hours)</option>
+                                <option value="tasks_completed">Completed Tasks</option>
+                                <option value="website_minutes">Website Time Today (Minutes)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="goal-tracking-target-group">
+                            <label for="goal-tracking-target-input" id="goal-tracking-target-label">Target</label>
+                            <input type="number" id="goal-tracking-target-input" min="1" step="1" placeholder="Set target value">
+                            <span class="helper-text" id="goal-tracking-hint">Set a target to unlock automatic progress.</span>
+                        </div>
+                    </div>
                     
-                    <div class="milestones-section">
+                    <div class="milestones-section" id="goal-milestones-section">
                         <div class="section-header">
                             <h4><i class="fas fa-flag"></i> Milestones</h4>
                             <span class="helper-text">Break your goal into achievable steps</span>
@@ -999,6 +1116,12 @@ function setupGoalModalListeners(modal) {
 
     document.getElementById('goal-form')?.addEventListener('submit', saveGoal);
 
+    const trackingTypeInput = document.getElementById('goal-tracking-type-input');
+    const trackingTargetInput = document.getElementById('goal-tracking-target-input');
+    trackingTypeInput?.addEventListener('change', updateGoalTrackingFormState);
+    trackingTargetInput?.addEventListener('input', updateGoalTrackingFormState);
+    updateGoalTrackingFormState();
+
     // Stakes toggle
     const stakesToggle = document.getElementById('goal-stakes-enabled');
     const stakesOptions = document.getElementById('stakes-options');
@@ -1082,6 +1205,59 @@ function setupGoalModalListeners(modal) {
                 clearVisionImage();
             });
         }
+    }
+}
+
+function updateGoalTrackingFormState() {
+    const trackingTypeInput = document.getElementById('goal-tracking-type-input');
+    const trackingTargetGroup = document.getElementById('goal-tracking-target-group');
+    const trackingTargetInput = document.getElementById('goal-tracking-target-input');
+    const trackingTargetLabel = document.getElementById('goal-tracking-target-label');
+    const trackingHint = document.getElementById('goal-tracking-hint');
+    const milestonesSection = document.getElementById('goal-milestones-section');
+
+    if (!trackingTypeInput) return;
+
+    const trackingType = normalizeGoalTrackingTypeValue(trackingTypeInput.value);
+    const showTrackedTarget = trackingType !== 'milestones';
+
+    trackingTargetGroup?.classList.toggle('hidden', !showTrackedTarget);
+    milestonesSection?.classList.toggle('hidden', showTrackedTarget);
+
+    if (trackingTargetInput) {
+        trackingTargetInput.required = showTrackedTarget;
+    }
+
+    if (!showTrackedTarget) return;
+
+    if (trackingType === 'focus_hours') {
+        if (trackingTargetLabel) trackingTargetLabel.textContent = 'Target Hours';
+        if (trackingHint) trackingHint.textContent = 'Example: 20 means 20 hours of focused work.';
+        if (trackingTargetInput) {
+            trackingTargetInput.min = '0.5';
+            trackingTargetInput.step = '0.5';
+            trackingTargetInput.placeholder = 'e.g., 20';
+        }
+        return;
+    }
+
+    if (trackingType === 'website_minutes') {
+        if (trackingTargetLabel) trackingTargetLabel.textContent = 'Target Minutes';
+        if (trackingHint) trackingHint.textContent = 'Example: 90 means 90 website minutes tracked today.';
+        if (trackingTargetInput) {
+            trackingTargetInput.min = '1';
+            trackingTargetInput.step = '1';
+            trackingTargetInput.placeholder = 'e.g., 90';
+        }
+        return;
+    }
+
+    if (trackingTargetLabel) trackingTargetLabel.textContent = 'Target Tasks';
+    if (trackingHint) trackingHint.textContent = 'Example: 30 means 30 completed tasks.';
+    if (trackingTargetInput) {
+        trackingTargetInput.min = '1';
+        trackingTargetInput.step = '1';
+        trackingTargetInput.placeholder = 'e.g., 30';
     }
 }
 
@@ -1270,10 +1446,39 @@ async function saveGoal(e) {
     const category = document.getElementById('goal-category-input').value;
     const priority = document.getElementById('goal-priority-input').value;
     const targetDate = document.getElementById('goal-target-date-input').value || null;
+    const trackingType = normalizeGoalTrackingTypeValue(document.getElementById('goal-tracking-type-input')?.value);
+    const trackingTargetRaw = document.getElementById('goal-tracking-target-input')?.value;
 
     if (!title) {
         showToast('error', 'Validation Error', 'Please enter a goal title');
         return;
+    }
+
+    let trackingTarget = 0;
+    if (trackingType !== 'milestones') {
+        const parsedTarget = Number.parseFloat(trackingTargetRaw || '');
+        const minTarget = trackingType === 'focus_hours' ? 0.5 : 1;
+
+        if (!Number.isFinite(parsedTarget) || parsedTarget < minTarget) {
+            let targetValidationMessage = 'Set a completed-tasks target (minimum 1).';
+            if (trackingType === 'focus_hours') {
+                targetValidationMessage = 'Set a focus-hours target (minimum 0.5).';
+            } else if (trackingType === 'website_minutes') {
+                targetValidationMessage = 'Set a website-minutes target (minimum 1).';
+            }
+
+            showToast(
+                'error',
+                'Validation Error',
+                targetValidationMessage
+            );
+            document.getElementById('goal-tracking-target-input')?.focus();
+            return;
+        }
+
+        trackingTarget = trackingType === 'focus_hours'
+            ? Math.round(parsedTarget * 10) / 10
+            : Math.round(parsedTarget);
     }
 
     // Gather milestones
@@ -1327,6 +1532,9 @@ async function saveGoal(e) {
         progress: GoalsState.editingGoal?.progress || 0,
         linkedTaskIds: GoalsState.editingGoal?.linkedTaskIds || [],
         reflection: GoalsState.editingGoal?.reflection || '',
+        trackingType,
+        trackingTarget,
+        trackingCurrent: GoalsState.editingGoal?.trackingCurrent || 0,
         // Commitment fields
         why,
         consequences,

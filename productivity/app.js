@@ -1724,9 +1724,20 @@ function renderGoalsPreview(goals) {
     const normalizeGoalProgress = (goal) => {
         if (!goal || typeof goal !== 'object') return 0;
 
-        const rawProgress = Math.round(toSafeNumber(goal.progress));
+        let rawProgress = Math.round(toSafeNumber(goal.progress));
+        if (typeof goal.calculateProgress === 'function') {
+            try {
+                rawProgress = Math.round(toSafeNumber(goal.calculateProgress()));
+            } catch (_) {
+                // ignore and keep fallback value
+            }
+        }
+
         const milestones = Array.isArray(goal.milestones) ? goal.milestones : [];
-        if (milestones.length > 0) {
+        const trackingType = String(goal.trackingType || '').toLowerCase();
+        const useMilestones = trackingType === 'milestones' || (!trackingType && milestones.length > 0);
+
+        if (useMilestones && milestones.length > 0) {
             const done = milestones.filter(m => m && (m.isCompleted || m.completed || String(m.status || '').toLowerCase() === 'completed')).length;
             return Math.max(0, Math.min(100, Math.round((done / milestones.length) * 100)));
         }
