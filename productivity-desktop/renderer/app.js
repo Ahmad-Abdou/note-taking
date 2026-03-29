@@ -524,16 +524,92 @@ function getDashboardTodayYMD() {
 }
 
 function normalizeYMD(value) {
-    if (!value) return '';
-    if (typeof value !== 'string') return '';
-    const trimmed = value.trim();
+    if (value === undefined || value === null) return '';
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toISOString().slice(0, 10);
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const fromNumber = new Date(value);
+        return Number.isNaN(fromNumber.getTime()) ? '' : fromNumber.toISOString().slice(0, 10);
+    }
+
+    const trimmed = String(value).trim();
     if (!trimmed) return '';
-    return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+        return trimmed.slice(0, 10);
+    }
+
+    if (/^\d{4}\/\d{2}\/\d{2}/.test(trimmed)) {
+        return trimmed.slice(0, 10).replace(/\//g, '-');
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+    }
+
+    return '';
 }
 
 function toSafeNumber(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeDashboardStatsEntry(entry) {
+    const src = entry && typeof entry === 'object' ? entry : {};
+
+    return {
+        focusMinutes: Math.round(toSafeNumber(
+            src.focusMinutes ?? src.totalFocusMinutes ?? src.focusTime ?? src.minutesFocused ?? src.totalMinutes ?? 0
+        )),
+        focusSessions: Math.round(toSafeNumber(
+            src.focusSessions ?? src.sessionsCompleted ?? src.completedSessions ?? src.sessionCount ?? 0
+        )),
+        tasksCompleted: Math.round(toSafeNumber(
+            src.tasksCompleted ?? src.completedTasks ?? src.tasksDone ?? src.doneTasks ?? 0
+        )),
+        productivityScore: Math.round(toSafeNumber(
+            src.productivityScore ?? src.score ?? src.dailyScore ?? 0
+        ))
+    };
+}
+
+function mergeDashboardStats(base, incoming) {
+    const a = normalizeDashboardStatsEntry(base);
+    const b = normalizeDashboardStatsEntry(incoming);
+
+    return {
+        focusMinutes: Math.max(a.focusMinutes, b.focusMinutes),
+        focusSessions: Math.max(a.focusSessions, b.focusSessions),
+        tasksCompleted: Math.max(a.tasksCompleted, b.tasksCompleted),
+        productivityScore: Math.max(a.productivityScore, b.productivityScore)
+    };
+}
+
+function normalizeSessionMinutes(session) {
+    const src = session && typeof session === 'object' ? session : {};
+
+    const explicitMinutes = toSafeNumber(
+        src.actualDurationMinutes ?? src.durationMinutes ?? src.plannedDurationMinutes
+    );
+    if (explicitMinutes > 0) return Math.round(explicitMinutes);
+
+    let genericDuration = toSafeNumber(src.duration ?? src.durationMs ?? src.durationSeconds ?? 0);
+    if (genericDuration <= 0) return 0;
+
+    if (genericDuration > 10000) {
+        // Likely milliseconds.
+        genericDuration = genericDuration / 60000;
+    } else if (genericDuration > 300) {
+        // Likely seconds.
+        genericDuration = genericDuration / 60;
+    }
+
+    return Math.round(genericDuration);
 }
 
 function normalizeDashboardDailyStats(rawStats) {
@@ -542,9 +618,11 @@ function normalizeDashboardDailyStats(rawStats) {
     if (Array.isArray(rawStats)) {
         for (const entry of rawStats) {
             if (!entry || typeof entry !== 'object') continue;
-            const date = normalizeYMD(entry.date || entry.day || '');
+            const date = normalizeYMD(
+                entry.date || entry.day || entry.sessionDate || entry.startDate || entry.startTime || entry.createdAt || ''
+            );
             if (!date) continue;
-            normalized[date] = entry;
+            normalized[date] = mergeDashboardStats(normalized[date], entry);
         }
         return normalized;
     }
@@ -553,9 +631,11 @@ function normalizeDashboardDailyStats(rawStats) {
 
     for (const [key, entry] of Object.entries(rawStats)) {
         if (!entry || typeof entry !== 'object') continue;
-        const date = normalizeYMD(key) || normalizeYMD(entry.date || '');
+        const date = normalizeYMD(
+            entry.date || entry.day || entry.sessionDate || entry.startDate || entry.startTime || entry.createdAt || key
+        );
         if (!date) continue;
-        normalized[date] = entry;
+        normalized[date] = mergeDashboardStats(normalized[date], entry);
     }
 
     return normalized;
@@ -572,12 +652,12 @@ async function buildDashboardSessionStatsByDate() {
         for (const session of sessions) {
             if (!session || typeof session !== 'object') continue;
 
-            const date = normalizeYMD(session.date || session.startTime || session.endTime || '');
+            const date = normalizeYMD(
+                session.date || session.day || session.sessionDate || session.startDate || session.startTime || session.endTime || session.createdAt || ''
+            );
             if (!date) continue;
 
-            const minutes = Math.round(toSafeNumber(
-                session.actualDurationMinutes ?? session.durationMinutes ?? session.plannedDurationMinutes ?? 0
-            ));
+            const minutes = normalizeSessionMinutes(session);
             if (minutes <= 0) continue;
 
             if (!byDate[date]) {
