@@ -324,6 +324,21 @@ function prepareToQuit(reason = 'quit') {
 
 let updaterInitialized = false;
 let installAfterDownload = false;
+let updaterLastAvailability = null; // null = unknown, true = available, false = not available
+let pendingCheckAutoDownload = false;
+
+function normalizeVersionString(version) {
+    if (version === undefined || version === null) return '';
+    return String(version).trim().replace(/^v/i, '');
+}
+
+function inferUpdateAvailableFromResult(result) {
+    const latest = normalizeVersionString(result?.updateInfo?.version);
+    const current = normalizeVersionString(app.getVersion());
+    if (!latest) return false;
+    if (!current) return updaterLastAvailability === true;
+    return latest !== current;
+}
 
 function isPortableBuild() {
     // electron-builder portable launcher sets these env vars on Windows.
@@ -420,11 +435,13 @@ function initAutoUpdater() {
     autoUpdater.autoInstallOnAppQuit = true;
 
     autoUpdater.on('checking-for-update', () => {
+        updaterLastAvailability = null;
         sendUpdaterStatus({ state: 'checking' });
         diag('info', 'updater checking-for-update');
     });
 
     autoUpdater.on('update-available', (info) => {
+        updaterLastAvailability = true;
         sendUpdaterStatus({
             state: 'available',
             version: info?.version,
@@ -432,14 +449,27 @@ function initAutoUpdater() {
             releaseDate: info?.releaseDate
         });
         diag('info', 'updater update-available', { version: info?.version });
+
+        // For manual "Check for Updates", start download automatically once availability is confirmed.
+        if (pendingCheckAutoDownload) {
+            pendingCheckAutoDownload = false;
+            sendUpdaterStatus({ state: 'download-starting' });
+            autoUpdater.downloadUpdate().catch((dlErr) => {
+                const dlMsg = sanitizeUpdaterError(dlErr);
+                sendUpdaterStatus({ state: 'error', message: dlMsg });
+            });
+        }
     });
 
     autoUpdater.on('update-not-available', (info) => {
+        updaterLastAvailability = false;
+        pendingCheckAutoDownload = false;
         sendUpdaterStatus({ state: 'not-available', version: info?.version });
         diag('info', 'updater update-not-available', { version: info?.version });
     });
 
     autoUpdater.on('error', (err) => {
+        pendingCheckAutoDownload = false;
         const friendlyMsg = sanitizeUpdaterError(err);
         sendUpdaterStatus({ state: 'error', message: friendlyMsg });
         diagError('updater error', err);
@@ -459,6 +489,7 @@ function initAutoUpdater() {
     });
 
     autoUpdater.on('update-downloaded', (info) => {
+        pendingCheckAutoDownload = false;
         sendUpdaterStatus({
             state: 'downloaded',
             version: info?.version,
@@ -1220,18 +1251,22 @@ ipcMain.handle('updater-check', async () => {
     if (!cfg.ok) return { ok: false, error: cfg.error };
 
     try {
+        pendingCheckAutoDownload = true;
+        updaterLastAvailability = null;
+
         const result = await autoUpdater.checkForUpdates();
-        const available = !!result?.updateInfo?.version;
-        if (available) {
-            // Auto-start download so the user isn't stuck at "available".
-            sendUpdaterStatus({ state: 'download-starting' });
-            autoUpdater.downloadUpdate().catch((dlErr) => {
-                const dlMsg = sanitizeUpdaterError(dlErr);
-                sendUpdaterStatus({ state: 'error', message: dlMsg });
-            });
+        const available = updaterLastAvailability === true || inferUpdateAvailableFromResult(result);
+
+        if (!available) {
+            pendingCheckAutoDownload = false;
+            sendUpdaterStatus({ state: 'not-available', version: result?.updateInfo?.version });
+            return { ok: true, status: 'not-available' };
         }
-        return { ok: true };
+
+        // Download starts in update-available event handler.
+        return { ok: true, status: 'available' };
     } catch (err) {
+        pendingCheckAutoDownload = false;
         const msg = sanitizeUpdaterError(err);
         sendUpdaterStatus({ state: 'error', message: msg });
         return { ok: false, error: msg };
@@ -1263,10 +1298,11 @@ ipcMain.handle('updater-update-now', async () => {
     try {
         // If update is already downloaded (rare), just install.
         installAfterDownload = true;
+        updaterLastAvailability = null;
 
         // Ensure we have an update available; if not, tell user.
         const result = await autoUpdater.checkForUpdates();
-        const available = !!result?.updateInfo?.version;
+        const available = updaterLastAvailability === true || inferUpdateAvailableFromResult(result);
         if (!available) {
             installAfterDownload = false;
             sendUpdaterStatus({ state: 'not-available' });

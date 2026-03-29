@@ -640,44 +640,77 @@
 
         // --- Events ---
 
-        _handleGoalChange(e) {
+        _getDateRangeForView(view, anchorDate = new Date()) {
+            const today = new Date(anchorDate);
+
+            if (view === 'weekly') {
+                const weekStart = this._alignToWeekStart(today);
+                const weekEnd = this._alignToWeekEnd(today);
+                return { startDate: this._toIso(weekStart), endDate: this._toIso(weekEnd) };
+            }
+
+            if (view === 'monthly') {
+                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                return { startDate: this._toIso(monthStart), endDate: this._toIso(monthEnd) };
+            }
+
+            if (view === 'yearly') {
+                const yearStart = new Date(today.getFullYear(), 0, 1);
+                const yearEnd = new Date(today.getFullYear(), 11, 31);
+                return { startDate: this._toIso(yearStart), endDate: this._toIso(yearEnd) };
+            }
+
+            return null;
+        }
+
+        _applyViewRangeToGoal(goalId, view = this.state.activeView) {
+            if (!goalId || view === 'custom') return false;
+
+            const goalData = this.state.data.goals[goalId];
+            if (!goalData) return false;
+
+            const range = this._getDateRangeForView(view);
+            if (!range) return false;
+
+            const changed = goalData.startDate !== range.startDate || goalData.endDate !== range.endDate;
+            goalData.startDate = range.startDate;
+            goalData.endDate = range.endDate;
+            return changed;
+        }
+
+        _applyViewRangeToAllGoals(view = this.state.activeView) {
+            if (view === 'custom') return false;
+
+            let changed = false;
+            for (const goal of this._getGoalsList()) {
+                if (this._applyViewRangeToGoal(goal.id, view)) changed = true;
+            }
+            return changed;
+        }
+
+        async _handleGoalChange(e) {
             const nextGoal = e.target.value;
             this.state.activeGoalId = nextGoal;
+
+            const changed = this._applyViewRangeToGoal(nextGoal, this.state.activeView);
+            if (changed) {
+                await this._save();
+            }
+
             this.render();
         }
 
-        _handleViewChange(e) {
+        async _handleViewChange(e) {
             const view = e.target.getAttribute('data-view');
             if (!view) return;
 
             this.state.activeView = view;
 
-            // Update date range based on view
-            const today = new Date();
-            const goalData = this.state.data.goals[this.state.activeGoalId];
+            // Keep all goals in sync with the currently selected period view.
+            this._applyViewRangeToAllGoals(view);
 
-            if (view === 'weekly') {
-                // Current week (Monday to Sunday)
-                const weekStart = this._alignToWeekStart(today);
-                const weekEnd = this._alignToWeekEnd(today);
-                goalData.startDate = this._toIso(weekStart);
-                goalData.endDate = this._toIso(weekEnd);
-            } else if (view === 'monthly') {
-                // Current month (1st to last day)
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                goalData.startDate = this._toIso(monthStart);
-                goalData.endDate = this._toIso(monthEnd);
-            } else if (view === 'yearly') {
-                // Current year (Jan 1 to Dec 31)
-                const yearStart = new Date(today.getFullYear(), 0, 1);
-                const yearEnd = new Date(today.getFullYear(), 11, 31);
-                goalData.startDate = this._toIso(yearStart);
-                goalData.endDate = this._toIso(yearEnd);
-            }
-            // 'custom' keeps existing dates
-
-            this._save();
+            await this._save();
             this.render();
         }
 
@@ -837,9 +870,13 @@
             this.state.data.goalsMeta = meta;
 
             const today = this._isoToday();
-            this.state.data.goals[id] = {
+            const range = this._getDateRangeForView(this.state.activeView) || {
                 startDate: this._addDaysIso(today, -30),
-                endDate: today,
+                endDate: today
+            };
+            this.state.data.goals[id] = {
+                startDate: range.startDate,
+                endDate: range.endDate,
                 completed: {}
             };
 

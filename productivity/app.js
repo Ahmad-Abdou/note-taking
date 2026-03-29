@@ -512,6 +512,112 @@ function normalizeYMD(value) {
     return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
 }
 
+function toSafeNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeDashboardDailyStats(rawStats) {
+    const normalized = {};
+
+    if (Array.isArray(rawStats)) {
+        for (const entry of rawStats) {
+            if (!entry || typeof entry !== 'object') continue;
+            const date = normalizeYMD(entry.date || entry.day || '');
+            if (!date) continue;
+            normalized[date] = entry;
+        }
+        return normalized;
+    }
+
+    if (!rawStats || typeof rawStats !== 'object') return normalized;
+
+    for (const [key, entry] of Object.entries(rawStats)) {
+        if (!entry || typeof entry !== 'object') continue;
+        const date = normalizeYMD(key) || normalizeYMD(entry.date || '');
+        if (!date) continue;
+        normalized[date] = entry;
+    }
+
+    return normalized;
+}
+
+async function buildDashboardSessionStatsByDate() {
+    const byDate = {};
+
+    try {
+        if (typeof ProductivityData?.DataStore?.getFocusSessions !== 'function') return byDate;
+        const sessions = await ProductivityData.DataStore.getFocusSessions();
+        if (!Array.isArray(sessions)) return byDate;
+
+        for (const session of sessions) {
+            if (!session || typeof session !== 'object') continue;
+
+            const date = normalizeYMD(session.date || session.startTime || session.endTime || '');
+            if (!date) continue;
+
+            const minutes = Math.round(toSafeNumber(
+                session.actualDurationMinutes ?? session.durationMinutes ?? session.plannedDurationMinutes ?? 0
+            ));
+            if (minutes <= 0) continue;
+
+            if (!byDate[date]) {
+                byDate[date] = { focusMinutes: 0, focusSessions: 0 };
+            }
+
+            byDate[date].focusMinutes += minutes;
+
+            const status = String(session.status || '').toLowerCase();
+            if (status === 'completed' || session.endTime) {
+                byDate[date].focusSessions += 1;
+            }
+        }
+    } catch (_) {
+        // ignore
+    }
+
+    return byDate;
+}
+
+function renderDashboardBestRecordEmpty(container) {
+    if (!container) return;
+    container.innerHTML = `
+        <div class="best-record-card">
+            <div class="best-record-header">
+                <div class="best-record-icon">🏅</div>
+                <div class="best-record-heading">
+                    <h3>Personal Best</h3>
+                    <span class="best-record-date">No records yet</span>
+                </div>
+            </div>
+            <div class="best-record-empty">
+                <p>Start a focus session to set your first personal record!</p>
+            </div>
+        </div>
+    `;
+}
+
+function pickBestRecordDay(statsByDate) {
+    let bestDay = null;
+
+    for (const [date, stats] of Object.entries(statsByDate || {})) {
+        const fm = Math.round(toSafeNumber(stats?.focusMinutes));
+        if (fm <= 0) continue;
+
+        if (!bestDay || fm > bestDay.focusMinutes) {
+            bestDay = {
+                date,
+                focusMinutes: fm,
+                focusSessions: Math.round(toSafeNumber(stats?.focusSessions)),
+                tasksCompleted: Math.round(toSafeNumber(stats?.tasksCompleted)),
+                productivityScore: Math.round(toSafeNumber(stats?.productivityScore))
+            };
+        }
+    }
+
+    return bestDay;
+}
+
 function isDailyRecurringTaskForDate(task, targetYmd) {
     if (!task || !targetYmd) return false;
 
@@ -1288,45 +1394,60 @@ async function loadDashboardBestRecord() {
     if (!container) return;
 
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getDashboardTodayYMD();
 
         // Reconcile today's stats from actual session records before rendering
         try {
             await ProductivityData.DataStore.reconcileDailyStatsRange(today, today);
         } catch (_) { /* ignore */ }
 
-        const allStats = await ProductivityData.DataStore.get('productivity_daily_stats', {});
-        const todayStats = allStats[today] || { focusMinutes: 0, focusSessions: 0, tasksCompleted: 0, productivityScore: 0 };
+        const statsKey = ProductivityData?.STORAGE_KEYS?.DAILY_STATS || 'productivity_daily_stats';
+        const rawStats = await ProductivityData.DataStore.get(statsKey, {});
+        const dailyStatsByDate = normalizeDashboardDailyStats(rawStats);
 
-        let bestDay = null;
-        for (const [date, stats] of Object.entries(allStats)) {
-            const fm = stats.focusMinutes || 0;
-            if (fm > 0 && (!bestDay || fm > bestDay.focusMinutes)) {
-                bestDay = {
-                    date,
-                    focusMinutes: fm,
-                    focusSessions: stats.focusSessions || 0,
-                    tasksCompleted: stats.tasksCompleted || 0,
-                    productivityScore: stats.productivityScore || 0
-                };
-            }
+        const mergedStatsByDate = {};
+        for (const [date, stats] of Object.entries(dailyStatsByDate)) {
+            mergedStatsByDate[date] = {
+                focusMinutes: Math.round(toSafeNumber(stats.focusMinutes)),
+                focusSessions: Math.round(toSafeNumber(stats.focusSessions)),
+                tasksCompleted: Math.round(toSafeNumber(stats.tasksCompleted)),
+                productivityScore: Math.round(toSafeNumber(stats.productivityScore))
+            };
         }
 
+        let bestDay = pickBestRecordDay(mergedStatsByDate);
+
+        // If daily stats are missing/corrupted, fall back to focus sessions for record reconstruction.
+        if (!bestDay) {
+            const sessionStatsByDate = await buildDashboardSessionStatsByDate();
+            for (const [date, sessionStats] of Object.entries(sessionStatsByDate)) {
+                const existing = mergedStatsByDate[date] || {
+                    focusMinutes: 0,
+                    focusSessions: 0,
+                    tasksCompleted: 0,
+                    productivityScore: 0
+                };
+
+                mergedStatsByDate[date] = {
+                    focusMinutes: Math.max(existing.focusMinutes, Math.round(toSafeNumber(sessionStats.focusMinutes))),
+                    focusSessions: Math.max(existing.focusSessions, Math.round(toSafeNumber(sessionStats.focusSessions))),
+                    tasksCompleted: existing.tasksCompleted,
+                    productivityScore: existing.productivityScore
+                };
+            }
+
+            bestDay = pickBestRecordDay(mergedStatsByDate);
+        }
+
+        const todayStats = mergedStatsByDate[today] || {
+            focusMinutes: 0,
+            focusSessions: 0,
+            tasksCompleted: 0,
+            productivityScore: 0
+        };
+
         if (!bestDay || bestDay.focusMinutes === 0) {
-            container.innerHTML = `
-                <div class="best-record-card">
-                    <div class="best-record-header">
-                        <div class="best-record-icon">🏅</div>
-                        <div class="best-record-heading">
-                            <h3>Personal Best</h3>
-                            <span class="best-record-date">No records yet</span>
-                        </div>
-                    </div>
-                    <div class="best-record-empty">
-                        <p>Start a focus session to set your first personal record!</p>
-                    </div>
-                </div>
-            `;
+            renderDashboardBestRecordEmpty(container);
             return;
         }
 
@@ -1399,6 +1520,7 @@ async function loadDashboardBestRecord() {
         `;
     } catch (e) {
         console.error('Failed to load dashboard best record:', e);
+        renderDashboardBestRecordEmpty(container);
     }
 }
 
