@@ -176,6 +176,55 @@ const STORE_KEY_LAST_CRASH_RELAUNCH_AT = 'lastRendererCrashRelaunchAtMs';
 
 let didStartApp = false;
 
+const AUTO_START_INITIALIZED_KEY = 'autoStartInitialized';
+
+function getAutoStartEnabled() {
+    try {
+        const scoped = app.getLoginItemSettings({ args: ['--hidden'] });
+        const generic = app.getLoginItemSettings();
+        return !!(scoped?.openAtLogin || generic?.openAtLogin);
+    } catch (e) {
+        diagError('getAutoStartEnabled failed', e);
+        return false;
+    }
+}
+
+function setAutoStartEnabled(enable) {
+    const shouldEnable = !!enable;
+
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: shouldEnable,
+            openAsHidden: true,
+            args: shouldEnable ? ['--hidden'] : []
+        });
+
+        // Some environments read generic registration state; keep both aligned.
+        const scopedState = app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin;
+        if (scopedState !== shouldEnable) {
+            app.setLoginItemSettings({
+                openAtLogin: shouldEnable,
+                openAsHidden: true
+            });
+        }
+    } catch (e) {
+        diagError('setAutoStartEnabled failed', e);
+    }
+
+    return getAutoStartEnabled();
+}
+
+function initializeAutoStartPreference() {
+    try {
+        if (store.get(AUTO_START_INITIALIZED_KEY) === true) return;
+        const enabled = setAutoStartEnabled(true);
+        store.set(AUTO_START_INITIALIZED_KEY, true);
+        diag('info', 'auto-start initialized', { enabled });
+    } catch (e) {
+        diagError('initializeAutoStartPreference failed', e);
+    }
+}
+
 function safeModeCleanupCachesOnce() {
     if (!safeModeGpuDisabled) return;
 
@@ -251,6 +300,9 @@ function startApp() {
     } catch (_) {
         // ignore
     }
+
+    // Enable startup launch by default once; users can still disable it in settings.
+    initializeAutoStartPreference();
 
     createWindow();
     createTray();
@@ -1169,18 +1221,17 @@ ipcMain.handle('close-window', () => {
 // ===== Auto-start Configuration =====
 
 ipcMain.handle('set-auto-start', (event, enable) => {
-    app.setLoginItemSettings({
-        openAtLogin: enable,
-        path: app.getPath('exe'),
-        args: [
-            '--hidden'
-        ]
-    });
-    return true;
+    const enabled = setAutoStartEnabled(enable);
+    try {
+        store.set(AUTO_START_INITIALIZED_KEY, true);
+    } catch (_) {
+        // ignore
+    }
+    return enabled;
 });
 
 ipcMain.handle('get-auto-start', () => {
-    return app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin;
+    return getAutoStartEnabled();
 });
 
 // ===== IPC Handler: Open External URLs =====

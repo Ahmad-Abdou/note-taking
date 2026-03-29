@@ -74,6 +74,7 @@
         async syncExternalDailyItems() {
             const today = this._isoToday();
             const dismissed = new Set(this.state.data.dismissedSyncIds || []);
+            const currentSyncedHabitIds = new Set();
             let didChange = false;
 
             // --- Daily recurring tasks ---
@@ -87,6 +88,7 @@
                     );
                     for (const task of dailyTasks) {
                         const habitId = `daily-task--${task.id}`;
+                        currentSyncedHabitIds.add(habitId);
                         if (dismissed.has(habitId)) continue;
                         const label = '\u{1F4CB} ' + (task.title || 'Daily Task');
                         didChange = this._ensureSyncedHabit(habitId, label) || didChange;
@@ -114,9 +116,11 @@
                 const CM = window.ChallengeManager;
                 if (CM) {
                     await CM.ensureLoaded();
+                    await CM.resetExpiredChallenges?.();
                     const dailyChallenges = (CM.challenges || []).filter(c => c.type === 'daily');
                     for (const ch of dailyChallenges) {
                         const habitId = `daily-challenge--${ch.id}`;
+                        currentSyncedHabitIds.add(habitId);
                         if (dismissed.has(habitId)) continue;
                         const label = '\u{1F3C6} ' + (ch.title || 'Daily Challenge');
                         didChange = this._ensureSyncedHabit(habitId, label) || didChange;
@@ -129,11 +133,32 @@
                         if (isDoneToday && !isChecked) {
                             goalData.completed[today] = 1;
                             didChange = true;
+                        } else if (!isDoneToday && isChecked) {
+                            delete goalData.completed[today];
+                            didChange = true;
                         }
                     }
                 }
             } catch (e) {
                 console.warn('[HabitTracker] Error syncing daily challenges:', e);
+            }
+
+            // Remove stale synced habits that no longer exist in tasks/challenges.
+            const staleSyncedIds = (Array.isArray(this.state.data.goalsMeta) ? this.state.data.goalsMeta : [])
+                .map(g => g?.id)
+                .filter(id => this._isSyncedHabit(id) && !dismissed.has(id) && !currentSyncedHabitIds.has(id));
+
+            if (staleSyncedIds.length > 0) {
+                const staleSet = new Set(staleSyncedIds);
+                this.state.data.goalsMeta = (Array.isArray(this.state.data.goalsMeta) ? this.state.data.goalsMeta : [])
+                    .filter(g => !staleSet.has(g?.id));
+                for (const id of staleSet) {
+                    delete this.state.data.goals[id];
+                }
+                if (!this.state.data.goals[this.state.activeGoalId]) {
+                    this.state.activeGoalId = this._getGoalsList()[0]?.id;
+                }
+                didChange = true;
             }
 
             if (didChange) {
@@ -357,6 +382,7 @@
         render() {
             this.mountEl.innerHTML = '';
             this.mountEl.classList.remove('habit-tracker-card');
+            this.mountEl.classList.add('habit-tracker-card');
 
             const header = document.createElement('div');
             header.className = 'habit-tracker-header';

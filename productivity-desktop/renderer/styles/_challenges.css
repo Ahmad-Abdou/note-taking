@@ -451,9 +451,20 @@
     font-weight: 600;
     font-size: 0.92rem;
     color: var(--text-primary);
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.dashboard-challenge-item .subtitle {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: capitalize;
 }
 
 .dashboard-challenge-item .count {

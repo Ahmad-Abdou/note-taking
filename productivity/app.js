@@ -420,7 +420,8 @@ async function loadDashboard() {
             allTasks,
             todayEvents,
             activeGoals,
-            weekStats
+            weekStats,
+            allGoals
         ] = await Promise.all([
             ProductivityData.DataStore.getSettings(),
             ProductivityData.DataStore.getDailyStats(),
@@ -429,7 +430,8 @@ async function loadDashboard() {
             ProductivityData.DataStore.getTasks(),
             ProductivityData.DataStore.getEventsForDate(ProductivityData.getTodayDate()),
             ProductivityData.DataStore.getActiveGoals(),
-            ProductivityData.DataStore.calculateWeeklyStats()
+            ProductivityData.DataStore.calculateWeeklyStats(),
+            ProductivityData.DataStore.getGoals()
         ]);
 
         App.settings = settings;
@@ -473,25 +475,51 @@ async function loadDashboard() {
         }
 
         // Update goals preview
-        renderGoalsPreview(activeGoals);
+        const goalsForDashboard = Array.isArray(allGoals) && allGoals.length > 0 ? allGoals : activeGoals;
+        renderGoalsPreview(goalsForDashboard);
 
         // Update new dashboard widgets
-        await renderReviewWidget();
+        try {
+            await renderReviewWidget();
+        } catch (widgetError) {
+            console.error('[Dashboard] Review widget failed:', widgetError);
+        }
 
         // Update challenges widget
-        await renderDashboardChallengesWidget();
+        try {
+            await renderDashboardChallengesWidget();
+        } catch (widgetError) {
+            console.error('[Dashboard] Challenges widget failed:', widgetError);
+        }
 
         // Update best record on dashboard
-        await loadDashboardBestRecord();
+        try {
+            await loadDashboardBestRecord();
+        } catch (widgetError) {
+            console.error('[Dashboard] Best record widget failed:', widgetError);
+        }
 
         // Update badges
-        updateBadges();
+        try {
+            updateBadges();
+        } catch (badgeError) {
+            console.error('[Dashboard] Badge update failed:', badgeError);
+        }
 
         // Update notification badge count
-        await updateNotificationCount();
+        try {
+            await updateNotificationCount();
+        } catch (notificationError) {
+            console.error('[Dashboard] Notification count update failed:', notificationError);
+        }
 
     } catch (error) {
         console.error('Failed to load dashboard:', error);
+        try {
+            await loadDashboardBestRecord();
+        } catch (_) {
+            // ignore
+        }
     }
 }
 
@@ -540,13 +568,75 @@ function toSafeNumber(value) {
     return Number.isFinite(n) ? n : 0;
 }
 
+function parseFlexibleMinutes(value) {
+    if (value === undefined || value === null) return 0;
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        if (value > 10000) return Math.round(value / 60000); // milliseconds
+        if (value > 300) return Math.round(value / 60); // seconds
+        return Math.round(value);
+    }
+
+    const text = String(value).trim();
+    if (!text) return 0;
+
+    // HH:MM or HH:MM:SS
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(text)) {
+        const parts = text.split(':').map(Number);
+        if (parts.length === 2) return (parts[0] * 60) + parts[1];
+        if (parts.length === 3) return (parts[0] * 60) + parts[1] + Math.round(parts[2] / 60);
+    }
+
+    // 1h 30m / 90m / 2h
+    const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*h/i);
+    const minMatch = text.match(/(\d+(?:\.\d+)?)\s*m/i);
+    if (hourMatch || minMatch) {
+        const hours = hourMatch ? Number(hourMatch[1]) : 0;
+        const mins = minMatch ? Number(minMatch[1]) : 0;
+        return Math.round((hours * 60) + mins);
+    }
+
+    // ISO-8601 duration PT1H30M / PT45M
+    const isoMatch = text.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+    if (isoMatch) {
+        const hours = Number(isoMatch[1] || 0);
+        const mins = Number(isoMatch[2] || 0);
+        const secs = Number(isoMatch[3] || 0);
+        return Math.round((hours * 60) + mins + (secs / 60));
+    }
+
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) {
+        if (numeric > 10000) return Math.round(numeric / 60000);
+        if (numeric > 300) return Math.round(numeric / 60);
+        return Math.round(numeric);
+    }
+
+    return 0;
+}
+
+function deriveMinutesFromStartEnd(startValue, endValue) {
+    const start = new Date(startValue || '');
+    const end = new Date(endValue || '');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
+    return minutes > 0 ? minutes : 0;
+}
+
 function normalizeDashboardStatsEntry(entry) {
     const src = entry && typeof entry === 'object' ? entry : {};
+    const focusMinutes = parseFlexibleMinutes(
+        src.focusMinutes ??
+        src.totalFocusMinutes ??
+        src.focusTime ??
+        src.minutesFocused ??
+        src.totalMinutes ??
+        src.totalFocusTime ??
+        src.focusDuration
+    );
 
     return {
-        focusMinutes: Math.round(toSafeNumber(
-            src.focusMinutes ?? src.totalFocusMinutes ?? src.focusTime ?? src.minutesFocused ?? src.totalMinutes ?? 0
-        )),
+        focusMinutes: Math.max(0, Math.round(focusMinutes)),
         focusSessions: Math.round(toSafeNumber(
             src.focusSessions ?? src.sessionsCompleted ?? src.completedSessions ?? src.sessionCount ?? 0
         )),
@@ -574,23 +664,20 @@ function mergeDashboardStats(base, incoming) {
 function normalizeSessionMinutes(session) {
     const src = session && typeof session === 'object' ? session : {};
 
-    const explicitMinutes = toSafeNumber(
+    const explicitMinutes = parseFlexibleMinutes(
         src.actualDurationMinutes ?? src.durationMinutes ?? src.plannedDurationMinutes
     );
     if (explicitMinutes > 0) return Math.round(explicitMinutes);
 
-    let genericDuration = toSafeNumber(src.duration ?? src.durationMs ?? src.durationSeconds ?? 0);
-    if (genericDuration <= 0) return 0;
+    const genericDuration = parseFlexibleMinutes(
+        src.duration ?? src.durationMs ?? src.durationSeconds ?? src.elapsed ?? src.elapsedMs
+    );
+    if (genericDuration > 0) return Math.round(genericDuration);
 
-    if (genericDuration > 10000) {
-        // Likely milliseconds.
-        genericDuration = genericDuration / 60000;
-    } else if (genericDuration > 300) {
-        // Likely seconds.
-        genericDuration = genericDuration / 60;
-    }
+    const fromStartEnd = deriveMinutesFromStartEnd(src.startTime, src.endTime);
+    if (fromStartEnd > 0) return fromStartEnd;
 
-    return Math.round(genericDuration);
+    return 0;
 }
 
 function normalizeDashboardDailyStats(rawStats) {
@@ -1495,29 +1582,25 @@ async function loadDashboardBestRecord() {
             };
         }
 
-        let bestDay = pickBestRecordDay(mergedStatsByDate);
+        // Always merge session-derived stats so historical/legacy records are not lost.
+        const sessionStatsByDate = await buildDashboardSessionStatsByDate();
+        for (const [date, sessionStats] of Object.entries(sessionStatsByDate)) {
+            const existing = mergedStatsByDate[date] || {
+                focusMinutes: 0,
+                focusSessions: 0,
+                tasksCompleted: 0,
+                productivityScore: 0
+            };
 
-        // If daily stats are missing/corrupted, fall back to focus sessions for record reconstruction.
-        if (!bestDay) {
-            const sessionStatsByDate = await buildDashboardSessionStatsByDate();
-            for (const [date, sessionStats] of Object.entries(sessionStatsByDate)) {
-                const existing = mergedStatsByDate[date] || {
-                    focusMinutes: 0,
-                    focusSessions: 0,
-                    tasksCompleted: 0,
-                    productivityScore: 0
-                };
-
-                mergedStatsByDate[date] = {
-                    focusMinutes: Math.max(existing.focusMinutes, Math.round(toSafeNumber(sessionStats.focusMinutes))),
-                    focusSessions: Math.max(existing.focusSessions, Math.round(toSafeNumber(sessionStats.focusSessions))),
-                    tasksCompleted: existing.tasksCompleted,
-                    productivityScore: existing.productivityScore
-                };
-            }
-
-            bestDay = pickBestRecordDay(mergedStatsByDate);
+            mergedStatsByDate[date] = {
+                focusMinutes: Math.max(existing.focusMinutes, Math.round(toSafeNumber(sessionStats.focusMinutes))),
+                focusSessions: Math.max(existing.focusSessions, Math.round(toSafeNumber(sessionStats.focusSessions))),
+                tasksCompleted: existing.tasksCompleted,
+                productivityScore: existing.productivityScore
+            };
         }
+
+        const bestDay = pickBestRecordDay(mergedStatsByDate);
 
         const todayStats = mergedStatsByDate[today] || {
             focusMinutes: 0,
@@ -1608,7 +1691,9 @@ function renderGoalsPreview(goals) {
     const container = document.getElementById('goals-preview');
     if (!container) return;
 
-    if (goals.length === 0) {
+    const goalList = Array.isArray(goals) ? goals : [];
+
+    if (goalList.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-bullseye"></i>
@@ -1618,17 +1703,62 @@ function renderGoalsPreview(goals) {
         return;
     }
 
-    container.innerHTML = goals.slice(0, 3).map(goal => `
-        <div class="goal-preview-item">
-            <div class="goal-preview-header">
-                <span class="goal-preview-title">${escapeHtml(goal.title)}</span>
-                <span class="goal-preview-progress">${goal.progress}%</span>
+    const normalizeGoalProgress = (goal) => {
+        if (!goal || typeof goal !== 'object') return 0;
+
+        const rawProgress = Math.round(toSafeNumber(goal.progress));
+        const milestones = Array.isArray(goal.milestones) ? goal.milestones : [];
+        if (milestones.length > 0) {
+            const done = milestones.filter(m => m && (m.isCompleted || m.completed || String(m.status || '').toLowerCase() === 'completed')).length;
+            return Math.max(0, Math.min(100, Math.round((done / milestones.length) * 100)));
+        }
+
+        if (String(goal.status || '').toLowerCase() === 'completed') return 100;
+        return Math.max(0, Math.min(100, rawProgress));
+    };
+
+    const sortedGoals = [...goalList]
+        .map(goal => ({ goal, progress: normalizeGoalProgress(goal) }))
+        .sort((a, b) => {
+            const aDone = a.progress >= 100 ? 1 : 0;
+            const bDone = b.progress >= 100 ? 1 : 0;
+            if (aDone !== bDone) return aDone - bDone;
+            return b.progress - a.progress;
+        });
+
+    const topGoals = sortedGoals.slice(0, 4);
+    const completedCount = sortedGoals.filter(g => g.progress >= 100).length;
+    const avgProgress = Math.round(sortedGoals.reduce((sum, g) => sum + g.progress, 0) / Math.max(1, sortedGoals.length));
+
+    container.innerHTML = `
+        <div class="dashboard-goals-summary">
+            <div class="goal-summary-pill">
+                <span class="label">Average</span>
+                <span class="value">${avgProgress}%</span>
             </div>
-            <div class="goal-progress-bar">
-                <div class="goal-progress-fill" style="width: ${goal.progress}%"></div>
+            <div class="goal-summary-pill">
+                <span class="label">Completed</span>
+                <span class="value">${completedCount}/${sortedGoals.length}</span>
             </div>
         </div>
-    `).join('');
+        <div class="dashboard-goals-bars">
+            ${topGoals.map((entry, idx) => {
+                const name = escapeHtml(entry.goal?.title || 'Untitled Goal');
+                const pct = Math.max(0, Math.min(100, entry.progress));
+                return `
+                    <div class="dashboard-goal-bar-row">
+                        <div class="dashboard-goal-bar-head">
+                            <span class="dashboard-goal-bar-title" title="${name}">${name}</span>
+                            <span class="dashboard-goal-bar-value">${pct}%</span>
+                        </div>
+                        <div class="dashboard-goal-bar-track">
+                            <div class="dashboard-goal-bar-fill fill-${(idx % 4) + 1}" style="width:${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
 }
 
 // Render Items to Review Widget
@@ -1772,8 +1902,23 @@ async function renderDashboardChallengesWidget() {
             ? window.ChallengeManager.challenges
             : [];
 
-        const active = challenges.filter(c => c && (c.status === 'active' || c.status === 'completed'));
-        if (active.length === 0) {
+        const visible = challenges
+            .filter(c => c && typeof c === 'object')
+            .map(c => {
+                const status = String(c.status || '').toLowerCase();
+                return {
+                    id: c.id || null,
+                    title: String(c.title || c.name || '').trim(),
+                    type: String(c.type || 'custom').trim(),
+                    metric: String(c.metric || '').trim(),
+                    status,
+                    currentProgress: Math.max(0, Number(c.currentProgress) || 0),
+                    targetProgress: Math.max(1, Number(c.targetProgress) || 1)
+                };
+            })
+            .filter(c => (c.status === 'active' || c.status === 'completed') && c.targetProgress > 0 && c.title);
+
+        if (visible.length === 0) {
             container.innerHTML = `
                 <div class="empty-state small">
                     <i class="fas fa-flag-checkered"></i>
@@ -1785,27 +1930,30 @@ async function renderDashboardChallengesWidget() {
         }
 
         // Prefer active first, then recently completed
-        active.sort((a, b) => {
+        visible.sort((a, b) => {
             const sa = a.status === 'active' ? 0 : 1;
             const sb = b.status === 'active' ? 0 : 1;
             if (sa !== sb) return sa - sb;
             return String(a.title || '').localeCompare(String(b.title || ''));
         });
 
-        const top = active.slice(0, 3);
+        const top = visible.slice(0, 3);
         container.innerHTML = `
             <div class="dashboard-challenges-list">
                 ${top.map(c => {
-                    const current = Math.max(0, Number(c.currentProgress) || 0);
-                    const target = Math.max(1, Number(c.targetProgress) || 1);
+                    const current = c.currentProgress;
+                    const target = c.targetProgress;
                     const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
                     const statusClass = c.status === 'completed' ? 'completed' : 'active';
+                    const typeLabel = c.type ? c.type.charAt(0).toUpperCase() + c.type.slice(1) : 'Custom';
+                    const metricLabel = c.metric ? c.metric.replace(/_/g, ' ') : 'progress';
                     return `
                         <div class="dashboard-challenge-item ${statusClass}">
                             <div class="row">
                                 <div class="title">${escapeHtml(c.title || 'Challenge')}</div>
                                 <div class="count">${current}/${target}</div>
                             </div>
+                            <div class="subtitle">${escapeHtml(typeLabel)} • ${escapeHtml(metricLabel)}</div>
                             <div class="progress-bar">
                                 <div class="progress-fill" style="width:${pct}%"></div>
                             </div>

@@ -963,6 +963,102 @@
     gap: var(--spacing-md);
 }
 
+.dashboard-goals-summary {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.goal-summary-pill {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+}
+
+.goal-summary-pill .label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 700;
+}
+
+.goal-summary-pill .value {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.dashboard-goals-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dashboard-goal-bar-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dashboard-goal-bar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.dashboard-goal-bar-title {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dashboard-goal-bar-value {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.dashboard-goal-bar-track {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.dashboard-goal-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.35s ease;
+}
+
+.dashboard-goal-bar-fill.fill-1 {
+    background: linear-gradient(90deg, #4f46e5, #6366f1);
+}
+
+.dashboard-goal-bar-fill.fill-2 {
+    background: linear-gradient(90deg, #0ea5e9, #22d3ee);
+}
+
+.dashboard-goal-bar-fill.fill-3 {
+    background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+.dashboard-goal-bar-fill.fill-4 {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
 /* Notification animation keyframes */
 @keyframes notifProgress {
     from {
