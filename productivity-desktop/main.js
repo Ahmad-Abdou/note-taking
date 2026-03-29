@@ -658,8 +658,12 @@ function createWindow() {
     const readyFallback = setTimeout(() => {
         try {
             if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-                diag('warn', 'ready-to-show timeout; showing window');
-                mainWindow.show();
+                if (!process.argv.includes('--hidden')) {
+                    diag('warn', 'ready-to-show timeout; showing window');
+                    mainWindow.show();
+                } else {
+                    diag('info', 'ready-to-show timeout; keeping window hidden due to --hidden flag');
+                }
             }
         } catch (_) {
             // ignore
@@ -668,7 +672,11 @@ function createWindow() {
 
     mainWindow.once('ready-to-show', () => {
         clearTimeout(readyFallback);
-        mainWindow.show();
+        if (!process.argv.includes('--hidden')) {
+            mainWindow.show();
+        } else {
+            diag('info', 'launched with --hidden, skipping mainWindow.show()');
+        }
         // Open DevTools in development (can use F12 or Ctrl+Shift+I)
         // mainWindow.webContents.openDevTools();
     });
@@ -1145,13 +1153,16 @@ ipcMain.handle('close-window', () => {
 ipcMain.handle('set-auto-start', (event, enable) => {
     app.setLoginItemSettings({
         openAtLogin: enable,
-        path: app.getPath('exe')
+        path: app.getPath('exe'),
+        args: [
+            '--hidden'
+        ]
     });
     return true;
 });
 
 ipcMain.handle('get-auto-start', () => {
-    return app.getLoginItemSettings().openAtLogin;
+    return app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin;
 });
 
 // ===== IPC Handler: Open External URLs =====

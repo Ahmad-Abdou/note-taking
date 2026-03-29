@@ -1,6 +1,6 @@
 {
     "name": "productivity-hub-desktop",
-    "version": "2.0.43",
+    "version": "2.0.44",
     "description": "Productivity Hub - Focus mode, task management, schedule planning, and productivity tracking",
     "repository": {
         "type": "git",
@@ -29,7 +29,7 @@
     "dependencies": {
         "build": "^0.1.4",
         "electron-store": "^8.1.0",
-        "electron-updater": "^6.3.0"
+        "electron-updater": "^6.8.3"
     },
     "build": {
         "appId": "com.productivity.hub",
