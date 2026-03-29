@@ -1414,8 +1414,14 @@ const DataStore = {
 
     // ========== GOALS ==========
     async getGoals() {
-        const goals = await this.get(STORAGE_KEYS.GOALS, []);
-        return goals.map(g => new Goal(g));
+        const rawGoals = await this.get(STORAGE_KEYS.GOALS, []);
+        const goalList = Array.isArray(rawGoals)
+            ? rawGoals
+            : (rawGoals && typeof rawGoals === 'object' ? Object.values(rawGoals) : []);
+
+        return goalList
+            .filter(g => g && typeof g === 'object')
+            .map(g => new Goal(g));
     },
 
     async saveGoal(goal) {

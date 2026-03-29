@@ -567,7 +567,10 @@
                 const manageHeader = document.createElement('div');
                 manageHeader.className = 'habit-manage-header';
                 manageHeader.innerHTML = `
-                    <div class="habit-manage-title">Manage habits</div>
+                    <div class="habit-manage-header-row">
+                        <div class="habit-manage-title">Manage habits</div>
+                        <button type="button" class="habit-ghost habit-manage-close" data-action="close-manage" data-testid="habit-manage-close">Close</button>
+                    </div>
                     <div class="habit-manage-hint">Add, edit, or delete habits. Deleting removes history.</div>
                 `;
 
@@ -582,6 +585,12 @@
                 input.setAttribute('data-testid', 'habit-add-input');
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') this._handleAddHabit();
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        this.state.isManageOpen = false;
+                        this.state.editingGoalId = null;
+                        this.render();
+                    }
                 });
 
                 const addBtn = document.createElement('button');
@@ -1084,6 +1093,13 @@
 
             const action = btn.getAttribute('data-action');
             const goalId = btn.getAttribute('data-goal-id');
+
+            if (action === 'close-manage') {
+                this.state.isManageOpen = false;
+                this.state.editingGoalId = null;
+                this.render();
+                return;
+            }
 
             if (action === 'start-rename') {
                 if (!goalId) return;

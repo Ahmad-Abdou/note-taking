@@ -198,6 +198,13 @@
     margin-bottom: var(--spacing-md);
 }
 
+#habit-tracker-root .habit-manage-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
 #habit-tracker-root .habit-manage-title {
     font-size: 16px;
     font-weight: 800;
@@ -207,6 +214,11 @@
 #habit-tracker-root .habit-manage-hint {
     font-size: 12px;
     color: var(--text-muted);
+}
+
+#habit-tracker-root .habit-manage-close {
+    height: 30px;
+    padding: 0 12px;
 }
 
 #habit-tracker-root .habit-manage-row {

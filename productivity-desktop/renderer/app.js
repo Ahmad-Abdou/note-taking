@@ -430,6 +430,15 @@ async function loadDashboard() {
     // Debug removed
 
     try {
+        const loadWithFallback = async (label, loader, fallbackValue) => {
+            try {
+                return await loader();
+            } catch (error) {
+                console.error(`[Dashboard] Failed to load ${label}:`, error);
+                return fallbackValue;
+            }
+        };
+
         // Load all required data in parallel
         const [
             settings,
@@ -439,19 +448,24 @@ async function loadDashboard() {
             allTasks,
             todayEvents,
             activeGoals,
-            weekStats,
-            allGoals
+            weekStats
         ] = await Promise.all([
-            ProductivityData.DataStore.getSettings(),
-            ProductivityData.DataStore.getDailyStats(),
-            ProductivityData.DataStore.getStreakData(),
-            ProductivityData.DataStore.getPriorityTasks(5),
-            ProductivityData.DataStore.getTasks(),
-            ProductivityData.DataStore.getEventsForDate(ProductivityData.getTodayDate()),
-            ProductivityData.DataStore.getActiveGoals(),
-            ProductivityData.DataStore.calculateWeeklyStats(),
-            ProductivityData.DataStore.getGoals()
+            loadWithFallback('settings', () => ProductivityData.DataStore.getSettings(), {}),
+            loadWithFallback('today stats', () => ProductivityData.DataStore.getDailyStats(), {
+                focusMinutes: 0,
+                tasksCompleted: 0,
+                productivityScore: 0,
+                calculateProductivityScore: () => 0
+            }),
+            loadWithFallback('streak data', () => ProductivityData.DataStore.getStreakData(), { currentStreak: 0 }),
+            loadWithFallback('priority tasks', () => ProductivityData.DataStore.getPriorityTasks(5), []),
+            loadWithFallback('tasks', () => ProductivityData.DataStore.getTasks(), []),
+            loadWithFallback('today events', () => ProductivityData.DataStore.getEventsForDate(ProductivityData.getTodayDate()), []),
+            loadWithFallback('active goals', () => ProductivityData.DataStore.getActiveGoals(), []),
+            loadWithFallback('weekly stats', () => ProductivityData.DataStore.calculateWeeklyStats(), null)
         ]);
+
+        const allGoals = await loadWithFallback('all goals', () => ProductivityData.DataStore.getGoals(), []);
 
         App.settings = settings;
 
@@ -1235,8 +1249,12 @@ function updateDateDisplay() {
 }
 
 function updateProductivityScore(stats, settings) {
-    // Calculate score if not already done
-    const score = stats.productivityScore || stats.calculateProductivityScore(settings);
+    const safeStats = stats && typeof stats === 'object' ? stats : {};
+    const calculatedScore = typeof safeStats.calculateProductivityScore === 'function'
+        ? safeStats.calculateProductivityScore(settings)
+        : 0;
+    const rawScore = toSafeNumber(safeStats.productivityScore);
+    const score = rawScore > 0 ? rawScore : calculatedScore;
 
     // Update score display
     const scoreEl = document.getElementById('productivity-score');
@@ -1259,8 +1277,8 @@ function updateProductivityScore(stats, settings) {
     const focusHoursEl = document.getElementById('focus-hours');
     const currentStreakEl = document.getElementById('current-streak');
 
-    if (tasksCompletedEl) tasksCompletedEl.textContent = stats.tasksCompleted;
-    if (focusHoursEl) focusHoursEl.textContent = (stats.focusMinutes / 60).toFixed(1);
+    if (tasksCompletedEl) tasksCompletedEl.textContent = Math.round(toSafeNumber(safeStats.tasksCompleted));
+    if (focusHoursEl) focusHoursEl.textContent = (toSafeNumber(safeStats.focusMinutes) / 60).toFixed(1);
 }
 
 function updateQuickStats(streakData, todayStats) {
