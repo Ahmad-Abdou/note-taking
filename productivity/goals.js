@@ -832,7 +832,14 @@ function openGoalModal(goal = null) {
     GoalsState.milestonesCount = goal?.milestones?.length || 0;
 
     let modal = document.getElementById('goal-modal');
-    if (!modal) {
+    const hasTrackedGoalForm = modal
+        && modal.querySelector('#goal-form')
+        && modal.querySelector('#goal-priority-input')
+        && modal.querySelector('#goal-tracking-type-input');
+
+    if (!modal || !hasTrackedGoalForm) {
+        // Replace legacy static modal markup so tracked goals always use the modern form.
+        modal?.remove();
         modal = createGoalModal();
     } else {
         // Re-setup listeners when modal already exists
@@ -1111,6 +1118,9 @@ function createGoalModal() {
 }
 
 function setupGoalModalListeners(modal) {
+    if (!modal || modal.dataset.goalModalListenersBound === 'true') return;
+    modal.dataset.goalModalListenersBound = 'true';
+
     modal.querySelectorAll('[data-action="close-goal-modal"]').forEach(el => {
         el.addEventListener('click', closeGoalModal);
     });
