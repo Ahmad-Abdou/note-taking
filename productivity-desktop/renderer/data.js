@@ -2260,6 +2260,7 @@ const DataStore = {
             scheduleSchool: await this.get(STORAGE_KEYS.SCHEDULE_SCHOOL, []),
             schedulePersonal: await this.get(STORAGE_KEYS.SCHEDULE_PERSONAL, []),
             goals: await this.get(STORAGE_KEYS.GOALS, []),
+            challenges: await this.get(STORAGE_KEYS.CHALLENGES, []),
             focusSessions: await this.get(STORAGE_KEYS.FOCUS_SESSIONS, []),
             dailyStats: await this.get(STORAGE_KEYS.DAILY_STATS, {}),
             streaks: await this.get(STORAGE_KEYS.STREAKS, {}),
@@ -2323,6 +2324,7 @@ const DataStore = {
             await mergeOrReplace(STORAGE_KEYS.SCHEDULE_SCHOOL, data.scheduleSchool);
             await mergeOrReplace(STORAGE_KEYS.SCHEDULE_PERSONAL, data.schedulePersonal);
             await mergeOrReplace(STORAGE_KEYS.GOALS, data.goals);
+            await mergeOrReplace(STORAGE_KEYS.CHALLENGES, data.challenges);
             await mergeOrReplace(STORAGE_KEYS.FOCUS_SESSIONS, data.focusSessions);
             await mergeOrReplaceObj(STORAGE_KEYS.DAILY_STATS, data.dailyStats);
             await mergeOrReplaceObj(STORAGE_KEYS.STREAKS, data.streaks);

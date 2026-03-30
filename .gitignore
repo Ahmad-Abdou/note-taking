@@ -15,6 +15,9 @@ productivity-desktop/node_modules/
 productivity-desktop/dist/
 productivity-desktop/out/
 
+# Android local build outputs
+productivity-mobile/*.apk
+
 # OS
 .DS_Store
 Thumbs.db
