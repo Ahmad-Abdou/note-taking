@@ -528,7 +528,7 @@ function openChallengeModal(existingChallenge) {
                 <h2><i class="fas fa-trophy"></i> ${isEdit ? 'Edit Challenge' : 'Create Challenge'}</h2>
                 <button class="close-modal-btn">&times;</button>
             </div>
-            <form id="challenge-form" class="modal-body">
+            <form id="challenge-form" class="modal-body challenge-form">
                 <div class="form-group">
                     <label>Challenge Name <span style="opacity:0.6;font-weight:normal;">(optional)</span></label>
                     <input type="text" id="challenge-name" placeholder="e.g. Morning Focus Sprint" maxlength="80">
@@ -583,6 +583,22 @@ function openChallengeModal(existingChallenge) {
     `;
 
     modal.classList.add('active');
+
+    if (modal.dataset.keydownIsolationBound !== 'true') {
+        modal.addEventListener('keydown', (e) => {
+            if (!modal.classList.contains('active')) return;
+
+            // Keep Escape behavior local to this modal and stop global shortcut handlers.
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                modal.classList.remove('active');
+                return;
+            }
+
+            e.stopPropagation();
+        }, true);
+        modal.dataset.keydownIsolationBound = 'true';
+    }
 
     // Setup modal event listeners
     modal.querySelectorAll('.close-modal-btn').forEach(btn => {
@@ -657,6 +673,18 @@ function openChallengeModal(existingChallenge) {
     nameEl?.addEventListener('input', syncPreview);
 
     syncMetricUi();
+
+    // Ensure keyboard typing works immediately when the modal opens.
+    setTimeout(() => {
+        try {
+            nameEl?.focus();
+            if (nameEl && !nameEl.value) {
+                nameEl.select();
+            }
+        } catch (_) {
+            // Ignore focus failures.
+        }
+    }, 0);
 }
 
 async function createChallenge() {
