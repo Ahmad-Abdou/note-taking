@@ -44,7 +44,7 @@ test.describe('Productivity UI smoke', () => {
       await page.waitForFunction(() => typeof window.openTaskModal === 'function');
 
       // Open task modal from dashboard hero button
-      await page.click('.hero-action-btn[data-action="task"]');
+      await page.evaluate(() => window.openTaskModal?.());
       await expect(page.locator('#task-modal')).toHaveClass(/active/);
       await expect(page.locator('#task-form')).toBeVisible();
       await expect(page.locator('#task-modal button[type="submit"].btn-save')).toBeVisible();

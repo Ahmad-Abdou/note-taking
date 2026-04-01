@@ -32,6 +32,113 @@ const App = {
     ]
 };
 
+let dashboardRefreshTimer = null;
+let dashboardRefreshInFlight = false;
+let dashboardRefreshPending = false;
+let goalsRefreshTimer = null;
+
+function emitProductivityDataChanged(source, detail = {}) {
+    const eventDetail = {
+        source: String(source || 'app'),
+        ...detail
+    };
+
+    window.dispatchEvent(new CustomEvent('productivity:data-changed', {
+        detail: eventDetail
+    }));
+}
+
+async function runDashboardRefresh() {
+    if (dashboardRefreshInFlight) {
+        dashboardRefreshPending = true;
+        return;
+    }
+
+    dashboardRefreshInFlight = true;
+    dashboardRefreshPending = false;
+
+    try {
+        await loadDashboard();
+    } catch (error) {
+        console.error('[LiveRefresh] Dashboard refresh failed:', error);
+    } finally {
+        dashboardRefreshInFlight = false;
+        if (dashboardRefreshPending && App.currentPage === 'dashboard') {
+            dashboardRefreshPending = false;
+            runDashboardRefresh();
+        }
+    }
+}
+
+function queueDashboardRefresh(options = {}) {
+    const immediate = options.immediate === true;
+
+    if (App.currentPage !== 'dashboard') {
+        dashboardRefreshPending = true;
+        return;
+    }
+
+    if (immediate) {
+        if (dashboardRefreshTimer) {
+            clearTimeout(dashboardRefreshTimer);
+            dashboardRefreshTimer = null;
+        }
+        runDashboardRefresh();
+        return;
+    }
+
+    if (dashboardRefreshTimer) return;
+
+    dashboardRefreshTimer = setTimeout(() => {
+        dashboardRefreshTimer = null;
+        runDashboardRefresh();
+    }, 250);
+}
+
+function queueGoalsRefresh() {
+    if (App.currentPage !== 'goals' || typeof loadGoals !== 'function') return;
+    if (goalsRefreshTimer) return;
+
+    goalsRefreshTimer = setTimeout(async () => {
+        goalsRefreshTimer = null;
+        try {
+            await loadGoals();
+        } catch (error) {
+            console.error('[LiveRefresh] Goals refresh failed:', error);
+        }
+    }, 250);
+}
+
+function setupLiveRefreshListeners() {
+    const habitSyncSources = new Set(['task', 'tasks', 'challenge', 'challenges', 'habit', 'habits']);
+
+    window.addEventListener('productivity:data-changed', (event) => {
+        const detail = event?.detail || {};
+        const source = String(detail.source || '').toLowerCase();
+        const shouldSyncHabits = habitSyncSources.has(source);
+
+        if (shouldSyncHabits && window.habitTrackerInstance?.syncExternalDailyItems) {
+            window.habitTrackerInstance.syncExternalDailyItems().catch((error) => {
+                console.warn('[LiveRefresh] Habit sync failed:', error);
+            });
+        }
+
+        if (source === 'focus' || source === 'goal' || source === 'goals' || shouldSyncHabits) {
+            queueGoalsRefresh();
+        }
+
+        if (!detail.suppressDashboardRefresh) {
+            queueDashboardRefresh({ immediate: detail.immediate === true });
+        }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && dashboardRefreshPending) {
+            queueDashboardRefresh({ immediate: true });
+        }
+    });
+}
+
 function highlightOverflowElements() {
     const root = document.querySelector('.main-content') || document.body;
     const viewportWidth = document.documentElement.clientWidth;
@@ -90,6 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupFAB();
         setupQuickEntry();
         setupHabitTrackerCalendar();
+        setupLiveRefreshListeners();
         window.addEventListener('resize', highlightOverflowElements);
 
         // Sync notification preferences with NotificationState early
@@ -152,7 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Set up auto-refresh
         setInterval(updateDateDisplay, 60000); // Update every minute
-        setInterval(loadDashboard, 300000); // Refresh dashboard every 5 minutes
+        setInterval(() => queueDashboardRefresh({ immediate: true }), 300000); // Refresh dashboard every 5 minutes
 
         App.isInitialized = true;
         // Debug removed
@@ -229,7 +337,7 @@ function navigateTo(page) {
     // Load page-specific data
     switch (page) {
         case 'dashboard':
-            loadDashboard();
+            queueDashboardRefresh({ immediate: true });
             break;
         case 'schedule':
             if (typeof loadSchedule === 'function') loadSchedule();
@@ -379,6 +487,10 @@ function showSmartFocusCreateTaskPrompt() {
                 status: 'not-started'
             });
             await ProductivityData.DataStore.saveTask(task);
+            emitProductivityDataChanged('task', {
+                immediate: App.currentPage !== 'dashboard',
+                suppressDashboardRefresh: App.currentPage === 'dashboard'
+            });
 
             // Remove prompt
             prompt.remove();
@@ -1168,6 +1280,11 @@ function setupTodayTasksCardHandlers() {
             } catch (e) {
                 // ignore
             }
+
+            emitProductivityDataChanged('task', {
+                immediate: App.currentPage !== 'dashboard',
+                suppressDashboardRefresh: App.currentPage === 'dashboard'
+            });
 
             if (App.currentPage === 'dashboard') {
                 await loadDashboard();
@@ -2518,6 +2635,11 @@ async function saveTask() {
             await ProductivityData.ProductivityCalculator.updateDailyStats('task_created');
         }
 
+        emitProductivityDataChanged('task', {
+            immediate: App.currentPage !== 'dashboard',
+            suppressDashboardRefresh: App.currentPage === 'dashboard'
+        });
+
         closeAllModals();
 
         // Silence only for *new* task creation
@@ -2638,6 +2760,11 @@ async function saveGoal() {
         const goal = new ProductivityData.Goal(goalData);
         await ProductivityData.DataStore.saveGoal(goal);
 
+        emitProductivityDataChanged('goal', {
+            immediate: App.currentPage !== 'dashboard',
+            suppressDashboardRefresh: App.currentPage === 'dashboard'
+        });
+
         // Check achievements
         await ProductivityData.ProductivityCalculator.checkAchievements();
 
@@ -2690,6 +2817,11 @@ async function toggleTask(taskId) {
 
         // Save the task
         await ProductivityData.DataStore.saveTask(task);
+
+        emitProductivityDataChanged('task', {
+            immediate: App.currentPage !== 'dashboard',
+            suppressDashboardRefresh: App.currentPage === 'dashboard'
+        });
 
         // Immediately push the change to pinned widget windows.
         notifyWidgetsDataChanged(taskId);

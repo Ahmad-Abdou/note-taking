@@ -35,13 +35,10 @@ test.describe('Distraction blocker', () => {
       await page.click('#toggle-blocker-btn');
       await expect(page.locator('#blocker-status')).toContainText('Blocker Active');
 
-      // Handle the prompt() used by the UI
-      page.once('dialog', async (dialog) => {
-        // prompt
-        await dialog.accept('example.com');
-      });
-
       await page.click('#add-blocked-site-btn');
+      await expect(page.locator('#blocker-add-site-modal')).toHaveClass(/active/);
+      await page.fill('#blocker-add-site-input', 'example.com');
+      await page.click('#blocker-add-site-form button[type="submit"]');
 
       await expect(page.locator('#blocked-sites-list')).toContainText('example.com');
 

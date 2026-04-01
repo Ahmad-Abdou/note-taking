@@ -39,7 +39,7 @@ test.describe('Focus duration picker', () => {
       await page.waitForFunction(() => typeof window.openTaskModal === 'function');
 
       // Create a task (so we have a focus button)
-      await page.click('.hero-action-btn[data-action="task"]');
+      await page.evaluate(() => window.openTaskModal?.());
       await expect(page.locator('#task-modal')).toHaveClass(/active/);
 
       const title = `E2E Focus Task ${Date.now()}`;

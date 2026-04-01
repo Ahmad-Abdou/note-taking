@@ -46,7 +46,8 @@ test.describe('Goals & targets', () => {
       await page.fill('#goal-title-input', title);
       await page.fill('#goal-target-date-input', ymdLocal(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)));
 
-      await page.click('#save-goal-btn');
+      const saveGoalBtn = page.locator('#goal-form button[type="submit"], #save-goal-btn');
+      await saveGoalBtn.first().click();
 
       // Modal should close
       await expect(page.locator('#goal-modal')).not.toHaveClass(/active/);

@@ -798,6 +798,38 @@
     font-weight: 500;
 }
 
+.focus-resume-session-btn {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: calc(var(--z-focus-overlay) - 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(99, 102, 241, 0.45);
+    border-radius: 999px;
+    padding: 10px 14px;
+    background: rgba(15, 23, 42, 0.92);
+    color: #e2e8f0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.38);
+    transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.focus-resume-session-btn:hover {
+    background: rgba(99, 102, 241, 0.88);
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .focus-resume-session-btn {
+        right: 12px;
+        bottom: 12px;
+        padding: 9px 12px;
+    }
+}
+
 /* ============================================================================
    MODALS
    ============================================================================ */

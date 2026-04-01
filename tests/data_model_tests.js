@@ -225,13 +225,13 @@ const dataModelTests = {
 
                     const c = await window.ChallengeManager.create({
                         metric: 'tasks',
-                        target: 5,
-                        durationDays: 7,
+                        targetCount: 5,
+                        type: 'custom'
                     });
 
                     if (!c || !c.id) throw new Error('Challenge not created');
                     if (c.metric !== 'tasks') throw new Error(`Metric: ${c.metric}`);
-                    if (c.target !== 5) throw new Error(`Target: ${c.target}`);
+                    if (c.targetProgress !== 5) throw new Error(`Target: ${c.targetProgress}`);
 
                     // Cleanup
                     await window.ChallengeManager.delete(c.id);
@@ -252,8 +252,8 @@ const dataModelTests = {
 
                     const c = await window.ChallengeManager.create({
                         metric: 'focus_sessions',
-                        target: 10,
-                        durationDays: 7,
+                        targetCount: 10,
+                        type: 'custom'
                     });
 
                     await window.ChallengeManager.recordProgress('focus_sessions', 3);
@@ -262,10 +262,9 @@ const dataModelTests = {
 
                     if (!updated) throw new Error('Challenge not found after recordProgress');
 
-                    const today = new Date().toISOString().slice(0, 10);
-                    const todayProgress = updated.dailyProgress?.[today] || 0;
-                    if (todayProgress < 3) {
-                        throw new Error(`Expected daily progress >= 3, got ${todayProgress}`);
+                    const progress = Number(updated.currentProgress) || 0;
+                    if (progress < 3) {
+                        throw new Error(`Expected progress >= 3, got ${progress}`);
                     }
 
                     // Cleanup
@@ -287,8 +286,8 @@ const dataModelTests = {
 
                     const c = await window.ChallengeManager.create({
                         metric: 'habits',
-                        target: 20,
-                        durationDays: 14,
+                        targetCount: 20,
+                        type: 'custom'
                     });
 
                     await window.ChallengeManager.delete(c.id);
@@ -302,13 +301,22 @@ const dataModelTests = {
 
             // ── getInvestedTime ───────────────────────────────────────
             {
-                name: 'getInvestedTime returns object with hours and milestones',
+                name: 'Goal.getInvestedTime returns object with hours and milestones',
                 fn: async () => {
-                    const ds = window.ProductivityData?.DataStore;
-                    if (!ds?.getInvestedTime) {
-                        throw new Error('getInvestedTime not available');
+                    const Goal = window.ProductivityData?.Goal;
+                    if (!Goal) {
+                        throw new Error('Goal class not available');
                     }
-                    const result = await ds.getInvestedTime();
+
+                    const goal = new Goal({
+                        hoursInvested: 4.5,
+                        milestones: [
+                            { title: 'M1', isCompleted: true },
+                            { title: 'M2', isCompleted: false }
+                        ]
+                    });
+
+                    const result = goal.getInvestedTime();
                     if (typeof result !== 'object') {
                         throw new Error(`Expected object, got ${typeof result}`);
                     }

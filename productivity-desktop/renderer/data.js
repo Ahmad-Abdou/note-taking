@@ -463,7 +463,7 @@ class Goal {
 
     // Calculate progress based on milestones
     calculateProgress() {
-        if (this.trackingType === 'focus_hours' || this.trackingType === 'tasks_completed' || this.trackingType === 'website_minutes') {
+        if (this.trackingType === 'focus_hours' || this.trackingType === 'tasks_completed' || this.trackingType === 'website_minutes' || this.trackingType === 'challenges_completed') {
             const target = toFiniteGoalNumber(this.trackingTarget, 0);
             const current = toFiniteGoalNumber(this.trackingCurrent, 0);
             if (target <= 0) {
@@ -518,7 +518,7 @@ class Goal {
 
 function normalizeTrackedGoalType(value) {
     const candidate = String(value || '').trim().toLowerCase();
-    if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes') return candidate;
+    if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes' || candidate === 'challenges_completed') return candidate;
     return 'milestones';
 }
 
@@ -566,10 +566,11 @@ function getWebsiteUsageMinutesTotal(websiteUsage) {
     return Math.max(0, Math.round(total));
 }
 
-function applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsage) {
+function applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsage, challenges) {
     const goalList = Array.isArray(goals) ? goals : [];
     const taskList = Array.isArray(tasks) ? tasks : [];
     const sessionList = Array.isArray(sessions) ? sessions : [];
+    const challengeList = Array.isArray(challenges) ? challenges : [];
     const websiteMinutesToday = getWebsiteUsageMinutesTotal(websiteUsage);
     const nowIso = new Date().toISOString();
 
@@ -625,6 +626,28 @@ function applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsa
             currentValue = Math.round(currentValue);
         } else if (trackingType === 'website_minutes') {
             currentValue = websiteMinutesToday;
+        } else if (trackingType === 'challenges_completed') {
+            for (const challenge of challengeList) {
+                if (!challenge || typeof challenge !== 'object') continue;
+
+                const totalCompletions = Math.floor(toFiniteGoalNumber(challenge.timesCompleted, 0));
+                if (totalCompletions > 0) {
+                    currentValue += totalCompletions;
+                    continue;
+                }
+
+                if (String(challenge.status || '').toLowerCase() !== 'completed') continue;
+
+                const challengeTs = toGoalTimestamp(challenge.completedAt)
+                    ?? toGoalTimestamp(challenge.updatedAt)
+                    ?? toGoalTimestamp(challenge.lastProgressDate)
+                    ?? toGoalTimestamp(challenge.createdAt);
+
+                if (challengeTs !== null && challengeTs < startTs) continue;
+                currentValue += 1;
+            }
+
+            currentValue = Math.round(currentValue);
         }
 
         goal.trackingCurrent = currentValue;
@@ -1583,12 +1606,13 @@ const DataStore = {
             .map(g => new Goal(g));
 
         try {
-            const [tasks, sessions, websiteUsage] = await Promise.all([
+            const [tasks, sessions, websiteUsage, challenges] = await Promise.all([
                 this.getTasks(),
                 this.getFocusSessions(),
-                this.get(STORAGE_KEYS.WEBSITE_DAILY_USAGE, {})
+                this.get(STORAGE_KEYS.WEBSITE_DAILY_USAGE, {}),
+                this.getChallenges()
             ]);
-            return applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsage);
+            return applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsage, challenges);
         } catch (error) {
             console.warn('[DataStore] Failed to enrich tracked goals from activity:', error);
             return goals;
@@ -2219,10 +2243,10 @@ const DataStore = {
         let totalSessions = 0;
 
         weekDates.forEach(date => {
-            const stats = statsMap[date];
-            totalMinutes += stats.focusMinutes;
-            totalTasks += stats.tasksCompleted;
-            totalSessions += stats.focusSessions;
+            const stats = statsMap?.[date] || new DailyStats({ date });
+            totalMinutes += Number(stats.focusMinutes) || 0;
+            totalTasks += Number(stats.tasksCompleted) || 0;
+            totalSessions += Number(stats.focusSessions) || 0;
         });
 
         return {

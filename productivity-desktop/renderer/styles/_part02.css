@@ -41,6 +41,43 @@
     /* Account for header and footer */
 }
 
+#goal-modal .modal-content.goal-modal-content {
+    max-width: min(880px, calc(100vw - 28px));
+    max-height: 92vh;
+}
+
+#goal-modal .goal-modal-body {
+    max-height: calc(92vh - 150px);
+    padding-bottom: 14px;
+}
+
+#goal-modal .form-row {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    align-items: start;
+}
+
+#goal-modal .form-group.full {
+    grid-column: 1 / -1;
+}
+
+#goal-modal .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: var(--bg-card);
+}
+
+@media (max-width: 768px) {
+    #goal-modal .modal-content.goal-modal-content {
+        max-width: calc(100vw - 16px);
+        max-height: 95vh;
+    }
+
+    #goal-modal .goal-modal-body {
+        max-height: calc(95vh - 150px);
+    }
+}
+
 /* Event Details Modal Styling */
 .modal-content.event-details {
     max-width: 450px;

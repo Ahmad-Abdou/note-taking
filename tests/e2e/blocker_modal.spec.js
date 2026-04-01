@@ -78,11 +78,11 @@ test.describe('Blocker – add-site modal', () => {
       if (await addBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
         await addBtn.first().click();
 
-        const input = page.locator('#add-site-modal input[type="text"], .add-site-modal input[type="text"], #blocked-site-url-input');
+        const input = page.locator('#blocker-add-site-input, #add-site-modal input[type="text"], .add-site-modal input[type="text"], #blocked-site-url-input');
         if (await input.first().isVisible({ timeout: 2000 }).catch(() => false)) {
           await input.first().fill('reddit.com');
 
-          const confirmBtn = page.locator('#add-site-modal button:has-text("Add"), .add-site-modal button:has-text("Add"), #confirm-add-site-btn');
+          const confirmBtn = page.locator('#blocker-add-site-form button[type="submit"], #add-site-modal button:has-text("Add"), .add-site-modal button:has-text("Add"), #confirm-add-site-btn');
           await confirmBtn.first().click();
 
           // Verify site appears in the blocked list
@@ -100,20 +100,16 @@ test.describe('Blocker – add-site modal', () => {
 
       await goToBlocker(page);
 
-      // Pre-seed a site
-      await page.evaluate(async () => {
-        const sites = [{ id: 'test-rm-' + Date.now(), url: 'example-remove.com', addedAt: new Date().toISOString() }];
-        await new Promise(r => chrome.storage.local.set({ blockedSites: sites }, r));
-      });
-      // Reload to pick up the seeded data
-      await page.reload({ waitUntil: 'load' });
-      await page.waitForFunction(() => typeof window.navigateTo === 'function');
-      await page.click('.nav-item[data-page="blocker"]');
+      // Seed via modal flow
+      await page.click('#add-blocked-site-btn');
+      await expect(page.locator('#blocker-add-site-modal')).toHaveClass(/active/);
+      await page.fill('#blocker-add-site-input', 'example-remove.com');
+      await page.click('#blocker-add-site-form button[type="submit"]');
 
       await expect(page.locator('#page-blocker')).toContainText('example-remove.com');
 
       // Click remove button
-      const removeBtn = page.locator('.blocked-site-item .remove-btn, .blocked-site-item button:has-text("Remove"), .blocked-site-item .delete-btn, .blocked-site-item [data-action="remove"]');
+      const removeBtn = page.locator('.blocked-site-item .remove-site, .blocked-site-item .remove-btn, .blocked-site-item button:has-text("Remove"), .blocked-site-item .delete-btn, .blocked-site-item [data-action="remove-site"], .blocked-site-item [data-action="remove"]');
       if (await removeBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
         await removeBtn.first().click();
         // Site should be gone

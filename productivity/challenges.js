@@ -31,6 +31,146 @@ function normalizeMetric(metric) {
     return String(metric || '').trim().toLowerCase();
 }
 
+function normalizeTimeOfDay(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(trimmed);
+    if (!match) return null;
+    return `${match[1]}:${match[2]}`;
+}
+
+function timeToMinutes(hhmm) {
+    const normalized = normalizeTimeOfDay(hhmm);
+    if (!normalized) return null;
+    const [hours, minutes] = normalized.split(':').map(Number);
+    return (hours * 60) + minutes;
+}
+
+function isValidDailyTimeWindow(start, end) {
+    const s = normalizeTimeOfDay(start);
+    const e = normalizeTimeOfDay(end);
+    return !!s && !!e && s !== e;
+}
+
+function formatTimeWindow(start, end) {
+    const s = normalizeTimeOfDay(start);
+    const e = normalizeTimeOfDay(end);
+    if (!s || !e) return '';
+    return `${s} - ${e}`;
+}
+
+function isTimeWithinWindow(time, start, end) {
+    const t = timeToMinutes(time);
+    const s = timeToMinutes(start);
+    const e = timeToMinutes(end);
+
+    if (t === null || s === null || e === null) return false;
+    if (s === e) return true;
+    if (s < e) return t >= s && t <= e;
+
+    // Overnight window (example: 22:00 -> 02:00)
+    return t >= s || t <= e;
+}
+
+function getLocalTimeHHMM(date = new Date()) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function challengeWindowSegments(start, end) {
+    const s = timeToMinutes(start);
+    const e = timeToMinutes(end);
+    if (s === null || e === null) return [];
+
+    if (s === e) {
+        return [{ start: 0, end: 1440 }];
+    }
+
+    if (s < e) {
+        return [{ start: s, end: e }];
+    }
+
+    return [
+        { start: s, end: 1440 },
+        { start: 0, end: e }
+    ];
+}
+
+function segmentsOverlap(leftSegments, rightSegments) {
+    for (const left of leftSegments) {
+        for (const right of rightSegments) {
+            const overlapStart = Math.max(left.start, right.start);
+            const overlapEnd = Math.min(left.end, right.end);
+            if (overlapEnd > overlapStart) return true;
+        }
+    }
+    return false;
+}
+
+function normalizeChallengeRecord(raw) {
+    const challenge = (raw && typeof raw === 'object') ? { ...raw } : {};
+
+    challenge.id = String(challenge.id || createChallengeId());
+    challenge.metric = normalizeMetric(challenge.metric);
+    challenge.type = ['daily', 'weekly', 'custom'].includes(challenge.type) ? challenge.type : 'custom';
+    challenge.options = (challenge.options && typeof challenge.options === 'object') ? { ...challenge.options } : {};
+    challenge.targetProgress = Math.max(1, Number(challenge.targetProgress ?? challenge.target ?? 1) || 1);
+    challenge.currentProgress = Math.max(0, Number(challenge.currentProgress) || 0);
+    challenge.currentStreak = Math.max(0, Number(challenge.currentStreak) || 0);
+    challenge.bestStreak = Math.max(challenge.currentStreak, Number(challenge.bestStreak) || 0);
+    challenge.status = challenge.status === 'completed' ? 'completed' : 'active';
+    challenge.createdAt = typeof challenge.createdAt === 'string' ? challenge.createdAt : new Date().toISOString();
+    challenge.lastProgressDate = typeof challenge.lastProgressDate === 'string' ? challenge.lastProgressDate : null;
+    challenge.completedAt = typeof challenge.completedAt === 'string' ? challenge.completedAt : null;
+    challenge.timesCompleted = Math.max(0, Number(challenge.timesCompleted) || 0);
+
+    if (challenge.metric === 'focus_sessions') {
+        challenge.options.minMinutes = Math.max(0, Number(challenge.options.minMinutes) || 0);
+    } else {
+        challenge.options = {};
+    }
+
+    const normalizedStart = normalizeTimeOfDay(challenge.timeWindowStart || challenge.timeframeStart || challenge.startTime || '');
+    const normalizedEnd = normalizeTimeOfDay(challenge.timeWindowEnd || challenge.timeframeEnd || challenge.endTime || '');
+    if (challenge.type === 'daily' && isValidDailyTimeWindow(normalizedStart, normalizedEnd)) {
+        challenge.timeWindowStart = normalizedStart;
+        challenge.timeWindowEnd = normalizedEnd;
+    } else {
+        challenge.timeWindowStart = null;
+        challenge.timeWindowEnd = null;
+    }
+
+    const historyRaw = (challenge.completionHistory && typeof challenge.completionHistory === 'object')
+        ? challenge.completionHistory
+        : {};
+    challenge.completionHistory = {};
+
+    for (const [dateIso, entry] of Object.entries(historyRaw)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) continue;
+        const record = (entry && typeof entry === 'object') ? entry : {};
+        let windowOutcome = 'within';
+        if (record.windowOutcome === 'outside' || record.withinTimeframe === false) {
+            windowOutcome = 'outside';
+        }
+
+        challenge.completionHistory[dateIso] = {
+            completedAt: typeof record.completedAt === 'string' ? record.completedAt : null,
+            completionTime: normalizeTimeOfDay(record.completionTime || ''),
+            windowOutcome
+        };
+    }
+
+    const customTitle = typeof challenge.title === 'string' && challenge.title.trim();
+    challenge.title = customTitle
+        ? challenge.title.trim()
+        : buildChallengeTitle(challenge.metric, challenge.targetProgress, challenge.options);
+    challenge.customTitle = !!customTitle;
+    challenge.description = buildChallengeDescription(challenge.metric, challenge.targetProgress, challenge.options);
+
+    return challenge;
+}
+
 function createChallengeId() {
     return 'challenge_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
 }
@@ -71,6 +211,15 @@ function buildChallengeDescription(metric, targetCount, options) {
     return 'Progress updates automatically when you complete the linked action.';
 }
 
+function emitChallengeDataChanged(detail = {}) {
+    window.dispatchEvent(new CustomEvent('productivity:data-changed', {
+        detail: {
+            source: 'challenge',
+            ...detail
+        }
+    }));
+}
+
 const ChallengeManager = {
     _loaded: false,
     _loadingPromise: null,
@@ -86,7 +235,9 @@ const ChallengeManager = {
         this._loadingPromise = (async () => {
             try {
                 const raw = await ProductivityData?.DataStore?.getChallenges?.();
-                this.challenges = Array.isArray(raw) ? raw : [];
+                this.challenges = Array.isArray(raw)
+                    ? raw.map(normalizeChallengeRecord)
+                    : [];
             } catch (e) {
                 console.warn('ChallengeManager: failed to load challenges', e);
                 this.challenges = [];
@@ -156,9 +307,10 @@ const ChallengeManager = {
         }
 
         if (didChange) await this.save();
+        if (didChange) emitChallengeDataChanged({ immediate: true });
     },
 
-    async create({ metric, type, targetCount, options, name }) {
+    async create({ metric, type, targetCount, options, name, timeWindowStart, timeWindowEnd }) {
         await this.ensureLoaded();
 
         const normalizedMetric = normalizeMetric(metric);
@@ -167,6 +319,9 @@ const ChallengeManager = {
         const safeOptions = (normalizedMetric === 'focus_sessions')
             ? { minMinutes: Math.max(0, Number(options?.minMinutes) || 0) }
             : {};
+        const normalizedWindowStart = normalizeTimeOfDay(timeWindowStart);
+        const normalizedWindowEnd = normalizeTimeOfDay(timeWindowEnd);
+        const hasValidWindow = safeType === 'daily' && isValidDailyTimeWindow(normalizedWindowStart, normalizedWindowEnd);
 
         const customName = (typeof name === 'string' && name.trim()) ? name.trim() : '';
 
@@ -185,12 +340,17 @@ const ChallengeManager = {
             status: 'active',
             createdAt: new Date().toISOString(),
             lastProgressDate: null,
-            completedAt: null
+            completedAt: null,
+            timesCompleted: 0,
+            timeWindowStart: hasValidWindow ? normalizedWindowStart : null,
+            timeWindowEnd: hasValidWindow ? normalizedWindowEnd : null,
+            completionHistory: {}
         };
 
-        this.challenges.push(challenge);
+        this.challenges.push(normalizeChallengeRecord(challenge));
         await this.save();
-        return challenge;
+        emitChallengeDataChanged({ immediate: true });
+        return this.challenges[this.challenges.length - 1];
     },
 
     async update(id, updates) {
@@ -198,7 +358,7 @@ const ChallengeManager = {
         const challenge = this.challenges.find(c => c.id === id);
         if (!challenge) return null;
 
-        const { metric, type, targetCount, options, name } = updates;
+        const { metric, type, targetCount, options, name, timeWindowStart, timeWindowEnd } = updates;
 
         if (metric !== undefined) challenge.metric = normalizeMetric(metric);
         if (type !== undefined) challenge.type = ['daily', 'weekly', 'custom'].includes(type) ? type : challenge.type;
@@ -207,6 +367,27 @@ const ChallengeManager = {
             challenge.options = (normalizeMetric(challenge.metric) === 'focus_sessions')
                 ? { minMinutes: Math.max(0, Number(options?.minMinutes) || 0) }
                 : {};
+        }
+
+        const hasWindowUpdate = updates && (
+            Object.prototype.hasOwnProperty.call(updates, 'timeWindowStart') ||
+            Object.prototype.hasOwnProperty.call(updates, 'timeWindowEnd')
+        );
+
+        if (challenge.type !== 'daily') {
+            challenge.timeWindowStart = null;
+            challenge.timeWindowEnd = null;
+        } else if (hasWindowUpdate) {
+            const normalizedWindowStart = normalizeTimeOfDay(timeWindowStart);
+            const normalizedWindowEnd = normalizeTimeOfDay(timeWindowEnd);
+
+            if (isValidDailyTimeWindow(normalizedWindowStart, normalizedWindowEnd)) {
+                challenge.timeWindowStart = normalizedWindowStart;
+                challenge.timeWindowEnd = normalizedWindowEnd;
+            } else {
+                challenge.timeWindowStart = null;
+                challenge.timeWindowEnd = null;
+            }
         }
 
         const customName = (typeof name === 'string' && name.trim()) ? name.trim() : '';
@@ -218,8 +399,10 @@ const ChallengeManager = {
             challenge.customTitle = false;
         }
         challenge.description = buildChallengeDescription(challenge.metric, challenge.targetProgress, challenge.options);
+        Object.assign(challenge, normalizeChallengeRecord(challenge));
 
         await this.save();
+        emitChallengeDataChanged({ immediate: true });
         return challenge;
     },
 
@@ -227,6 +410,7 @@ const ChallengeManager = {
         await this.ensureLoaded();
         this.challenges = this.challenges.filter(c => c.id !== id);
         await this.save();
+        emitChallengeDataChanged({ immediate: true });
     },
 
     async recordProgress(metric, amount = 1, meta = {}) {
@@ -268,6 +452,28 @@ const ChallengeManager = {
             if ((Number(challenge.currentProgress) || 0) >= (Number(challenge.targetProgress) || 0)) {
                 challenge.status = 'completed';
                 challenge.completedAt = new Date().toISOString();
+                challenge.timesCompleted = (Number(challenge.timesCompleted) || 0) + 1;
+
+                if (challenge.type === 'daily') {
+                    const completionTime = getLocalTimeHHMM();
+                    const hasWindow = isValidDailyTimeWindow(challenge.timeWindowStart, challenge.timeWindowEnd);
+                    const windowOutcome = hasWindow
+                        ? (isTimeWithinWindow(completionTime, challenge.timeWindowStart, challenge.timeWindowEnd)
+                            ? 'within'
+                            : 'outside')
+                        : 'within';
+
+                    if (!challenge.completionHistory || typeof challenge.completionHistory !== 'object') {
+                        challenge.completionHistory = {};
+                    }
+
+                    challenge.completionHistory[today] = {
+                        completedAt: challenge.completedAt,
+                        completionTime,
+                        windowOutcome
+                    };
+                }
+
                 try {
                     showToast?.('success', 'Challenge Complete!', `You completed: ${challenge.title}`);
                 } catch {
@@ -280,6 +486,7 @@ const ChallengeManager = {
 
         if (!didChange) return;
         await this.save();
+        emitChallengeDataChanged({ immediate: true });
 
         // Sync daily challenge state with habit tracker
         if (window.habitTrackerInstance?.syncExternalDailyItems) {
@@ -379,6 +586,7 @@ function renderChallenges() {
                 </button>
             </div>
         `;
+        renderChallengeScheduleTimeline(ChallengeState.challenges);
         return;
     }
 
@@ -399,6 +607,120 @@ function renderChallenges() {
             if (challenge) openChallengeModal(challenge);
         });
     });
+
+    renderChallengeScheduleTimeline(ChallengeState.challenges);
+}
+
+function renderChallengeScheduleTimeline(challenges) {
+    const grid = document.getElementById('challenges-grid');
+    if (!grid) return;
+
+    const host = grid.parentElement;
+    if (!host) return;
+
+    let timeline = host.querySelector('#challenge-schedule-timeline');
+    if (!timeline) {
+        timeline = document.createElement('section');
+        timeline.id = 'challenge-schedule-timeline';
+        timeline.className = 'challenge-schedule-timeline';
+        host.appendChild(timeline);
+    }
+
+    const allChallenges = Array.isArray(challenges) ? challenges : [];
+    const daily = allChallenges.filter((challenge) => challenge?.type === 'daily');
+    const scheduled = daily
+        .map((challenge) => {
+            const start = normalizeTimeOfDay(challenge.timeWindowStart);
+            const end = normalizeTimeOfDay(challenge.timeWindowEnd);
+            return {
+                challenge,
+                start,
+                end,
+                segments: isValidDailyTimeWindow(start, end) ? challengeWindowSegments(start, end) : []
+            };
+        })
+        .filter((entry) => entry.segments.length > 0);
+    const unscheduled = daily.filter((challenge) => !isValidDailyTimeWindow(challenge.timeWindowStart, challenge.timeWindowEnd));
+
+    if (daily.length === 0) {
+        timeline.innerHTML = '';
+        timeline.style.display = 'none';
+        return;
+    }
+
+    timeline.style.display = '';
+
+    if (scheduled.length === 0) {
+        timeline.innerHTML = `
+            <div class="challenge-schedule-header">
+                <h4><i class="fas fa-stream"></i> Daily Challenge Timeline</h4>
+                <p>Add a time frame to your daily challenges to see overlap planning.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const withOverlap = scheduled.map((entry, index) => {
+        const overlaps = [];
+        for (let i = 0; i < scheduled.length; i++) {
+            if (i === index) continue;
+            if (segmentsOverlap(entry.segments, scheduled[i].segments)) {
+                overlaps.push(scheduled[i].challenge.id);
+            }
+        }
+
+        return {
+            ...entry,
+            overlaps
+        };
+    });
+
+    const overlapCount = withOverlap.filter((entry) => entry.overlaps.length > 0).length;
+
+    const rowsHtml = withOverlap.map((entry) => {
+        const challenge = entry.challenge;
+        const title = escapeHtml(challenge.title || 'Daily Challenge');
+        const rangeLabel = formatTimeWindow(entry.start, entry.end);
+        const bars = entry.segments.map((segment) => {
+            const leftPct = (segment.start / 1440) * 100;
+            const widthPct = ((segment.end - segment.start) / 1440) * 100;
+            return `<span class="challenge-schedule-bar" style="left:${leftPct}%;width:${widthPct}%;"></span>`;
+        }).join('');
+        const overlapLabel = entry.overlaps.length > 0
+            ? `<span class="challenge-schedule-overlap has-overlap"><i class="fas fa-exclamation-circle"></i> Overlaps with ${entry.overlaps.length} challenge${entry.overlaps.length === 1 ? '' : 's'}</span>`
+            : '<span class="challenge-schedule-overlap"><i class="fas fa-check-circle"></i> No overlap</span>';
+
+        return `
+            <div class="challenge-schedule-row ${entry.overlaps.length > 0 ? 'has-overlap' : ''}">
+                <div class="challenge-schedule-meta">
+                    <div class="challenge-schedule-name">${title}</div>
+                    <div class="challenge-schedule-range">${rangeLabel}</div>
+                </div>
+                <div class="challenge-schedule-track">${bars}</div>
+                ${overlapLabel}
+            </div>
+        `;
+    }).join('');
+
+    const unscheduledHtml = unscheduled.length > 0
+        ? `<div class="challenge-schedule-unscheduled"><strong>Unscheduled daily challenges:</strong> ${unscheduled.map((challenge) => escapeHtml(challenge.title || 'Daily Challenge')).join(', ')}</div>`
+        : '';
+
+    timeline.innerHTML = `
+        <div class="challenge-schedule-header">
+            <h4><i class="fas fa-stream"></i> Daily Challenge Timeline</h4>
+            <p>${scheduled.length} scheduled challenge${scheduled.length === 1 ? '' : 's'}${overlapCount > 0 ? `, ${overlapCount} with overlap` : ', no overlaps detected'}.</p>
+        </div>
+        <div class="challenge-schedule-axis" aria-hidden="true">
+            <span>00:00</span>
+            <span>06:00</span>
+            <span>12:00</span>
+            <span>18:00</span>
+            <span>24:00</span>
+        </div>
+        <div class="challenge-schedule-list">${rowsHtml}</div>
+        ${unscheduledHtml}
+    `;
 }
 
 function renderChallengeCard(challenge) {
@@ -408,6 +730,10 @@ function renderChallengeCard(challenge) {
     const isCompleted = challenge.status === 'completed';
     const typeIcon = challenge.type === 'daily' ? 'fa-calendar-day' :
         challenge.type === 'weekly' ? 'fa-calendar-week' : 'fa-calendar-alt';
+    const timeWindowLabel = formatTimeWindow(challenge.timeWindowStart, challenge.timeWindowEnd);
+    const timeWindowBadge = challenge.type === 'daily' && timeWindowLabel
+        ? `<span class="challenge-time-window-badge"><i class="fas fa-clock"></i> ${timeWindowLabel}</span>`
+        : '';
 
     const streakBadge = challenge.currentStreak > 0 ?
         `<span class="streak-badge"><i class="fas fa-fire"></i> ${challenge.currentStreak}</span>` : '';
@@ -419,6 +745,7 @@ function renderChallengeCard(challenge) {
                     <i class="fas ${typeIcon}"></i>
                     <span>${challenge.type}</span>
                 </div>
+                ${timeWindowBadge}
                 ${streakBadge}
                 <div class="challenge-actions">
                     ${!isCompleted ? `<button class="btn-icon tiny edit-btn" title="Edit">
@@ -570,6 +897,20 @@ function openChallengeModal(existingChallenge) {
                         <option value="custom" selected>Custom</option>
                     </select>
                 </div>
+                <div class="form-row" id="challenge-time-window-row" style="display:none;">
+                    <div class="form-group">
+                        <label>Timeframe Start</label>
+                        <input type="time" id="challenge-time-start" step="300">
+                    </div>
+                    <div class="form-group">
+                        <label>Timeframe End</label>
+                        <input type="time" id="challenge-time-end" step="300">
+                    </div>
+                </div>
+                <div class="form-group" id="challenge-time-window-note" style="display:none;opacity:0.85;">
+                    <label>Daily timeframe requirement</label>
+                    <div style="font-size:12px;color:var(--text-secondary);">Daily challenges are counted as <strong>within window</strong> or <strong>outside window</strong> based on this timeframe.</div>
+                </div>
                 <div class="form-group" style="opacity:0.9;">
                     <label>Preview</label>
                     <div id="challenge-preview" style="line-height:1.4"></div>
@@ -619,6 +960,10 @@ function openChallengeModal(existingChallenge) {
     const typeRow = document.getElementById('challenge-type-row');
     const typeSimpleEl = document.getElementById('challenge-type-simple');
     const typeFocusEl = document.getElementById('challenge-type');
+    const timeWindowRow = document.getElementById('challenge-time-window-row');
+    const timeWindowNote = document.getElementById('challenge-time-window-note');
+    const timeStartEl = document.getElementById('challenge-time-start');
+    const timeEndEl = document.getElementById('challenge-time-end');
 
     // Pre-populate for edit mode
     if (isEdit) {
@@ -629,6 +974,8 @@ function openChallengeModal(existingChallenge) {
         const curType = existingChallenge.type || 'custom';
         if (typeSimpleEl) typeSimpleEl.value = curType;
         if (typeFocusEl) typeFocusEl.value = curType;
+        if (timeStartEl) timeStartEl.value = normalizeTimeOfDay(existingChallenge.timeWindowStart || '') || '';
+        if (timeEndEl) timeEndEl.value = normalizeTimeOfDay(existingChallenge.timeWindowEnd || '') || '';
     }
 
     // Store editing challenge ID for the submit handler
@@ -637,12 +984,23 @@ function openChallengeModal(existingChallenge) {
     form.onsubmit = async (e) => {
         e.preventDefault();
         const editId = form.dataset.editId;
+        let ok = false;
         if (editId) {
-            await updateChallenge(editId);
+            ok = await updateChallenge(editId);
         } else {
-            await createChallenge();
+            ok = await createChallenge();
         }
-        modal.classList.remove('active');
+        if (ok) {
+            modal.classList.remove('active');
+        }
+    };
+
+    const getSelectedType = () => {
+        const metric = normalizeMetric(metricEl?.value);
+        if (metric === 'focus_sessions') {
+            return typeFocusEl?.value || 'custom';
+        }
+        return typeSimpleEl?.value || 'custom';
     };
 
     const syncMetricUi = () => {
@@ -650,6 +1008,9 @@ function openChallengeModal(existingChallenge) {
         const showFocus = metric === 'focus_sessions';
         if (focusOpts) focusOpts.style.display = showFocus ? '' : 'none';
         if (typeRow) typeRow.style.display = showFocus ? 'none' : '';
+        const isDaily = getSelectedType() === 'daily';
+        if (timeWindowRow) timeWindowRow.style.display = isDaily ? '' : 'none';
+        if (timeWindowNote) timeWindowNote.style.display = isDaily ? '' : 'none';
         syncPreview();
     };
 
@@ -662,7 +1023,15 @@ function openChallengeModal(existingChallenge) {
         const options = metric === 'focus_sessions' ? { minMinutes } : {};
         const title = customName || buildChallengeTitle(metric, target, options);
         const desc = buildChallengeDescription(metric, target, options);
-        previewEl.innerHTML = `<strong>${escapeHtml(title)}</strong><div style="opacity:0.85;margin-top:4px;">${escapeHtml(desc)}</div>`;
+        const selectedType = getSelectedType();
+        const start = normalizeTimeOfDay(timeStartEl?.value || '');
+        const end = normalizeTimeOfDay(timeEndEl?.value || '');
+        const hasWindow = selectedType === 'daily' && isValidDailyTimeWindow(start, end);
+        const windowSummary = hasWindow
+            ? `<div style="opacity:0.9;margin-top:6px;"><i class="fas fa-clock"></i> Required timeframe: ${escapeHtml(formatTimeWindow(start, end))}</div>`
+            : '';
+
+        previewEl.innerHTML = `<strong>${escapeHtml(title)}</strong><div style="opacity:0.85;margin-top:4px;">${escapeHtml(desc)}</div>${windowSummary}`;
     };
 
     metricEl?.addEventListener('change', syncMetricUi);
@@ -671,6 +1040,10 @@ function openChallengeModal(existingChallenge) {
     typeSimpleEl?.addEventListener('change', syncPreview);
     typeFocusEl?.addEventListener('change', syncPreview);
     nameEl?.addEventListener('input', syncPreview);
+    timeStartEl?.addEventListener('input', syncPreview);
+    timeEndEl?.addEventListener('input', syncPreview);
+    typeSimpleEl?.addEventListener('change', syncMetricUi);
+    typeFocusEl?.addEventListener('change', syncMetricUi);
 
     syncMetricUi();
 
@@ -692,20 +1065,29 @@ async function createChallenge() {
     const metric = normalizeMetric(document.getElementById('challenge-metric')?.value);
     const target = Math.max(1, parseInt(document.getElementById('challenge-target')?.value) || 1);
     const minMinutes = Math.max(0, parseInt(document.getElementById('challenge-min-minutes')?.value) || 0);
+    const timeStart = normalizeTimeOfDay(document.getElementById('challenge-time-start')?.value || '');
+    const timeEnd = normalizeTimeOfDay(document.getElementById('challenge-time-end')?.value || '');
 
     const isFocus = metric === 'focus_sessions';
     const type = isFocus
         ? (document.getElementById('challenge-type')?.value || 'custom')
         : (document.getElementById('challenge-type-simple')?.value || 'custom');
 
-    if (!metric) return;
+    if (!metric) return false;
+
+    if (type === 'daily' && !isValidDailyTimeWindow(timeStart, timeEnd)) {
+        showToast?.('warning', 'Timeframe Required', 'Daily challenges need a valid start and end time.');
+        return false;
+    }
 
     await window.ChallengeManager?.create?.({
         metric,
         type,
         targetCount: target,
         options: isFocus ? { minMinutes } : {},
-        name
+        name,
+        timeWindowStart: type === 'daily' ? timeStart : null,
+        timeWindowEnd: type === 'daily' ? timeEnd : null
     });
 
     ChallengeState.challenges = window.ChallengeManager?.challenges || [];
@@ -718,6 +1100,7 @@ async function createChallenge() {
     }
 
     showToast?.('success', 'Challenge Created', 'Challenge is now active and will update automatically.');
+    return true;
 }
 
 async function updateChallenge(challengeId) {
@@ -725,21 +1108,50 @@ async function updateChallenge(challengeId) {
     const metric = normalizeMetric(document.getElementById('challenge-metric')?.value);
     const target = Math.max(1, parseInt(document.getElementById('challenge-target')?.value) || 1);
     const minMinutes = Math.max(0, parseInt(document.getElementById('challenge-min-minutes')?.value) || 0);
+    const rawTimeStart = document.getElementById('challenge-time-start')?.value || '';
+    const rawTimeEnd = document.getElementById('challenge-time-end')?.value || '';
+    const timeStart = normalizeTimeOfDay(rawTimeStart);
+    const timeEnd = normalizeTimeOfDay(rawTimeEnd);
 
     const isFocus = metric === 'focus_sessions';
     const type = isFocus
         ? (document.getElementById('challenge-type')?.value || 'custom')
         : (document.getElementById('challenge-type-simple')?.value || 'custom');
+    const existingChallenge = ChallengeState.challenges.find((challenge) => challenge.id === challengeId);
+    const existingHasWindow = isValidDailyTimeWindow(existingChallenge?.timeWindowStart, existingChallenge?.timeWindowEnd);
+    const transitioningToDaily = type === 'daily' && existingChallenge?.type !== 'daily';
+    const requiresWindow = transitioningToDaily || existingHasWindow;
+    const hasWindowInput = !!rawTimeStart || !!rawTimeEnd;
 
-    if (!metric) return;
+    if (!metric) return false;
 
-    await window.ChallengeManager?.update?.(challengeId, {
+    if (type === 'daily' && (requiresWindow || hasWindowInput) && !isValidDailyTimeWindow(timeStart, timeEnd)) {
+        showToast?.('warning', 'Timeframe Required', 'Daily challenges need a valid start and end time.');
+        return false;
+    }
+
+    const payload = {
         metric,
         type,
         targetCount: target,
         options: isFocus ? { minMinutes } : {},
         name
-    });
+    };
+
+    if (type === 'daily') {
+        if (isValidDailyTimeWindow(timeStart, timeEnd)) {
+            payload.timeWindowStart = timeStart;
+            payload.timeWindowEnd = timeEnd;
+        } else if (requiresWindow) {
+            payload.timeWindowStart = null;
+            payload.timeWindowEnd = null;
+        }
+    } else {
+        payload.timeWindowStart = null;
+        payload.timeWindowEnd = null;
+    }
+
+    await window.ChallengeManager?.update?.(challengeId, payload);
 
     ChallengeState.challenges = window.ChallengeManager?.challenges || [];
     renderChallenges();
@@ -751,6 +1163,7 @@ async function updateChallenge(challengeId) {
     }
 
     showToast?.('success', 'Challenge Updated', 'Your changes have been saved.');
+    return true;
 }
 
 // Escape HTML helper

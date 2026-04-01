@@ -205,6 +205,93 @@ test.describe('Challenges feature', () => {
     });
   });
 
+  test('daily challenge requires timeframe in modal', async ({}, testInfo) => {
+    await runWithPageCoverage(context, testInfo, async (page) => {
+      const pageErrors = [];
+      page.on('pageerror', (err) => pageErrors.push(err));
+
+      await page.goto(extensionUrl('/productivity/index.html'), { waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.openChallengeModal === 'function');
+
+      await page.evaluate(() => new Promise(r => chrome.storage.local.clear(r)));
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.openChallengeModal === 'function');
+
+      await page.click('.nav-item[data-page="challenges"]');
+
+      const createBtn = page.locator('#create-challenge-btn');
+      const emptyStateBtn = page.locator('[data-action="create-challenge"]');
+      if (await createBtn.isVisible().catch(() => false)) {
+        await createBtn.click();
+      } else {
+        await emptyStateBtn.first().click();
+      }
+
+      await page.fill('#challenge-name', 'Timeframed Daily Test');
+      await page.selectOption('#challenge-metric', 'tasks');
+      await page.fill('#challenge-target', '2');
+      await page.selectOption('#challenge-type-simple', 'daily');
+
+      // Missing timeframe keeps modal open.
+      await page.click('#challenge-modal button[type="submit"]');
+      await expect(page.locator('#challenge-modal')).toHaveClass(/active/);
+
+      await page.fill('#challenge-time-start', '06:00');
+      await page.fill('#challenge-time-end', '07:00');
+      await page.click('#challenge-modal button[type="submit"]');
+
+      await expect(page.locator('#challenge-modal')).not.toHaveClass(/active/);
+      await expect(page.locator('.challenge-card .challenge-time-window-badge')).toContainText('06:00 - 07:00');
+
+      if (pageErrors.length) throw pageErrors[0];
+    });
+  });
+
+  test('daily timeline shows overlap for timed challenges', async ({}, testInfo) => {
+    await runWithPageCoverage(context, testInfo, async (page) => {
+      const pageErrors = [];
+      page.on('pageerror', (err) => pageErrors.push(err));
+
+      await page.goto(extensionUrl('/productivity/index.html'), { waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.ChallengeManager === 'object');
+
+      await page.evaluate(() => new Promise(r => chrome.storage.local.clear(r)));
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.ChallengeManager === 'object');
+
+      await page.evaluate(async () => {
+        await window.ChallengeManager.create({
+          metric: 'tasks',
+          type: 'daily',
+          targetCount: 2,
+          options: {},
+          name: 'Morning Reading',
+          timeWindowStart: '06:00',
+          timeWindowEnd: '07:00'
+        });
+
+        await window.ChallengeManager.create({
+          metric: 'focus_sessions',
+          type: 'daily',
+          targetCount: 1,
+          options: { minMinutes: 25 },
+          name: 'Deep Start',
+          timeWindowStart: '06:30',
+          timeWindowEnd: '07:30'
+        });
+      });
+
+      await page.click('.nav-item[data-page="challenges"]');
+
+      await expect(page.locator('#challenge-schedule-timeline')).toBeVisible();
+      await expect(page.locator('#challenge-schedule-timeline')).toContainText('Morning Reading');
+      await expect(page.locator('#challenge-schedule-timeline')).toContainText('Deep Start');
+      await expect(page.locator('#challenge-schedule-timeline .challenge-schedule-row.has-overlap')).toHaveCount(2);
+
+      if (pageErrors.length) throw pageErrors[0];
+    });
+  });
+
   test('can edit a challenge', async ({}, testInfo) => {
     await runWithPageCoverage(context, testInfo, async (page) => {
       const pageErrors = [];
@@ -384,6 +471,9 @@ test.describe('Challenges feature', () => {
       if (await typeSimple.isVisible().catch(() => false)) {
         await typeSimple.selectOption('daily');
       }
+
+      await page.fill('#challenge-time-start', '06:00');
+      await page.fill('#challenge-time-end', '07:00');
 
       await page.click('#challenge-modal button[type="submit"]');
       await expect(page.locator('#challenge-modal')).not.toHaveClass(/active/);

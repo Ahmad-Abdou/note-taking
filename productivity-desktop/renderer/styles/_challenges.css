@@ -257,6 +257,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
     padding: 16px 20px 0;
 }
 
@@ -301,6 +302,23 @@
     gap: 4px;
     margin-left: auto;
     flex-shrink: 0;
+}
+
+.challenge-time-window-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0f172a;
+    background: rgba(56, 189, 248, 0.25);
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(56, 189, 248, 0.45);
+}
+
+.challenge-time-window-badge i {
+    color: #0369a1;
 }
 
 .challenge-card .delete-btn,
@@ -648,6 +666,129 @@
 }
 
 /* ============================================================================
+   DAILY CHALLENGE TIMELINE
+   ============================================================================ */
+
+.challenge-schedule-timeline {
+    margin-top: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--bg-secondary);
+    padding: 14px;
+}
+
+.challenge-schedule-header h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.challenge-schedule-header p {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.challenge-schedule-axis {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.3px;
+}
+
+.challenge-schedule-axis span {
+    text-align: center;
+}
+
+.challenge-schedule-axis span:first-child {
+    text-align: left;
+}
+
+.challenge-schedule-axis span:last-child {
+    text-align: right;
+}
+
+.challenge-schedule-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.challenge-schedule-row {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px;
+    background: var(--bg-card);
+}
+
+.challenge-schedule-row.has-overlap {
+    border-color: rgba(245, 158, 11, 0.6);
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.2);
+}
+
+.challenge-schedule-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.challenge-schedule-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.challenge-schedule-range {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.challenge-schedule-track {
+    position: relative;
+    height: 14px;
+    border-radius: 999px;
+    border: 1px dashed var(--border-color);
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.02) 100%);
+    overflow: hidden;
+}
+
+.challenge-schedule-bar {
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0ea5e9, #22d3ee);
+    box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.4);
+}
+
+.challenge-schedule-overlap {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.challenge-schedule-overlap.has-overlap {
+    color: #f59e0b;
+}
+
+.challenge-schedule-unscheduled {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* ============================================================================
    HISTORY VIEW
    ============================================================================ */
 
@@ -715,5 +856,10 @@
     
     .challenge-form-row {
         grid-template-columns: 1fr;
+    }
+
+    .challenge-schedule-meta {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }

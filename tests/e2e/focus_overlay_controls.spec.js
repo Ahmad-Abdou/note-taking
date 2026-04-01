@@ -60,9 +60,9 @@ test.describe('Focus overlay controls', () => {
       await page.click('#focus-pause-btn');
       await page.waitForFunction(() => typeof FocusState !== 'undefined' && FocusState.isPaused === false);
 
-      await page.waitForTimeout(1200);
-      const t3 = await timeText.textContent();
-      expect(t3).not.toBe(paused2);
+      await expect
+        .poll(async () => await timeText.textContent(), { timeout: 5000 })
+        .not.toBe(paused2);
 
       // Cleanup
       await page.click('#focus-stop-btn');

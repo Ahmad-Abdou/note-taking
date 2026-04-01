@@ -13,7 +13,8 @@
      *     [goalId]: {
      *       startDate: 'YYYY-MM-DD',
      *       endDate: 'YYYY-MM-DD',
-     *       completed: { 'YYYY-MM-DD': 1 }
+    *       completed: { 'YYYY-MM-DD': 1 },
+    *       missedReasons: { 'YYYY-MM-DD': string[] }
      *     }
      *   }
      * }
@@ -55,6 +56,8 @@
             this._handleToggleManage = this._handleToggleManage.bind(this);
             this._handleManageClick = this._handleManageClick.bind(this);
             this._handleAddHabit = this._handleAddHabit.bind(this);
+            this._handleReasonsTimelineClick = this._handleReasonsTimelineClick.bind(this);
+            this._handleExternalDataChanged = this._handleExternalDataChanged.bind(this);
         }
 
         async init() {
@@ -63,6 +66,11 @@
             this.render();
             // Sync daily tasks & challenges into the habit grid
             await this.syncExternalDailyItems();
+
+            if (!this._externalDataListenerAttached) {
+                window.addEventListener('productivity:data-changed', this._handleExternalDataChanged);
+                this._externalDataListenerAttached = true;
+            }
         }
 
         // --- External Daily-Item Sync ---
@@ -128,13 +136,45 @@
                         const goalData = this.state.data.goals[habitId];
                         if (!goalData) continue;
 
-                        const isDoneToday = ch.status === 'completed' || ch.lastProgressDate === today;
-                        const isChecked = !!goalData.completed[today];
-                        if (isDoneToday && !isChecked) {
-                            goalData.completed[today] = 1;
+                        const completionHistory = (ch.completionHistory && typeof ch.completionHistory === 'object')
+                            ? ch.completionHistory
+                            : {};
+                        const nextCompleted = {};
+                        const nextChallengeDayStatus = {};
+
+                        for (const [dateIso, entry] of Object.entries(completionHistory)) {
+                            if (!this._isIsoDate(dateIso)) continue;
+                            nextCompleted[dateIso] = 1;
+                            nextChallengeDayStatus[dateIso] = entry?.windowOutcome === 'outside' ? 'outside' : 'within';
+                        }
+
+                        const isDoneToday = ch.status === 'completed' && ch.lastProgressDate === today;
+                        if (isDoneToday && !nextCompleted[today]) {
+                            nextCompleted[today] = 1;
+                            nextChallengeDayStatus[today] = 'within';
+                        }
+
+                        const nextWindow = this._normalizeChallengeTimeWindow({
+                            start: ch.timeWindowStart,
+                            end: ch.timeWindowEnd
+                        });
+
+                        if (!this._isSameObjectMap(goalData.completed, nextCompleted)) {
+                            goalData.completed = nextCompleted;
                             didChange = true;
-                        } else if (!isDoneToday && isChecked) {
-                            delete goalData.completed[today];
+                        }
+
+                        if (!this._isSameObjectMap(goalData.challengeDayStatus, nextChallengeDayStatus)) {
+                            goalData.challengeDayStatus = nextChallengeDayStatus;
+                            didChange = true;
+                        }
+
+                        const currentWindow = this._normalizeChallengeTimeWindow(goalData.challengeTimeWindow);
+                        const windowChanged = (currentWindow?.start || null) !== (nextWindow?.start || null)
+                            || (currentWindow?.end || null) !== (nextWindow?.end || null);
+
+                        if (windowChanged) {
+                            goalData.challengeTimeWindow = nextWindow;
                             didChange = true;
                         }
                     }
@@ -201,7 +241,10 @@
             this.state.data.goals[habitId] = {
                 startDate: defaultStart,
                 endDate: defaultEnd,
-                completed: {}
+                completed: {},
+                missedReasons: {},
+                challengeDayStatus: {},
+                challengeTimeWindow: null
             };
             return true;
         }
@@ -216,6 +259,24 @@
             if (goalId.startsWith('daily-task--')) return '\u{1F4CB} ';
             if (goalId.startsWith('daily-challenge--')) return '\u{1F3C6} ';
             return '';
+        }
+
+        _emitDataChanged(source = 'habit', detail = {}) {
+            window.dispatchEvent(new CustomEvent('productivity:data-changed', {
+                detail: {
+                    source,
+                    ...detail
+                }
+            }));
+        }
+
+        _handleExternalDataChanged(event) {
+            const source = String(event?.detail?.source || '').toLowerCase();
+            if (!['task', 'tasks', 'challenge', 'challenges'].includes(source)) return;
+
+            this.syncExternalDailyItems().catch((error) => {
+                console.warn('[HabitTracker] External sync failed:', error);
+            });
         }
 
         // --- Storage ---
@@ -359,13 +420,28 @@
                     this.state.data.goals[goal.id] = {
                         startDate: defaultStart,
                         endDate: defaultEnd,
-                        completed: {}
+                        completed: {},
+                        missedReasons: {},
+                        challengeDayStatus: {},
+                        challengeTimeWindow: null
                     };
                 } else {
                     const g = this.state.data.goals[goal.id];
                     g.completed = g.completed && typeof g.completed === 'object' ? g.completed : {};
                     g.startDate = this._isIsoDate(g.startDate) ? g.startDate : defaultStart;
                     g.endDate = this._isIsoDate(g.endDate) ? g.endDate : defaultEnd;
+                    g.challengeDayStatus = this._normalizeChallengeDayStatusMap(g.challengeDayStatus);
+                    g.challengeTimeWindow = this._normalizeChallengeTimeWindow(g.challengeTimeWindow);
+
+                    const rawReasons = g.missedReasons && typeof g.missedReasons === 'object' ? g.missedReasons : {};
+                    g.missedReasons = {};
+                    for (const [dateIso, reasons] of Object.entries(rawReasons)) {
+                        if (!this._isIsoDate(dateIso)) continue;
+                        const normalized = this._normalizeReasonList(reasons);
+                        if (normalized.length > 0) {
+                            g.missedReasons[dateIso] = normalized;
+                        }
+                    }
                 }
             }
 
@@ -396,7 +472,7 @@
 
             const subtitle = document.createElement('div');
             subtitle.className = 'habit-tracker-subtitle';
-            subtitle.textContent = 'Click a day to mark complete.';
+            subtitle.textContent = 'Click a day to mark complete. Click missed days to log reasons.';
 
             titleWrap.appendChild(title);
             titleWrap.appendChild(subtitle);
@@ -463,6 +539,7 @@
             startInput.className = 'habit-date';
             startInput.value = range.startDate;
             startInput.setAttribute('data-role', 'start');
+            startInput.addEventListener('change', this._handleApplyRange);
             startLabel.appendChild(startInput);
 
             const endLabel = document.createElement('label');
@@ -473,6 +550,7 @@
             endInput.className = 'habit-date';
             endInput.value = range.endDate;
             endInput.setAttribute('data-role', 'end');
+            endInput.addEventListener('change', this._handleApplyRange);
             endLabel.appendChild(endInput);
 
             const applyBtn = document.createElement('button');
@@ -543,11 +621,20 @@
 
             const legend = document.createElement('div');
             legend.className = 'habit-legend';
-            legend.innerHTML = `
-                <span class="habit-legend-item"><span class="habit-swatch habit-swatch-empty"></span>Pending</span>
-                <span class="habit-legend-item"><span class="habit-swatch habit-swatch-done"></span>Complete</span>
-                <span class="habit-legend-item"><span class="habit-swatch habit-swatch-missed"></span>Missed</span>
-            `;
+            if (this._isChallengeTimingHabit(this.state.activeGoalId)) {
+                legend.innerHTML = `
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-future"></span>Future</span>
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-window-missed"></span>Missed</span>
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-window-outside"></span>Done Outside Timeframe</span>
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-window-within"></span>Done Within Timeframe</span>
+                `;
+            } else {
+                legend.innerHTML = `
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-empty"></span>Pending</span>
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-done"></span>Complete</span>
+                    <span class="habit-legend-item"><span class="habit-swatch habit-swatch-missed"></span>Missed</span>
+                `;
+            }
 
             // Stats row with stats on left and legend on right
             const statsRow = document.createElement('div');
@@ -693,6 +780,7 @@
             }
 
             body.appendChild(gridWrap);
+            body.appendChild(this._buildMissedReasonsTimeline());
             
             // Add comparative bar chart
             body.appendChild(this._buildBarChart());
@@ -702,9 +790,13 @@
         }
 
         _renderGridCellsInto(gridEl) {
-            const { startDate, endDate, completed } = this._getActiveGoalRange();
+            const { startDate, endDate, completed, missedReasons, challengeDayStatus, challengeTimeWindow } = this._getActiveGoalRange();
             const start = this._parseIso(startDate);
             const end = this._parseIso(endDate);
+            const isChallengeTiming = this._isChallengeTimingHabit(this.state.activeGoalId);
+            const windowLabel = challengeTimeWindow
+                ? `${challengeTimeWindow.start} - ${challengeTimeWindow.end}`
+                : '';
 
             if (!start || !end || start > end) {
                 gridEl.innerHTML = `<div class="habit-grid-empty">Invalid date range</div>`;
@@ -728,6 +820,8 @@
                 const isDone = !!completed?.[iso];
                 const isPast = iso < today;
                 const isToday = iso === today;
+                const reasonCount = this._normalizeReasonList(missedReasons?.[iso]).length;
+                const challengeOutcome = challengeDayStatus?.[iso];
 
                 const btn = document.createElement('button');
                 btn.type = 'button';
@@ -745,6 +839,32 @@
                     btn.disabled = true;
                     btn.setAttribute('aria-hidden', 'true');
                     btn.tabIndex = -1;
+                } else if (isChallengeTiming) {
+                    btn.setAttribute('aria-pressed', isDone ? 'true' : 'false');
+
+                    if (isDone && challengeOutcome === 'outside') {
+                        btn.classList.add('is-challenge-outside-window');
+                        btn.title = windowLabel
+                            ? `${iso} — Done outside timeframe (${windowLabel})`
+                            : `${iso} — Done outside timeframe`;
+                    } else if (isDone) {
+                        btn.classList.add('is-challenge-within-window');
+                        btn.title = windowLabel
+                            ? `${iso} — Done within timeframe (${windowLabel})`
+                            : `${iso} — Done`;
+                    } else if (isPast) {
+                        btn.classList.add('is-challenge-missed');
+                        if (reasonCount > 0) {
+                            btn.classList.add('has-missed-reasons');
+                            btn.setAttribute('data-reason-count', String(reasonCount));
+                            btn.title = `${iso} — Missed (${reasonCount} reason${reasonCount === 1 ? '' : 's'})`;
+                        } else {
+                            btn.title = `${iso} — Missed`;
+                        }
+                    } else {
+                        btn.classList.add('is-challenge-pending');
+                        btn.title = `${iso} — Future / Pending`;
+                    }
                 } else if (isDone) {
                     btn.classList.add('is-done');
                     btn.setAttribute('aria-pressed', 'true');
@@ -752,7 +872,13 @@
                 } else if (isPast) {
                     btn.classList.add('is-missed');
                     btn.setAttribute('aria-pressed', 'false');
-                    btn.title = `${iso} — Missed`;
+                    if (reasonCount > 0) {
+                        btn.classList.add('has-missed-reasons');
+                        btn.setAttribute('data-reason-count', String(reasonCount));
+                        btn.title = `${iso} — Missed (${reasonCount} reason${reasonCount === 1 ? '' : 's'})`;
+                    } else {
+                        btn.title = `${iso} — Missed`;
+                    }
                 } else {
                     btn.setAttribute('aria-pressed', 'false');
                     btn.title = `${iso} — Pending`;
@@ -828,6 +954,175 @@
             }
 
             return chartWrap;
+        }
+
+        _collectMissedReasonEntries(limit = 60) {
+            const goals = this._getGoalsList();
+            const entries = [];
+
+            for (const goal of goals) {
+                const goalData = this.state.data.goals[goal.id];
+                if (!goalData || typeof goalData !== 'object') continue;
+
+                const completed = goalData.completed && typeof goalData.completed === 'object' ? goalData.completed : {};
+                const reasonsMap = goalData.missedReasons && typeof goalData.missedReasons === 'object' ? goalData.missedReasons : {};
+
+                for (const [dateIso, reasonList] of Object.entries(reasonsMap)) {
+                    if (!this._isIsoDate(dateIso)) continue;
+                    if (completed[dateIso]) continue;
+
+                    const reasons = this._normalizeReasonList(reasonList);
+                    if (reasons.length === 0) continue;
+
+                    entries.push({
+                        goalId: goal.id,
+                        goalLabel: goal.label,
+                        dateIso,
+                        reasons
+                    });
+                }
+            }
+
+            entries.sort((a, b) => {
+                if (a.dateIso !== b.dateIso) return a.dateIso < b.dateIso ? 1 : -1;
+                return a.goalLabel.localeCompare(b.goalLabel);
+            });
+
+            return entries.slice(0, Math.max(1, limit));
+        }
+
+        _buildMissedReasonsTimeline() {
+            const wrap = document.createElement('section');
+            wrap.className = 'habit-reasons-timeline';
+
+            const entries = this._collectMissedReasonEntries();
+
+            const header = document.createElement('div');
+            header.className = 'habit-reasons-header';
+
+            const title = document.createElement('div');
+            title.className = 'habit-reasons-title';
+            title.textContent = 'Missed-Day Reasons Timeline';
+
+            const subtitle = document.createElement('div');
+            subtitle.className = 'habit-reasons-subtitle';
+            subtitle.textContent = entries.length > 0
+                ? `${entries.length} saved missed-day note${entries.length === 1 ? '' : 's'} across all habits.`
+                : 'No missed-day reasons saved yet.';
+
+            header.appendChild(title);
+            header.appendChild(subtitle);
+            wrap.appendChild(header);
+
+            if (entries.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'habit-reasons-empty';
+                empty.textContent = 'Click any missed day in the calendar to add reasons here.';
+                wrap.appendChild(empty);
+                return wrap;
+            }
+
+            const list = document.createElement('div');
+            list.className = 'habit-reasons-list';
+            list.addEventListener('click', this._handleReasonsTimelineClick);
+
+            for (const entry of entries) {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'habit-reason-item';
+                item.setAttribute('data-goal-id', entry.goalId);
+                item.setAttribute('data-date', entry.dateIso);
+
+                const head = document.createElement('div');
+                head.className = 'habit-reason-item-head';
+
+                const date = document.createElement('span');
+                date.className = 'habit-reason-date';
+                date.textContent = entry.dateIso;
+
+                const goal = document.createElement('span');
+                goal.className = 'habit-reason-goal';
+                goal.textContent = entry.goalLabel;
+
+                head.appendChild(date);
+                head.appendChild(goal);
+
+                const ul = document.createElement('ul');
+                ul.className = 'habit-reason-bullets';
+                for (const reason of entry.reasons) {
+                    const li = document.createElement('li');
+                    li.textContent = reason;
+                    ul.appendChild(li);
+                }
+
+                const hint = document.createElement('div');
+                hint.className = 'habit-reason-edit-hint';
+                hint.textContent = 'Click to edit or mark complete';
+
+                item.appendChild(head);
+                item.appendChild(ul);
+                item.appendChild(hint);
+                list.appendChild(item);
+            }
+
+            wrap.appendChild(list);
+            return wrap;
+        }
+
+        async _handleReasonsTimelineClick(e) {
+            const item = e.target.closest('button.habit-reason-item');
+            if (!item) return;
+
+            const goalId = item.getAttribute('data-goal-id');
+            const dateIso = item.getAttribute('data-date');
+            if (!goalId || !this._isIsoDate(dateIso)) return;
+
+            const goalData = this.state.data.goals[goalId];
+            if (!goalData) return;
+            const isChallengeTiming = this._isChallengeTimingHabit(goalId);
+
+            if (!goalData.completed || typeof goalData.completed !== 'object') goalData.completed = {};
+            if (!goalData.missedReasons || typeof goalData.missedReasons !== 'object') goalData.missedReasons = {};
+
+            const result = await this._showMissedReasonsModal({
+                dateIso,
+                reasons: this._normalizeReasonList(goalData.missedReasons[dateIso]),
+                allowMarkComplete: !isChallengeTiming
+            });
+
+            if (!result) return;
+
+            if (result.action === 'mark-complete') {
+                if (isChallengeTiming) {
+                    this._flashInfo('Challenge completion is synced from the challenge timeline.');
+                    return;
+                }
+
+                goalData.completed[dateIso] = 1;
+                delete goalData.missedReasons[dateIso];
+                await this._save();
+                this.render();
+
+                if (window.ChallengeManager) {
+                    window.ChallengeManager.recordProgress('habits', 1);
+                }
+
+                this._emitDataChanged('habit', { immediate: true });
+                return;
+            }
+
+            if (result.action === 'save') {
+                if (result.reasons.length > 0) {
+                    goalData.missedReasons[dateIso] = result.reasons;
+                } else {
+                    delete goalData.missedReasons[dateIso];
+                }
+
+                await this._save();
+                this.render();
+                this._flashInfo(result.reasons.length > 0 ? 'Missed-day reasons saved.' : 'Missed-day reasons cleared.');
+                this._emitDataChanged('habit', { immediate: true });
+            }
         }
 
         // --- Events ---
@@ -941,32 +1236,79 @@
             // Don't allow clicking on missed days (past days that aren't done)
             const today = this._isoToday();
             const goalData = this.state.data.goals[this.state.activeGoalId];
+            const isChallengeTiming = this._isChallengeTimingHabit(this.state.activeGoalId);
             if (!goalData.completed) goalData.completed = {};
+            if (!goalData.missedReasons || typeof goalData.missedReasons !== 'object') goalData.missedReasons = {};
 
             const isDone = !!goalData.completed[iso];
             const isPast = iso < today;
+            const reasonsForDay = this._normalizeReasonList(goalData.missedReasons[iso]);
+
+            if (isPast && !isDone) {
+                const result = await this._showMissedReasonsModal({
+                    dateIso: iso,
+                    reasons: reasonsForDay,
+                    allowMarkComplete: !isChallengeTiming
+                });
+
+                if (!result) return;
+
+                if (result.action === 'mark-complete') {
+                    if (isChallengeTiming) {
+                        this._flashInfo('Challenge completion is synced from the challenge timeline.');
+                        return;
+                    }
+
+                    goalData.completed[iso] = 1;
+                    delete goalData.missedReasons[iso];
+                    await this._save();
+                    this.render();
+
+                    if (window.ChallengeManager) {
+                        window.ChallengeManager.recordProgress('habits', 1);
+                    }
+                    this._emitDataChanged('habit', { immediate: true });
+                    return;
+                }
+
+                if (result.action === 'save') {
+                    if (result.reasons.length > 0) {
+                        goalData.missedReasons[iso] = result.reasons;
+                    } else {
+                        delete goalData.missedReasons[iso];
+                    }
+
+                    await this._save();
+                    this.render();
+                    this._flashInfo(result.reasons.length > 0 ? 'Missed-day reasons saved.' : 'Missed-day reasons cleared.');
+                    this._emitDataChanged('habit', { immediate: true });
+                }
+                return;
+            }
+
+            if (isChallengeTiming) {
+                return;
+            }
 
             // If it's a past day and not done, we used to block changing it,
             // but now we allow users to click it to mark completion retroactively.
 
             const next = !isDone;
-            if (next) goalData.completed[iso] = 1;
-            else delete goalData.completed[iso];
+            if (next) {
+                goalData.completed[iso] = 1;
+                delete goalData.missedReasons[iso];
+            } else {
+                delete goalData.completed[iso];
+            }
 
             await this._save();
-
-            btn.classList.toggle('is-done', next);
-            btn.classList.toggle('is-missed', !next && isPast);
-            btn.setAttribute('aria-pressed', String(next));
-            btn.title = `${iso} — ${next ? 'Complete' : (isPast ? 'Missed' : 'Pending')}`;
-
-            const stats = this.mountEl.querySelector('.habit-tracker-stats');
-            if (stats) stats.textContent = this._buildStatsText();
+            this.render();
 
             // Record progress for challenges when habit is marked done
             if (next && window.ChallengeManager) {
                 window.ChallengeManager.recordProgress('habits', 1);
             }
+            this._emitDataChanged('habit', { immediate: true });
         }
 
         async _handleExport() {
@@ -1075,7 +1417,10 @@
             this.state.data.goals[id] = {
                 startDate: range.startDate,
                 endDate: range.endDate,
-                completed: {}
+                completed: {},
+                missedReasons: {},
+                challengeDayStatus: {},
+                challengeTimeWindow: null
             };
 
             this.state.activeGoalId = id;
@@ -1262,6 +1607,116 @@
             });
         }
 
+        _showMissedReasonsModal({ dateIso, reasons, allowMarkComplete = true } = {}) {
+            return new Promise((resolve) => {
+                let overlay = document.getElementById('ht-missed-reasons-modal');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'ht-missed-reasons-modal';
+                    overlay.className = 'modal';
+                    document.body.appendChild(overlay);
+                }
+
+                const safeDate = this._isIsoDate(dateIso) ? dateIso : this._isoToday();
+                const initialReasons = this._normalizeReasonList(reasons);
+
+                overlay.innerHTML = `
+                    <div class="modal-content" style="max-width:520px;">
+                        <div class="modal-header">
+                            <h2>Missed Day Reasons</h2>
+                            <button class="close-modal-btn" type="button">&times;</button>
+                        </div>
+                        <div class="modal-body" style="padding:16px 20px;">
+                            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Date: ${safeDate}</div>
+                            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">Write one reason per line (this creates a list).</div>
+                            <div id="ht-missed-reasons-preview" style="margin-bottom:10px;"></div>
+                            <textarea id="ht-missed-reasons-input" rows="7" style="width:100%;resize:vertical;" placeholder="Example:\nFelt sick\nUnexpected family event\nHeavy workload from school"></textarea>
+                            <div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+                                <button type="button" class="btn-secondary" data-action="cancel">Cancel</button>
+                                ${allowMarkComplete ? '<button type="button" class="habit-ghost" data-action="mark-complete">Mark Complete</button>' : ''}
+                                <button type="button" class="btn-primary" data-action="save">Save Reasons</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                overlay.classList.add('active');
+
+                const textarea = overlay.querySelector('#ht-missed-reasons-input');
+                const preview = overlay.querySelector('#ht-missed-reasons-preview');
+                if (textarea) textarea.value = initialReasons.join('\n');
+
+                const parseReasons = () => this._normalizeReasonList(String(textarea?.value || '').split(/\r?\n/));
+
+                const renderPreview = () => {
+                    if (!preview) return;
+                    preview.innerHTML = '';
+
+                    const list = parseReasons();
+                    if (list.length === 0) {
+                        const empty = document.createElement('div');
+                        empty.style.fontSize = '12px';
+                        empty.style.color = 'var(--text-muted)';
+                        empty.textContent = 'No reasons listed yet.';
+                        preview.appendChild(empty);
+                        return;
+                    }
+
+                    const ul = document.createElement('ul');
+                    ul.style.margin = '0';
+                    ul.style.paddingLeft = '18px';
+                    ul.style.maxHeight = '140px';
+                    ul.style.overflowY = 'auto';
+
+                    for (const reason of list) {
+                        const li = document.createElement('li');
+                        li.style.marginBottom = '4px';
+                        li.textContent = reason;
+                        ul.appendChild(li);
+                    }
+                    preview.appendChild(ul);
+                };
+
+                const cleanup = (result) => {
+                    document.removeEventListener('keydown', onKeyDown, true);
+                    overlay.removeEventListener('click', onOverlayClick);
+                    overlay.classList.remove('active');
+                    resolve(result);
+                };
+
+                const onKeyDown = (event) => {
+                    if (event.key === 'Escape') {
+                        event.preventDefault();
+                        cleanup(null);
+                    }
+                };
+
+                const onOverlayClick = (event) => {
+                    if (event.target === overlay) {
+                        cleanup(null);
+                    }
+                };
+
+                overlay.querySelector('[data-action="save"]')?.addEventListener('click', () => {
+                    cleanup({ action: 'save', reasons: parseReasons() });
+                });
+                if (allowMarkComplete) {
+                    overlay.querySelector('[data-action="mark-complete"]')?.addEventListener('click', () => {
+                        cleanup({ action: 'mark-complete' });
+                    });
+                }
+                overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cleanup(null));
+                overlay.querySelectorAll('.close-modal-btn').forEach((btn) => btn.addEventListener('click', () => cleanup(null)));
+
+                textarea?.addEventListener('input', renderPreview);
+                document.addEventListener('keydown', onKeyDown, true);
+                overlay.addEventListener('click', onOverlayClick);
+
+                renderPreview();
+                textarea?.focus();
+            });
+        }
+
         _showCopyModal(text) {
             let overlay = document.getElementById('ht-copy-modal');
             if (!overlay) {
@@ -1305,8 +1760,73 @@
             return this.state.data.goals[this.state.activeGoalId] || {
                 startDate: this._addDaysIso(this._isoToday(), -30),
                 endDate: this._isoToday(),
-                completed: {}
+                completed: {},
+                missedReasons: {},
+                challengeDayStatus: {},
+                challengeTimeWindow: null
             };
+        }
+
+        _isChallengeTimingHabit(goalId) {
+            return typeof goalId === 'string' && goalId.startsWith('daily-challenge--');
+        }
+
+        _normalizeChallengeDayStatusMap(value) {
+            if (!value || typeof value !== 'object') return {};
+
+            const out = {};
+            for (const [dateIso, status] of Object.entries(value)) {
+                if (!this._isIsoDate(dateIso)) continue;
+                if (status === 'outside' || status === 'within') {
+                    out[dateIso] = status;
+                }
+            }
+            return out;
+        }
+
+        _normalizeChallengeTimeWindow(value) {
+            if (!value || typeof value !== 'object') return null;
+            const start = this._normalizeTimeOfDay(value.start);
+            const end = this._normalizeTimeOfDay(value.end);
+            if (!start || !end || start === end) return null;
+            return { start, end };
+        }
+
+        _normalizeTimeOfDay(value) {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(trimmed);
+            if (!match) return null;
+            return `${match[1]}:${match[2]}`;
+        }
+
+        _isSameObjectMap(left, right) {
+            const leftObj = (left && typeof left === 'object') ? left : {};
+            const rightObj = (right && typeof right === 'object') ? right : {};
+
+            const leftKeys = Object.keys(leftObj).sort();
+            const rightKeys = Object.keys(rightObj).sort();
+            if (leftKeys.length !== rightKeys.length) return false;
+
+            for (let i = 0; i < leftKeys.length; i++) {
+                if (leftKeys[i] !== rightKeys[i]) return false;
+                if (String(leftObj[leftKeys[i]]) !== String(rightObj[rightKeys[i]])) return false;
+            }
+            return true;
+        }
+
+        _normalizeReasonList(value) {
+            if (!Array.isArray(value)) return [];
+
+            const normalized = [];
+            for (const entry of value) {
+                const text = String(entry || '').trim();
+                if (!text) continue;
+                normalized.push(text);
+                if (normalized.length >= 25) break;
+            }
+
+            return normalized;
         }
 
         _isoToday() {

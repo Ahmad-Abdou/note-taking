@@ -43,25 +43,23 @@ test.describe('Revisions page', () => {
       await page.click('.nav-item[data-page="revisions"]');
       await expect(page.locator('#page-revisions')).toHaveClass(/active/);
 
-      // Try to add a revision topic
-      const addBtn = page.locator('#add-revision-btn, [data-action="add-revision"], button:has-text("Add Topic"), button:has-text("Add Revision"), button:has-text("New Topic")');
-      if (await addBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addBtn.first().click();
+      const addBtn = page.locator('#add-revision-btn, [data-action="add-revision"], button:has-text("Add Item"), button:has-text("Add Topic"), button:has-text("Add Revision"), button:has-text("New Topic")').first();
+      await expect(addBtn).toBeVisible();
+      await addBtn.click();
 
-        // Fill form if modal appears
-        const titleInput = page.locator('#revision-title, #revision-topic-input, input[name="revision-title"]');
-        if (await titleInput.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-          await titleInput.first().fill('E2E Revision Topic');
+      const modal = page.locator('.revision-modal.active');
+      await expect(modal).toBeVisible();
 
-          const saveBtn = page.locator('#save-revision-btn, button:has-text("Save"), button[type="submit"]');
-          if (await saveBtn.first().isVisible({ timeout: 2000 }).catch(() => false)) {
-            await saveBtn.first().click();
-          }
+      await modal.locator('#revision-title').fill('E2E Revision Topic');
+      await modal.locator('#revision-content').fill('E2E revision content for validation.');
+      await modal.locator('#save-revision-btn').click();
 
-          await page.waitForTimeout(500);
-          await expect(page.locator('#page-revisions')).toContainText('E2E Revision Topic');
-        }
-      }
+      await expect(page.locator('.revision-modal.active')).toHaveCount(0);
+      await page.waitForFunction(async () => {
+        const items = await window.ProductivityData?.DataStore?.getRevisions?.();
+        return Array.isArray(items) && items.some((item) => item.title === 'E2E Revision Topic');
+      });
+      await expect(page.locator('#rev-count-all')).toHaveText(/1/);
     });
   });
 
@@ -123,7 +121,11 @@ test.describe('Revisions page', () => {
       await page.click('.nav-item[data-page="revisions"]');
       await expect(page.locator('#page-revisions')).toHaveClass(/active/);
 
-      await expect(page.locator('#page-revisions')).toContainText('Persistence Test');
+      await page.waitForFunction(async () => {
+        const items = await window.ProductivityData?.DataStore?.getRevisions?.();
+        return Array.isArray(items) && items.some((item) => item.title === 'Persistence Test');
+      });
+      await expect(page.locator('#rev-count-all')).toHaveText(/1/);
     });
   });
 });

@@ -33,6 +33,7 @@ const FocusState = {
     endTimestamp: null,
     pausedRemainingSeconds: null,
     pausedElapsedSeconds: null,
+    isOverlayMinimized: false,
     pendingLinkedTaskId: null,
     pendingLinkedTaskTitle: null,
     currentSession: null,
@@ -77,6 +78,75 @@ const AmbientSounds = {
     whitenoise: null,
     cafe: null
 };
+
+let _lastFocusProgressMinute = -1;
+
+function emitFocusDataChanged(detail = {}) {
+    window.dispatchEvent(new CustomEvent('productivity:data-changed', {
+        detail: {
+            source: 'focus',
+            ...detail
+        }
+    }));
+}
+
+function ensureFocusResumeSessionButton() {
+    let btn = document.getElementById('focus-resume-session-btn');
+    if (btn) return btn;
+
+    btn = document.createElement('button');
+    btn.id = 'focus-resume-session-btn';
+    btn.className = 'focus-resume-session-btn hidden';
+    btn.type = 'button';
+    btn.innerHTML = '<i class="fas fa-expand"></i><span>Return to Focus</span>';
+    btn.addEventListener('click', () => {
+        if (!FocusState.isActive) return;
+        showFocusOverlay();
+        syncFocusStateToStorage();
+    });
+    document.body.appendChild(btn);
+
+    return btn;
+}
+
+function updateFocusResumeSessionButton() {
+    const btn = ensureFocusResumeSessionButton();
+    const overlay = document.getElementById('focus-overlay');
+    const overlayHidden = !overlay || overlay.classList.contains('hidden');
+    const shouldShow = FocusState.isActive && overlayHidden;
+    btn.classList.toggle('hidden', !shouldShow);
+}
+
+function minimizeFocusOverlay() {
+    if (!FocusState.isActive) return;
+
+    hideFocusOverlay({ keepSessionRunning: true });
+    syncFocusStateToStorage();
+    emitFocusDataChanged({ immediate: true });
+    showToast('info', 'Focus Running', 'Session continues in the background.');
+}
+
+function maybeEmitFocusProgressUpdate() {
+    if (!FocusState.isActive || FocusState.isBreak || FocusState.isPaused) return;
+
+    let elapsedMinutes = 0;
+    if (FocusState.isOpenEnded) {
+        elapsedMinutes = Math.floor(Math.max(0, FocusState.elapsedSeconds || 0) / 60);
+    } else {
+        const totalSeconds = Math.max(0, (FocusState.selectedMinutes || 0) * 60);
+        const remaining = Math.max(0, Number(FocusState.remainingSeconds) || 0);
+        elapsedMinutes = Math.floor(Math.max(0, totalSeconds - remaining) / 60);
+    }
+
+    if (elapsedMinutes <= 0 || elapsedMinutes === _lastFocusProgressMinute) return;
+
+    _lastFocusProgressMinute = elapsedMinutes;
+    emitFocusDataChanged({
+        immediate: true,
+        kind: 'minute-progress',
+        elapsedMinutes
+    });
+}
 
 // ============================================================================
 // BOREDOM (MOOD) TAGGING
@@ -428,6 +498,9 @@ async function checkActiveSession() {
                     startTime: new Date(savedState.startTimestamp).toISOString(),
                     status: 'in-progress'
                 };
+
+                FocusState.isOverlayMinimized = savedState.isOverlayMinimized !== false;
+                updateFocusResumeSessionButton();
                 
                 // Don't show any toast here — the user will be prompted only when
                 // they try to start a new session (via checkPausedSessionBeforeStart).
@@ -450,6 +523,7 @@ async function checkActiveSession() {
                 FocusState.pausedElapsedSeconds = null;
                 FocusState.remainingSeconds = 0;
                 FocusState.selectedMinutes = 0;
+                FocusState.isOverlayMinimized = savedState.isOverlayMinimized === true;
 
                 // Create session object
                 FocusState.currentSession = {
@@ -461,8 +535,12 @@ async function checkActiveSession() {
                     status: 'in-progress'
                 };
 
-                // Show overlay for RUNNING session
-                showFocusOverlay();
+                // Show overlay for RUNNING session unless user minimized it
+                if (FocusState.isOverlayMinimized) {
+                    hideFocusOverlay({ keepSessionRunning: true });
+                } else {
+                    showFocusOverlay();
+                }
                 updateTimerDisplay();
 
                 // Start timer
@@ -472,7 +550,11 @@ async function checkActiveSession() {
                 FocusState.timerInterval = setInterval(timerTick, 1000);
 
                 syncFocusStateToStorage();
-                showToast('success', 'Free Focus Restored!', `You've been focusing for ${Math.floor(elapsedSeconds / 60)} minutes.`);
+                showToast(
+                    FocusState.isOverlayMinimized ? 'info' : 'success',
+                    FocusState.isOverlayMinimized ? 'Free Focus Running' : 'Free Focus Restored!',
+                    `You've been focusing for ${Math.floor(elapsedSeconds / 60)} minutes.`
+                );
                 return;
             }
 
@@ -490,6 +572,7 @@ async function checkActiveSession() {
                 FocusState.endTimestamp = savedState.endTimestamp;
                 FocusState.selectedMinutes = savedState.selectedMinutes || 25;
                 FocusState.remainingSeconds = newRemaining;
+                FocusState.isOverlayMinimized = savedState.isOverlayMinimized === true;
                 FocusState.currentSession = {
                     id: `restored_${Date.now()}`,
                     type: getSessionType(savedState.selectedMinutes),
@@ -499,7 +582,11 @@ async function checkActiveSession() {
                     status: 'in-progress'
                 };
 
-                showFocusOverlay();
+                if (FocusState.isOverlayMinimized) {
+                    hideFocusOverlay({ keepSessionRunning: true });
+                } else {
+                    showFocusOverlay();
+                }
                 updateTimerDisplay();
 
                 if (FocusState.timerInterval) clearInterval(FocusState.timerInterval);
@@ -507,7 +594,11 @@ async function checkActiveSession() {
                 syncFocusStateToStorage();
 
                 const elapsedMin = savedState.selectedMinutes - Math.ceil(newRemaining / 60);
-                showToast('info', 'Session Restored', `Resumed: ${elapsedMin}m done, ${Math.ceil(newRemaining / 60)}m remaining.`);
+                showToast(
+                    'info',
+                    FocusState.isOverlayMinimized ? 'Session Running' : 'Session Restored',
+                    `Resumed: ${elapsedMin}m done, ${Math.ceil(newRemaining / 60)}m remaining.`
+                );
             } else {
                 // Session expired or completed - clear it
                 chrome.storage.local.remove('focusState');
@@ -1225,10 +1316,12 @@ async function startFocusSession(minutes = null, options = {}) {
     if (FocusState.timerInterval) {
         clearInterval(FocusState.timerInterval);
     }
+    _lastFocusProgressMinute = -1;
     FocusState.timerInterval = setInterval(timerTick, 1000);
 
     // Sync state immediately so popup can show it
     syncFocusStateToStorage();
+    emitFocusDataChanged({ immediate: true, kind: 'session-started' });
 
     // Notify background so it can schedule a completion alarm (MV3-safe)
     try {
@@ -1355,10 +1448,12 @@ async function startOpenEndedSession() {
     if (FocusState.timerInterval) {
         clearInterval(FocusState.timerInterval);
     }
+    _lastFocusProgressMinute = -1;
     FocusState.timerInterval = setInterval(timerTick, 1000);
 
     // Sync state to storage
     syncFocusStateToStorage();
+    emitFocusDataChanged({ immediate: true, kind: 'session-started' });
 
     // Notify background so it can keep state in sync; alarms are ignored for open-ended.
     try {
@@ -1411,6 +1506,8 @@ function showFocusOverlay() {
     if (!overlay) return;
 
     overlay.classList.remove('hidden');
+    FocusState.isOverlayMinimized = false;
+    updateFocusResumeSessionButton();
 
     // Set task name
     const taskNameEl = document.getElementById('focus-task-name');
@@ -1521,6 +1618,7 @@ function syncFocusStateToStorage() {
                 elapsedSeconds: FocusState.elapsedSeconds,
                 remainingSeconds: FocusState.remainingSeconds,
                 selectedMinutes: FocusState.selectedMinutes,
+                isOverlayMinimized: FocusState.isOverlayMinimized,
                 taskTitle: FocusState.currentSession?.linkedTaskTitle || null,
                 boredomLevel: FocusState.currentSession?.boredomLevel ?? null,
                 startTimestamp: FocusState.startTimestamp || (FocusState.isOpenEnded
@@ -1576,6 +1674,8 @@ function timerTick() {
             FocusState.currentSession.actualDurationMinutes = Math.floor(FocusState.elapsedSeconds / 60);
         }
 
+        maybeEmitFocusProgressUpdate();
+
         // Milestone notifications (every 30 minutes)
         if (FocusState.elapsedSeconds > 0 && FocusState.elapsedSeconds % 1800 === 0) {
             const mins = FocusState.elapsedSeconds / 60;
@@ -1601,6 +1701,8 @@ function timerTick() {
         FocusState.currentSession.actualDurationMinutes =
             FocusState.selectedMinutes - Math.ceil(FocusState.remainingSeconds / 60);
     }
+
+    maybeEmitFocusProgressUpdate();
 
     // Check for completion
     if (FocusState.remainingSeconds <= 0) {
@@ -1844,6 +1946,10 @@ function setFocusPaused(paused) {
     }
 
     syncFocusStateToStorage();
+    emitFocusDataChanged({
+        immediate: true,
+        kind: FocusState.isPaused ? 'session-paused' : 'session-resumed'
+    });
 
     showToast(FocusState.isPaused ? 'info' : 'success',
         FocusState.isPaused ? 'Session Paused' : 'Session Resumed',
@@ -2211,7 +2317,9 @@ async function finalizeExtraTimeSession(addExtraTime) {
     FocusState.endTimestamp = null;
     FocusState.pausedRemainingSeconds = null;
     FocusState.pausedElapsedSeconds = null;
+    FocusState.isOverlayMinimized = false;
     FocusState.currentSession = null;
+    _lastFocusProgressMinute = -1;
     FocusState.isStopping = false;
 
     // Clear persisted state so popup/background don't restore a stale session.
@@ -2224,6 +2332,8 @@ async function finalizeExtraTimeSession(addExtraTime) {
 
     // Reset page title
     document.title = 'Student Productivity Hub';
+
+    emitFocusDataChanged({ immediate: true, kind: 'session-ended' });
 }
 
 
@@ -2649,21 +2759,29 @@ async function endFocusMode() {
     FocusState.endTimestamp = null;
     FocusState.pausedRemainingSeconds = null;
     FocusState.pausedElapsedSeconds = null;
+    FocusState.isOverlayMinimized = false;
     FocusState.currentSession = null;
+    _lastFocusProgressMinute = -1;
 
     // Clear focus state from storage so popup knows session ended
     chrome.storage.local.remove(['focusState', 'focusSession']);
 
     // Reset page title
     document.title = 'Student Productivity Hub';
+
+    emitFocusDataChanged({ immediate: true, kind: 'session-ended' });
 }
 
-function hideFocusOverlay() {
+function hideFocusOverlay(options = {}) {
+    const keepSessionRunning = options.keepSessionRunning === true;
     const overlay = document.getElementById('focus-overlay');
     if (overlay) {
         overlay.classList.add('hidden');
         overlay.classList.remove('break-mode', 'paused');
     }
+
+    FocusState.isOverlayMinimized = keepSessionRunning && FocusState.isActive;
+    updateFocusResumeSessionButton();
 }
 
 // ============================================================================
@@ -3118,6 +3236,10 @@ function handleFocusKeypress(e) {
             FocusState.settings.soundEnabled = !FocusState.settings.soundEnabled;
             showToast('info', 'Sound', FocusState.settings.soundEnabled ? 'Enabled' : 'Muted');
             break;
+        case 'KeyH':
+            e.preventDefault();
+            minimizeFocusOverlay();
+            break;
     }
 }
 
@@ -3237,8 +3359,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Focus overlay controls
     document.getElementById('focus-pause-btn')?.addEventListener('click', pauseFocusSession);
     document.getElementById('focus-stop-btn')?.addEventListener('click', stopFocusSession);
+    document.getElementById('focus-minimize-btn')?.addEventListener('click', minimizeFocusOverlay);
     document.getElementById('focus-skip-break-btn')?.addEventListener('click', skipBreak);
     document.getElementById('focus-overlay-toggle-btn')?.addEventListener('click', toggleFocusBorderDirectly);
+    ensureFocusResumeSessionButton();
+    updateFocusResumeSessionButton();
 
     // Ambient sound selector
     document.getElementById('ambient-sound-select')?.addEventListener('change', (e) => {

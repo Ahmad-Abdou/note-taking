@@ -192,7 +192,7 @@ function getGoalStartDate(goal) {
 
 function normalizeGoalTrackingTypeValue(value) {
     const candidate = String(value || '').trim().toLowerCase();
-    if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes') return candidate;
+    if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes' || candidate === 'challenges_completed') return candidate;
     return 'milestones';
 }
 
@@ -229,6 +229,9 @@ function getGoalTrackingSummary(goal) {
     if (tracking.type === 'website_minutes') {
         return `${formatGoalTrackingNumber(tracking.current, 0)} / ${formatGoalTrackingNumber(tracking.target, 0)} minutes`;
     }
+    if (tracking.type === 'challenges_completed') {
+        return `${formatGoalTrackingNumber(tracking.current, 0)} / ${formatGoalTrackingNumber(tracking.target, 0)} challenges`;
+    }
     return '';
 }
 
@@ -237,6 +240,7 @@ function getGoalTrackingIcon(goal) {
     if (type === 'focus_hours') return 'fa-clock';
     if (type === 'tasks_completed') return 'fa-list-check';
     if (type === 'website_minutes') return 'fa-globe';
+    if (type === 'challenges_completed') return 'fa-trophy';
     return 'fa-flag';
 }
 
@@ -939,7 +943,7 @@ function createGoalModal() {
 
     modal.innerHTML = `
         <div class="modal-backdrop" data-action="close-goal-modal"></div>
-        <div class="modal-content large">
+        <div class="modal-content large goal-modal-content">
             <div class="modal-header">
                 <h2 id="goal-modal-title">Create New Goal</h2>
                 <button class="btn-icon" data-action="close-goal-modal">
@@ -947,7 +951,7 @@ function createGoalModal() {
                 </button>
             </div>
             <form id="goal-form">
-                <div class="modal-body">
+                <div class="modal-body goal-modal-body">
                     <div class="form-row">
                         <div class="form-group full">
                             <label for="goal-title-input">Goal Title *</label>
@@ -996,6 +1000,7 @@ function createGoalModal() {
                                 <option value="focus_hours">Focus Time (Hours)</option>
                                 <option value="tasks_completed">Completed Tasks</option>
                                 <option value="website_minutes">Website Time Today (Minutes)</option>
+                                <option value="challenges_completed">Completed Challenges</option>
                             </select>
                         </div>
                         <div class="form-group" id="goal-tracking-target-group">
@@ -1262,6 +1267,17 @@ function updateGoalTrackingFormState() {
         return;
     }
 
+    if (trackingType === 'challenges_completed') {
+        if (trackingTargetLabel) trackingTargetLabel.textContent = 'Target Challenges';
+        if (trackingHint) trackingHint.textContent = 'Progress updates automatically when challenges are completed.';
+        if (trackingTargetInput) {
+            trackingTargetInput.min = '1';
+            trackingTargetInput.step = '1';
+            trackingTargetInput.placeholder = 'e.g., 12';
+        }
+        return;
+    }
+
     if (trackingTargetLabel) trackingTargetLabel.textContent = 'Target Tasks';
     if (trackingHint) trackingHint.textContent = 'Example: 30 means 30 completed tasks.';
     if (trackingTargetInput) {
@@ -1475,6 +1491,8 @@ async function saveGoal(e) {
                 targetValidationMessage = 'Set a focus-hours target (minimum 0.5).';
             } else if (trackingType === 'website_minutes') {
                 targetValidationMessage = 'Set a website-minutes target (minimum 1).';
+            } else if (trackingType === 'challenges_completed') {
+                targetValidationMessage = 'Set a completed-challenges target (minimum 1).';
             }
 
             showToast(
@@ -1572,6 +1590,10 @@ async function saveGoal(e) {
         closeGoalModal();
         await loadGoals();
 
+        window.dispatchEvent(new CustomEvent('productivity:data-changed', {
+            detail: { source: 'goal', immediate: true }
+        }));
+
         showToast('success',
             GoalsState.editingGoal ? 'Goal Updated' : 'Goal Created',
             `"${title}" has been saved.`);
@@ -1615,6 +1637,10 @@ async function deleteGoal(goalId) {
         closeGoalModal();
         closeGoalDetails();
         await loadGoals();
+
+        window.dispatchEvent(new CustomEvent('productivity:data-changed', {
+            detail: { source: 'goal', immediate: true }
+        }));
 
         showToast('info', 'Goal Deleted', 'The goal has been removed.');
     } catch (error) {
