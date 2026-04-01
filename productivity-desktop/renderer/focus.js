@@ -563,6 +563,8 @@ async function checkActiveSession() {
                 FocusState.isPaused = true;
                 FocusState.isOpenEnded = savedState.isOpenEnded || false;
                 FocusState.isBreak = savedState.isBreak || false;
+                FocusState.isExtraTime = savedState.isExtraTime === true;
+                FocusState.extraTimeSeconds = Number(savedState.extraTimeSeconds || 0);
                 FocusState.startTimestamp = savedState.startTimestamp;
                 FocusState.selectedMinutes = savedState.selectedMinutes || 0;
                 
@@ -593,6 +595,53 @@ async function checkActiveSession() {
                 return;
             }
 
+            // Handle extra-time mode (count-up after a completed countdown) - RUNNING session
+            if (savedState.isExtraTime === true) {
+                FocusState.isActive = true;
+                FocusState.isPaused = false;
+                FocusState.isBreak = false;
+                FocusState.isOpenEnded = false;
+                FocusState.isExtraTime = true;
+                FocusState.extraTimeSeconds = Math.max(0, Number(savedState.extraTimeSeconds) || 0);
+                FocusState.selectedMinutes = savedState.selectedMinutes || 25;
+                FocusState.remainingSeconds = 0;
+                FocusState.startTimestamp = savedState.startTimestamp || (Date.now() - (FocusState.extraTimeSeconds * 1000));
+                FocusState.endTimestamp = null;
+                FocusState.pausedRemainingSeconds = null;
+                FocusState.pausedElapsedSeconds = null;
+                FocusState.isOverlayMinimized = savedState.isOverlayMinimized === true;
+
+                FocusState.currentSession = {
+                    id: `restored_${Date.now()}`,
+                    type: getSessionType(savedState.selectedMinutes),
+                    durationMinutes: savedState.selectedMinutes || 25,
+                    linkedTaskTitle: savedState.taskTitle,
+                    startTime: new Date(FocusState.startTimestamp).toISOString(),
+                    status: 'in-progress'
+                };
+
+                if (FocusState.isOverlayMinimized) {
+                    hideFocusOverlay({ keepSessionRunning: true });
+                } else {
+                    showFocusOverlay();
+                }
+                updateTimerDisplay();
+
+                if (FocusState.timerInterval) {
+                    clearInterval(FocusState.timerInterval);
+                }
+                FocusState.timerInterval = setInterval(timerTick, 1000);
+
+                syncFocusStateToStorage();
+                await pinDesktopFocusWidget({ minimizeOverlay: true });
+                showToast(
+                    FocusState.isOverlayMinimized ? 'info' : 'success',
+                    FocusState.isOverlayMinimized ? 'Extra Time Running' : 'Extra Time Restored',
+                    `Continuing extra time: +${Math.floor(FocusState.extraTimeSeconds / 60)}m.`
+                );
+                return;
+            }
+
             // Handle open-ended (count-up) mode - RUNNING session
             if (savedState.isOpenEnded) {
                 // Recalculate elapsed time since session started
@@ -603,6 +652,8 @@ async function checkActiveSession() {
                 FocusState.isPaused = false;
                 FocusState.isBreak = false;
                 FocusState.isOpenEnded = true;
+                FocusState.isExtraTime = false;
+                FocusState.extraTimeSeconds = 0;
                 FocusState.elapsedSeconds = elapsedSeconds;
                 FocusState.startTimestamp = savedState.startTimestamp;
                 FocusState.endTimestamp = null;
@@ -655,6 +706,8 @@ async function checkActiveSession() {
                 FocusState.isPaused = false;
                 FocusState.isOpenEnded = false;
                 FocusState.isBreak = savedState.isBreak || false;
+                FocusState.isExtraTime = false;
+                FocusState.extraTimeSeconds = 0;
                 FocusState.startTimestamp = savedState.startTimestamp;
                 FocusState.endTimestamp = savedState.endTimestamp;
                 FocusState.selectedMinutes = savedState.selectedMinutes || 25;
@@ -1705,6 +1758,8 @@ function syncFocusStateToStorage() {
                 isPaused: FocusState.isPaused,
                 isBreak: FocusState.isBreak,
                 isOpenEnded: FocusState.isOpenEnded,
+                isExtraTime: FocusState.isExtraTime,
+                extraTimeSeconds: FocusState.extraTimeSeconds,
                 elapsedSeconds: FocusState.elapsedSeconds,
                 remainingSeconds: FocusState.remainingSeconds,
                 selectedMinutes: FocusState.selectedMinutes,
@@ -2716,7 +2771,10 @@ function showSessionCompleteModal(breakMinutes, isLongBreak, options = {}) {
 // BREAK FUNCTIONS
 // ============================================================================
 function startBreak(minutes) {
+    FocusState.isActive = true;
     FocusState.isBreak = true;
+    FocusState.isExtraTime = false;
+    FocusState.extraTimeSeconds = 0;
     FocusState.remainingSeconds = minutes * 60;
     FocusState.selectedMinutes = minutes;
     FocusState.isPaused = false;
@@ -3878,10 +3936,22 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             FocusState.remainingSeconds = newState.remainingSeconds;
             FocusState.isBreak = newState.isBreak || false;
             FocusState.isOpenEnded = newState.isOpenEnded || false;
+            FocusState.isExtraTime = newState.isExtraTime === true;
+            FocusState.extraTimeSeconds = Math.max(0, Number(newState.extraTimeSeconds) || 0);
             FocusState.startTimestamp = newState.startTimestamp || null;
             FocusState.endTimestamp = newState.endTimestamp || null;
             FocusState.pausedRemainingSeconds = newState.pausedRemainingSeconds ?? null;
             FocusState.pausedElapsedSeconds = newState.pausedElapsedSeconds ?? null;
+
+            if (FocusState.isExtraTime) {
+                FocusState.isOpenEnded = false;
+                FocusState.isBreak = false;
+                FocusState.remainingSeconds = 0;
+                if (typeof FocusState.startTimestamp !== 'number') {
+                    FocusState.startTimestamp = Date.now() - (FocusState.extraTimeSeconds * 1000);
+                }
+                FocusState.endTimestamp = null;
+            }
 
             if (!FocusState.isOpenEnded && !FocusState.isPaused && typeof FocusState.endTimestamp !== 'number') {
                 FocusState.endTimestamp = Date.now() + ((newState.remainingSeconds || 0) * 1000);

@@ -109,4 +109,65 @@ test.describe('Focus floating widget', () => {
       await page.waitForFunction(() => typeof FocusState !== 'undefined' && FocusState.isActive === false);
     });
   });
+
+  test('floating focus widget shows extra-time counter with + prefix', async ({}, testInfo) => {
+    test.setTimeout(60_000);
+
+    await runWithPageCoverage(context, testInfo, async (page) => {
+      await page.goto(extensionUrl('/productivity-desktop/renderer/widget.html?card=focus-session'), { waitUntil: 'load' });
+
+      await page.evaluate(() => new Promise((resolve) => {
+        chrome.storage.local.set({
+          focusState: {
+            isActive: true,
+            isPaused: false,
+            isBreak: false,
+            isOpenEnded: false,
+            isExtraTime: true,
+            extraTimeSeconds: 65,
+            selectedMinutes: 25,
+            remainingSeconds: 0,
+            taskTitle: 'Linear Algebra Review'
+          }
+        }, resolve);
+      }));
+
+      await expect
+        .poll(async () => (await page.locator('.widget-focus-clock').textContent()) || '', { timeout: 6000 })
+        .toContain('+01:05');
+
+      await expect(page.locator('.widget-focus-target')).toContainText('Linear Algebra Review');
+    });
+  });
+
+  test('break overlay can be minimized back to app', async ({}, testInfo) => {
+    test.setTimeout(60_000);
+
+    await runWithPageCoverage(context, testInfo, async (page) => {
+      await page.addInitScript(() => {
+        window.confirm = () => true;
+        window.alert = () => {};
+      });
+
+      await page.goto(extensionUrl('/productivity-desktop/renderer/index.html'), { waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.navigateTo === 'function');
+      await page.evaluate(() => window.navigateTo('focus'));
+
+      await page.waitForFunction(() => typeof startBreak === 'function' && typeof FocusState !== 'undefined');
+
+      await page.evaluate(() => {
+        FocusState.isActive = false;
+        startBreak(1);
+      });
+
+      await expect(page.locator('#focus-overlay')).toHaveClass(/break-mode/);
+
+      await page.locator('#focus-minimize-btn').click();
+
+      await expect(page.locator('#focus-overlay')).toHaveClass(/hidden/);
+      await expect
+        .poll(async () => await page.evaluate(() => FocusState.isOverlayMinimized === true), { timeout: 4000 })
+        .toBe(true);
+    });
+  });
 });

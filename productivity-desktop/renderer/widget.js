@@ -508,9 +508,12 @@
         const now = Date.now();
         const isPaused = state.isPaused === true;
         const isOpenEnded = state.isOpenEnded === true;
+        const isExtraTime = state.isExtraTime === true;
 
         let shownSeconds = 0;
-        if (isOpenEnded) {
+        if (isExtraTime) {
+            shownSeconds = Math.max(0, Number(state.extraTimeSeconds || 0));
+        } else if (isOpenEnded) {
             if (isPaused) {
                 shownSeconds = Number(state.pausedElapsedSeconds ?? state.elapsedSeconds ?? 0);
             } else if (typeof state.startTimestamp === 'number') {
@@ -530,14 +533,17 @@
 
         const focusTargetRaw = String(state.taskTitle || state.subject || '').trim();
         const focusTarget = focusTargetRaw
-            || (state.isBreak ? 'Break Session' : (isOpenEnded ? 'Free Focus' : 'No linked task'));
-        const status = isPaused ? 'Paused' : (isOpenEnded ? 'Running' : 'In progress');
-        const clock = isOpenEnded
-            ? formatClock(shownSeconds, { forceHours: shownSeconds >= 3600 })
-            : formatClock(shownSeconds, { forceHours: shownSeconds >= 3600 });
+            || (state.isBreak ? 'Break Session' : (isOpenEnded ? 'Free Focus' : (isExtraTime ? 'Extra Time' : 'No linked task')));
+        const status = isPaused
+            ? 'Paused'
+            : (isExtraTime ? 'Extra time' : (isOpenEnded ? 'Running' : 'In progress'));
+        const clock = formatClock(shownSeconds, {
+            forceHours: shownSeconds >= 3600,
+            allowSign: isExtraTime
+        });
 
         let progressHtml = '';
-        if (!isOpenEnded) {
+        if (!isOpenEnded && !isExtraTime) {
             const totalSeconds = Math.max(1, (Number(state.selectedMinutes) || 25) * 60);
             const remainingSeconds = Math.max(0, shownSeconds);
             const progressPct = Math.min(100, Math.max(0, ((totalSeconds - remainingSeconds) / totalSeconds) * 100));
