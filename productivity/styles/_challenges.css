@@ -341,6 +341,38 @@
     color: var(--danger-color, #ef4444);
 }
 
+.challenge-card .challenge-check-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1.5px solid var(--primary);
+    background: transparent;
+    color: var(--primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.challenge-card .challenge-check-btn i {
+    font-size: 12px;
+}
+
+.challenge-card .challenge-check-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: rgba(99, 102, 241, 0.12);
+}
+
+.challenge-card .challenge-check-btn.is-checked,
+.challenge-card .challenge-check-btn:disabled {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.8);
+    color: var(--success-color, #10b981);
+    cursor: not-allowed;
+}
+
 /* Confirm Modal */
 #confirm-modal-overlay .btn-danger {
     background: var(--danger-color, #ef4444);
@@ -582,6 +614,25 @@
     font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
+}
+
+.challenge-form .challenge-manual-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.challenge-form .challenge-manual-toggle input[type="checkbox"] {
+    margin-top: 2px;
+    accent-color: var(--primary);
+}
+
+.challenge-form .challenge-manual-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
 }
 
 .challenge-form input,

@@ -205,6 +205,59 @@ test.describe('Challenges feature', () => {
     });
   });
 
+  test('task-style challenge checkbox adds one count per day', async ({}, testInfo) => {
+    await runWithPageCoverage(context, testInfo, async (page) => {
+      const pageErrors = [];
+      page.on('pageerror', (err) => pageErrors.push(err));
+
+      await page.goto(extensionUrl('/productivity/index.html'), { waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.openChallengeModal === 'function');
+
+      await page.evaluate(() => new Promise(r => chrome.storage.local.clear(r)));
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => typeof window.openChallengeModal === 'function');
+
+      await page.click('.nav-item[data-page="challenges"]');
+
+      const createBtn = page.locator('#create-challenge-btn');
+      const emptyStateBtn = page.locator('[data-action="create-challenge"]');
+      if (await createBtn.isVisible().catch(() => false)) {
+        await createBtn.click();
+      } else {
+        await emptyStateBtn.first().click();
+      }
+
+      await page.fill('#challenge-name', 'Checkbox Challenge');
+      await page.selectOption('#challenge-metric', 'tasks');
+      await page.fill('#challenge-target', '3');
+      await page.check('#challenge-manual-check');
+      await page.click('#challenge-modal button[type="submit"]');
+
+      await expect(page.locator('#challenge-modal')).not.toHaveClass(/active/);
+      await expect(page.locator('.challenge-check-btn')).toBeVisible();
+
+      await page.click('.challenge-check-btn');
+      await expect(page.locator('.challenge-card .progress-text')).toContainText('1 / 3');
+      await expect(page.locator('.challenge-check-btn')).toBeDisabled();
+
+      const secondCheck = await page.evaluate(async () => {
+        const id = window.ChallengeManager.challenges[0]?.id;
+        const result = await window.ChallengeManager.checkManualProgress(id);
+        return {
+          didChange: result?.didChange === true,
+          alreadyChecked: result?.alreadyChecked === true,
+          progress: window.ChallengeManager.challenges[0]?.currentProgress || 0
+        };
+      });
+
+      expect(secondCheck.didChange).toBe(false);
+      expect(secondCheck.alreadyChecked).toBe(true);
+      expect(secondCheck.progress).toBe(1);
+
+      if (pageErrors.length) throw pageErrors[0];
+    });
+  });
+
   test('daily challenge requires timeframe in modal', async ({}, testInfo) => {
     await runWithPageCoverage(context, testInfo, async (page) => {
       const pageErrors = [];

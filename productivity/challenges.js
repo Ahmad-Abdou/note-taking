@@ -124,6 +124,18 @@ function normalizeChallengeRecord(raw) {
     challenge.lastProgressDate = typeof challenge.lastProgressDate === 'string' ? challenge.lastProgressDate : null;
     challenge.completedAt = typeof challenge.completedAt === 'string' ? challenge.completedAt : null;
     challenge.timesCompleted = Math.max(0, Number(challenge.timesCompleted) || 0);
+    challenge.manualCheckEnabled = challenge.manualCheckEnabled === true || challenge.manualMode === true;
+
+    const manualHistoryRaw = (challenge.manualCheckHistory && typeof challenge.manualCheckHistory === 'object')
+        ? challenge.manualCheckHistory
+        : ((challenge.checkedDays && typeof challenge.checkedDays === 'object') ? challenge.checkedDays : {});
+    challenge.manualCheckHistory = {};
+
+    for (const [dateIso, value] of Object.entries(manualHistoryRaw)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) continue;
+        if (!value) continue;
+        challenge.manualCheckHistory[dateIso] = 1;
+    }
 
     if (challenge.metric === 'focus_sessions') {
         challenge.options.minMinutes = Math.max(0, Number(challenge.options.minMinutes) || 0);
@@ -310,7 +322,7 @@ const ChallengeManager = {
         if (didChange) emitChallengeDataChanged({ immediate: true });
     },
 
-    async create({ metric, type, targetCount, options, name, timeWindowStart, timeWindowEnd }) {
+    async create({ metric, type, targetCount, options, name, timeWindowStart, timeWindowEnd, manualCheckEnabled }) {
         await this.ensureLoaded();
 
         const normalizedMetric = normalizeMetric(metric);
@@ -342,6 +354,8 @@ const ChallengeManager = {
             lastProgressDate: null,
             completedAt: null,
             timesCompleted: 0,
+            manualCheckEnabled: manualCheckEnabled === true,
+            manualCheckHistory: {},
             timeWindowStart: hasValidWindow ? normalizedWindowStart : null,
             timeWindowEnd: hasValidWindow ? normalizedWindowEnd : null,
             completionHistory: {}
@@ -358,7 +372,7 @@ const ChallengeManager = {
         const challenge = this.challenges.find(c => c.id === id);
         if (!challenge) return null;
 
-        const { metric, type, targetCount, options, name, timeWindowStart, timeWindowEnd } = updates;
+        const { metric, type, targetCount, options, name, timeWindowStart, timeWindowEnd, manualCheckEnabled } = updates;
 
         if (metric !== undefined) challenge.metric = normalizeMetric(metric);
         if (type !== undefined) challenge.type = ['daily', 'weekly', 'custom'].includes(type) ? type : challenge.type;
@@ -367,6 +381,9 @@ const ChallengeManager = {
             challenge.options = (normalizeMetric(challenge.metric) === 'focus_sessions')
                 ? { minMinutes: Math.max(0, Number(options?.minMinutes) || 0) }
                 : {};
+        }
+        if (Object.prototype.hasOwnProperty.call(updates, 'manualCheckEnabled')) {
+            challenge.manualCheckEnabled = manualCheckEnabled === true;
         }
 
         const hasWindowUpdate = updates && (
@@ -413,6 +430,91 @@ const ChallengeManager = {
         emitChallengeDataChanged({ immediate: true });
     },
 
+    async checkManualProgress(id, dateYmd = getTodayYMD()) {
+        await this.ensureLoaded();
+
+        const challenge = this.challenges.find(c => c.id === id);
+        if (!challenge || !challenge.manualCheckEnabled || challenge.status !== 'active') {
+            return { challenge: challenge || null, didChange: false, alreadyChecked: false };
+        }
+
+        const dateIso = /^\d{4}-\d{2}-\d{2}$/.test(String(dateYmd || '')) ? String(dateYmd) : getTodayYMD();
+        if (!challenge.manualCheckHistory || typeof challenge.manualCheckHistory !== 'object') {
+            challenge.manualCheckHistory = {};
+        }
+
+        if (challenge.manualCheckHistory[dateIso]) {
+            return { challenge, didChange: false, alreadyChecked: true };
+        }
+
+        challenge.manualCheckHistory[dateIso] = 1;
+
+        const last = challenge.lastProgressDate;
+        if (last === dateIso) {
+            // No streak change.
+        } else if (isYesterdayYMD(last, dateIso) && (challenge.currentStreak || 0) > 0) {
+            challenge.currentStreak = (challenge.currentStreak || 0) + 1;
+        } else {
+            challenge.currentStreak = 1;
+        }
+
+        challenge.bestStreak = Math.max(challenge.bestStreak || 0, challenge.currentStreak || 0);
+        challenge.lastProgressDate = dateIso;
+        challenge.currentProgress = (Number(challenge.currentProgress) || 0) + 1;
+
+        if (challenge.type === 'daily') {
+            const completionTime = getLocalTimeHHMM();
+            const hasWindow = isValidDailyTimeWindow(challenge.timeWindowStart, challenge.timeWindowEnd);
+            const windowOutcome = hasWindow
+                ? (isTimeWithinWindow(completionTime, challenge.timeWindowStart, challenge.timeWindowEnd)
+                    ? 'within'
+                    : 'outside')
+                : 'within';
+
+            if (!challenge.completionHistory || typeof challenge.completionHistory !== 'object') {
+                challenge.completionHistory = {};
+            }
+
+            challenge.completionHistory[dateIso] = {
+                completedAt: new Date().toISOString(),
+                completionTime,
+                windowOutcome
+            };
+        }
+
+        if ((Number(challenge.currentProgress) || 0) >= (Number(challenge.targetProgress) || 0) && challenge.status !== 'completed') {
+            challenge.status = 'completed';
+            challenge.completedAt = new Date().toISOString();
+            challenge.timesCompleted = (Number(challenge.timesCompleted) || 0) + 1;
+
+            try {
+                showToast?.('success', 'Challenge Complete!', `You completed: ${challenge.title}`);
+            } catch {
+                // ignore
+            }
+        }
+
+        Object.assign(challenge, normalizeChallengeRecord(challenge));
+        await this.save();
+        emitChallengeDataChanged({ immediate: true });
+
+        if (window.habitTrackerInstance?.syncExternalDailyItems) {
+            window.habitTrackerInstance.syncExternalDailyItems();
+        }
+
+        try {
+            if (document.getElementById('challenges-grid')) {
+                ChallengeState.challenges = this.challenges;
+                renderChallenges();
+                updateChallengeStats();
+            }
+        } catch {
+            // ignore
+        }
+
+        return { challenge, didChange: true, alreadyChecked: false };
+    },
+
     async recordProgress(metric, amount = 1, meta = {}) {
         await this.ensureLoaded();
 
@@ -426,6 +528,7 @@ const ChallengeManager = {
         for (const challenge of this.challenges) {
             if (!challenge || challenge.status !== 'active') continue;
             if (normalizeMetric(challenge.metric) !== normalizedMetric) continue;
+            if (challenge.manualCheckEnabled) continue;
 
             // Constraints
             if (normalizedMetric === 'focus_sessions') {
@@ -606,6 +709,11 @@ function renderChallenges() {
             const challenge = ChallengeState.challenges.find(c => c.id === id);
             if (challenge) openChallengeModal(challenge);
         });
+
+        card.querySelector('[data-action="manual-check"]')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await checkChallengeForToday(id);
+        });
     });
 
     renderChallengeScheduleTimeline(ChallengeState.challenges);
@@ -728,12 +836,22 @@ function renderChallengeCard(challenge) {
     const target = Math.max(1, Number(challenge.targetProgress) || 1);
     const progress = Math.min(100, Math.round((current / target) * 100));
     const isCompleted = challenge.status === 'completed';
+    const isManualCheck = challenge.manualCheckEnabled === true;
+    const todayChecked = !!challenge.manualCheckHistory?.[getTodayYMD()];
     const typeIcon = challenge.type === 'daily' ? 'fa-calendar-day' :
         challenge.type === 'weekly' ? 'fa-calendar-week' : 'fa-calendar-alt';
     const timeWindowLabel = formatTimeWindow(challenge.timeWindowStart, challenge.timeWindowEnd);
     const timeWindowBadge = challenge.type === 'daily' && timeWindowLabel
         ? `<span class="challenge-time-window-badge"><i class="fas fa-clock"></i> ${timeWindowLabel}</span>`
         : '';
+    const manualCheckButton = isManualCheck && !isCompleted
+        ? `<button type="button" class="challenge-check-btn ${todayChecked ? 'is-checked' : ''}" data-action="manual-check" ${todayChecked ? 'disabled' : ''} aria-label="${todayChecked ? 'Already checked today' : 'Check challenge for today'}" title="${todayChecked ? 'Already checked today' : 'Mark today as done'}"><i class="fas fa-check"></i></button>`
+        : '';
+    const progressBadge = isCompleted
+        ? `<span class="completed-badge"><i class="fas fa-check-circle"></i> Completed!</span>`
+        : (isManualCheck
+            ? `<span class="completed-badge"><i class="fas fa-circle-check"></i> Task-style check</span>`
+            : `<span class="completed-badge"><i class="fas fa-bolt"></i> Auto-tracked</span>`);
 
     const streakBadge = challenge.currentStreak > 0 ?
         `<span class="streak-badge"><i class="fas fa-fire"></i> ${challenge.currentStreak}</span>` : '';
@@ -767,12 +885,8 @@ function renderChallengeCard(challenge) {
                 </div>
             </div>
             <div class="challenge-footer">
-                ${isCompleted
-            ? `<span class="completed-badge"><i class="fas fa-check-circle"></i> Completed!</span>`
-            : (challenge.metric
-                ? `<span class="completed-badge"><i class="fas fa-bolt"></i> Auto-tracked</span>`
-                : `<span class="completed-badge"><i class="fas fa-pen"></i> Manual</span>`
-            )}
+                ${manualCheckButton}
+                ${progressBadge}
             </div>
         </div>
     `;
@@ -809,6 +923,13 @@ async function deleteChallenge(challengeId) {
     _removeSyncedHabitForChallenge(challengeId);
 
     showToast?.('success', 'Deleted', 'Challenge removed');
+}
+
+async function checkChallengeForToday(challengeId) {
+    const result = await window.ChallengeManager?.checkManualProgress?.(challengeId);
+    if (!result?.didChange && result?.alreadyChecked) {
+        showToast?.('info', 'Already Checked', 'You already checked this challenge for today.');
+    }
 }
 
 /** Remove the daily-challenge habit entry for a deleted challenge */
@@ -897,6 +1018,13 @@ function openChallengeModal(existingChallenge) {
                         <option value="custom" selected>Custom</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label class="challenge-manual-toggle">
+                        <input type="checkbox" id="challenge-manual-check">
+                        <span>Track this challenge like a task checkbox</span>
+                    </label>
+                    <div class="challenge-manual-hint">One check adds <strong>1</strong> count for today. You can only check once per day.</div>
+                </div>
                 <div class="form-row" id="challenge-time-window-row" style="display:none;">
                     <div class="form-group">
                         <label>Timeframe Start</label>
@@ -964,6 +1092,7 @@ function openChallengeModal(existingChallenge) {
     const timeWindowNote = document.getElementById('challenge-time-window-note');
     const timeStartEl = document.getElementById('challenge-time-start');
     const timeEndEl = document.getElementById('challenge-time-end');
+    const manualCheckEl = document.getElementById('challenge-manual-check');
 
     // Pre-populate for edit mode
     if (isEdit) {
@@ -976,6 +1105,7 @@ function openChallengeModal(existingChallenge) {
         if (typeFocusEl) typeFocusEl.value = curType;
         if (timeStartEl) timeStartEl.value = normalizeTimeOfDay(existingChallenge.timeWindowStart || '') || '';
         if (timeEndEl) timeEndEl.value = normalizeTimeOfDay(existingChallenge.timeWindowEnd || '') || '';
+        if (manualCheckEl) manualCheckEl.checked = existingChallenge.manualCheckEnabled === true;
     }
 
     // Store editing challenge ID for the submit handler
@@ -1024,6 +1154,9 @@ function openChallengeModal(existingChallenge) {
         const title = customName || buildChallengeTitle(metric, target, options);
         const desc = buildChallengeDescription(metric, target, options);
         const selectedType = getSelectedType();
+        const manualSummary = manualCheckEl?.checked
+            ? `<div style="opacity:0.9;margin-top:6px;"><i class="fas fa-circle-check"></i> Task-style check mode: one check adds one count for today.</div>`
+            : `<div style="opacity:0.9;margin-top:6px;"><i class="fas fa-bolt"></i> Auto-tracked from your activity.</div>`;
         const start = normalizeTimeOfDay(timeStartEl?.value || '');
         const end = normalizeTimeOfDay(timeEndEl?.value || '');
         const hasWindow = selectedType === 'daily' && isValidDailyTimeWindow(start, end);
@@ -1031,7 +1164,7 @@ function openChallengeModal(existingChallenge) {
             ? `<div style="opacity:0.9;margin-top:6px;"><i class="fas fa-clock"></i> Required timeframe: ${escapeHtml(formatTimeWindow(start, end))}</div>`
             : '';
 
-        previewEl.innerHTML = `<strong>${escapeHtml(title)}</strong><div style="opacity:0.85;margin-top:4px;">${escapeHtml(desc)}</div>${windowSummary}`;
+        previewEl.innerHTML = `<strong>${escapeHtml(title)}</strong><div style="opacity:0.85;margin-top:4px;">${escapeHtml(desc)}</div>${manualSummary}${windowSummary}`;
     };
 
     metricEl?.addEventListener('change', syncMetricUi);
@@ -1042,6 +1175,7 @@ function openChallengeModal(existingChallenge) {
     nameEl?.addEventListener('input', syncPreview);
     timeStartEl?.addEventListener('input', syncPreview);
     timeEndEl?.addEventListener('input', syncPreview);
+    manualCheckEl?.addEventListener('change', syncPreview);
     typeSimpleEl?.addEventListener('change', syncMetricUi);
     typeFocusEl?.addEventListener('change', syncMetricUi);
 
@@ -1067,6 +1201,7 @@ async function createChallenge() {
     const minMinutes = Math.max(0, parseInt(document.getElementById('challenge-min-minutes')?.value) || 0);
     const timeStart = normalizeTimeOfDay(document.getElementById('challenge-time-start')?.value || '');
     const timeEnd = normalizeTimeOfDay(document.getElementById('challenge-time-end')?.value || '');
+    const manualCheckEnabled = !!document.getElementById('challenge-manual-check')?.checked;
 
     const isFocus = metric === 'focus_sessions';
     const type = isFocus
@@ -1086,6 +1221,7 @@ async function createChallenge() {
         targetCount: target,
         options: isFocus ? { minMinutes } : {},
         name,
+        manualCheckEnabled,
         timeWindowStart: type === 'daily' ? timeStart : null,
         timeWindowEnd: type === 'daily' ? timeEnd : null
     });
@@ -1099,7 +1235,9 @@ async function createChallenge() {
         window.habitTrackerInstance.syncExternalDailyItems();
     }
 
-    showToast?.('success', 'Challenge Created', 'Challenge is now active and will update automatically.');
+    showToast?.('success', 'Challenge Created', manualCheckEnabled
+        ? 'Challenge is now active. Use the check circle to add one count each day.'
+        : 'Challenge is now active and will update automatically.');
     return true;
 }
 
@@ -1112,6 +1250,7 @@ async function updateChallenge(challengeId) {
     const rawTimeEnd = document.getElementById('challenge-time-end')?.value || '';
     const timeStart = normalizeTimeOfDay(rawTimeStart);
     const timeEnd = normalizeTimeOfDay(rawTimeEnd);
+    const manualCheckEnabled = !!document.getElementById('challenge-manual-check')?.checked;
 
     const isFocus = metric === 'focus_sessions';
     const type = isFocus
@@ -1135,7 +1274,8 @@ async function updateChallenge(challengeId) {
         type,
         targetCount: target,
         options: isFocus ? { minMinutes } : {},
-        name
+        name,
+        manualCheckEnabled
     };
 
     if (type === 'daily') {

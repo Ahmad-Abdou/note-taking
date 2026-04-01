@@ -127,6 +127,81 @@ function getEventDisplayColors(event) {
     return { border: baseColor, bg: bgColor, label: typeColors.label };
 }
 
+function getImportedCalendarEventStats() {
+    const stats = {};
+
+    (ScheduleState.events || []).forEach((event) => {
+        const calId = event?.importedCalendarId;
+        if (!calId) return;
+
+        if (!stats[calId]) {
+            stats[calId] = {
+                count: 0,
+                sample: event
+            };
+        }
+
+        stats[calId].count += 1;
+    });
+
+    return stats;
+}
+
+async function reconcileImportedCalendarsMetaWithEvents(options = {}) {
+    const persist = options.persist !== false;
+    const stats = getImportedCalendarEventStats();
+    const knownMeta = ScheduleState.importedCalendarsMeta || {};
+    let changed = false;
+
+    // Ensure every imported calendar that has events has metadata.
+    Object.entries(stats).forEach(([calId, info]) => {
+        if (!knownMeta[calId]) {
+            knownMeta[calId] = {
+                name: 'Imported Calendar',
+                color: info.sample?.color || '#6366f1',
+                eventType: info.sample?.type || 'class',
+                importedAt: info.sample?.importedAt || new Date().toISOString(),
+                eventCount: info.count,
+                sourceUrl: null
+            };
+            changed = true;
+        } else if (knownMeta[calId].eventCount !== info.count) {
+            knownMeta[calId].eventCount = info.count;
+            changed = true;
+        }
+
+        if (ScheduleState.filters.importedCalendars[calId] === undefined) {
+            ScheduleState.filters.importedCalendars[calId] = true;
+        }
+    });
+
+    // Remove stale metadata with no events and no subscription source.
+    Object.keys(knownMeta).forEach((calId) => {
+        const hasEvents = !!stats[calId];
+        const hasSource = !!knownMeta[calId]?.sourceUrl;
+        if (!hasEvents && !hasSource) {
+            delete knownMeta[calId];
+            delete ScheduleState.filters.importedCalendars[calId];
+            changed = true;
+        }
+    });
+
+    Object.keys(ScheduleState.filters.importedCalendars).forEach((calId) => {
+        if (!knownMeta[calId]) {
+            delete ScheduleState.filters.importedCalendars[calId];
+            changed = true;
+        }
+    });
+
+    ScheduleState.importedCalendarsMeta = knownMeta;
+
+    if (changed && persist) {
+        await chrome.storage.local.set({ importedCalendarsMeta: ScheduleState.importedCalendarsMeta });
+    }
+
+    return changed;
+}
+
 // ============================================================================
 // SCHEDULE INITIALIZATION
 // ============================================================================
@@ -158,6 +233,7 @@ async function loadSchedule() {
 
         // Load tasks with due dates and convert them to calendar events
         await loadTasksAsEvents();
+        await reconcileImportedCalendarsMetaWithEvents();
 
         try {
             // Render current view
@@ -2091,7 +2167,10 @@ async function renderImportedCalendars() {
     if (!container) return;
 
     try {
-        const hasImportedCalendars = Object.keys(ScheduleState.importedCalendarsMeta).length > 0;
+        await reconcileImportedCalendarsMetaWithEvents();
+        const stats = getImportedCalendarEventStats();
+        const calendars = Object.entries(ScheduleState.importedCalendarsMeta || {});
+        const hasImportedCalendars = calendars.length > 0;
 
         let html = `
             <label class="filter-item-mini">
@@ -2102,13 +2181,15 @@ async function renderImportedCalendars() {
         `;
 
         if (hasImportedCalendars) {
-            // Render each imported calendar with delete button
-            Object.entries(ScheduleState.importedCalendarsMeta).forEach(([calId, meta]) => {
-                const eventCount = ScheduleState.events.filter(e => e.importedCalendarId === calId).length;
+            calendars.forEach(([calId, meta]) => {
+                const eventCount = stats[calId]?.count || 0;
                 html += `
                     <div class="imported-source-item" data-calendar-id="${calId}">
-                        <span class="filter-color" style="background: ${meta.color || '#667eea'}; width: 10px; height: 10px; border-radius: 3px;"></span>
-                        <span class="source-name">${escapeHtml(meta.name || 'Imported Calendar')}</span>
+                        <label class="imported-calendar-label" style="display:flex; align-items:center; gap:8px; min-width: 0; flex: 1; cursor: pointer;">
+                            <input type="checkbox" data-calendar-id="${calId}" ${ScheduleState.filters.importedCalendars[calId] !== false ? 'checked' : ''}>
+                            <span class="filter-color" style="background: ${meta.color || '#667eea'}; width: 10px; height: 10px; border-radius: 3px;" data-imported-color-picker="${calId}"></span>
+                            <span class="source-name">${escapeHtml(meta.name || 'Imported Calendar')}</span>
+                        </label>
                         <span class="source-count">${eventCount}</span>
                         <div class="imported-actions" style="display: flex; gap: 4px; margin-left: auto;">
                             ${meta.sourceUrl ? `
@@ -2155,35 +2236,7 @@ async function renderImportedCalendars() {
             await renderCurrentView();
         });
 
-        // Attach edit button handlers
-        container.querySelectorAll('[data-edit-calendar]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const calId = btn.dataset.editCalendar;
-                await editImportedCalendar(calId);
-            });
-        });
-
-        // Attach delete button handlers
-        container.querySelectorAll('[data-delete-calendar]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const calId = btn.dataset.deleteCalendar;
-                await deleteImportedCalendar(calId);
-            });
-        });
-
-        // Attach refresh button handlers
-        container.querySelectorAll('[data-refresh-calendar]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const calId = btn.dataset.refreshCalendar;
-                await refreshImportedCalendar(calId);
-            });
-        });
+        setupImportedCalendarHandlers();
 
         // Attach delete all imported events handler
         container.querySelector('#delete-all-imported')?.addEventListener('click', async (e) => {
@@ -2520,48 +2573,15 @@ async function refreshScheduleFilters() {
 }
 
 function renderImportedCalendarsFilter() {
-
-    const importedContainer = document.getElementById('imported-calendars-list');
-    if (!importedContainer) {
-        return;
-    }
-
-    const hasImportedCalendars = Object.keys(ScheduleState.importedCalendarsMeta).length > 0;
-
-    if (!hasImportedCalendars) {
-        importedContainer.innerHTML = `
-            <p class="empty-hint">No subscribed calendars yet</p>
-        `;
-    } else {
-        importedContainer.innerHTML = Object.entries(ScheduleState.importedCalendarsMeta).map(([calId, meta]) => `
-            <div class="imported-calendar-item" data-calendar-id="${calId}">
-                <label class="imported-calendar-label">
-                    <input type="checkbox" data-calendar-id="${calId}" ${ScheduleState.filters.importedCalendars[calId] !== false ? 'checked' : ''}>
-                    <span class="filter-color" style="background: ${meta.color || '#667eea'};" data-imported-color-picker="${calId}"></span>
-                    <span class="imported-calendar-name">${escapeHtml(meta.name || 'Imported Calendar')}</span>
-                </label>
-                <div class="imported-calendar-actions">
-                    ${meta.sourceUrl ? `
-                        <button class="imported-action-btn refresh-btn" data-refresh-calendar="${calId}" title="Refresh from source">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    ` : ''}
-                    <button class="imported-action-btn delete-btn" data-delete-calendar="${calId}" title="Delete this calendar">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // Setup imported calendar handlers
-    setupImportedCalendarHandlers();
+    renderImportedCalendars();
 }
 
 function setupImportedCalendarHandlers() {
+    const importedContainer = document.getElementById('imported-calendars-list');
+    if (!importedContainer) return;
 
     // Individual imported calendar checkboxes
-    document.querySelectorAll('input[data-calendar-id]').forEach(checkbox => {
+    importedContainer.querySelectorAll('input[data-calendar-id]').forEach(checkbox => {
         checkbox.onchange = () => {
             const calId = checkbox.dataset.calendarId;
             ScheduleState.filters.importedCalendars[calId] = checkbox.checked;
@@ -2570,7 +2590,7 @@ function setupImportedCalendarHandlers() {
     });
 
     // Color pickers for imported calendars
-    document.querySelectorAll('.filter-color[data-imported-color-picker]').forEach(colorSpan => {
+    importedContainer.querySelectorAll('.filter-color[data-imported-color-picker]').forEach(colorSpan => {
         colorSpan.style.cursor = 'pointer';
         colorSpan.title = 'Click to change color';
         colorSpan.onclick = (e) => {
@@ -2581,8 +2601,18 @@ function setupImportedCalendarHandlers() {
         };
     });
 
+    // Edit buttons for imported calendars
+    importedContainer.querySelectorAll('[data-edit-calendar]').forEach(btn => {
+        btn.onclick = async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const calId = btn.dataset.editCalendar;
+            await editImportedCalendar(calId);
+        };
+    });
+
     // Delete buttons for imported calendars (updated selector)
-    document.querySelectorAll('.imported-action-btn.delete-btn[data-delete-calendar], .filter-delete-btn[data-delete-calendar]').forEach(btn => {
+    importedContainer.querySelectorAll('[data-delete-calendar]').forEach(btn => {
         btn.onclick = async (e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -2592,7 +2622,7 @@ function setupImportedCalendarHandlers() {
     });
 
     // Refresh buttons for imported calendars with source URLs (updated selector)
-    document.querySelectorAll('.imported-action-btn.refresh-btn[data-refresh-calendar], .filter-refresh-btn[data-refresh-calendar]').forEach(btn => {
+    importedContainer.querySelectorAll('[data-refresh-calendar]').forEach(btn => {
         btn.onclick = async (e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -2668,7 +2698,13 @@ async function deleteImportedCalendar(calId) {
         // Delete all events from this calendar
         const eventsToDelete = ScheduleState.events.filter(e => e.importedCalendarId === calId);
         for (const event of eventsToDelete) {
-            await ProductivityData.DataStore.deleteScheduleEvent(event.id);
+            const scheduleType = event.scheduleType || 'school';
+            await ProductivityData.DataStore.deleteScheduleEvent(event.id, scheduleType);
+            // Defensive cleanup: the same id may exist in the other bucket in old data.
+            await ProductivityData.DataStore.deleteScheduleEvent(
+                event.id,
+                scheduleType === 'school' ? 'personal' : 'school'
+            );
         }
         ScheduleState.events = ScheduleState.events.filter(e => e.importedCalendarId !== calId);
 
@@ -2676,6 +2712,7 @@ async function deleteImportedCalendar(calId) {
         delete ScheduleState.importedCalendarsMeta[calId];
         delete ScheduleState.filters.importedCalendars[calId];
         await chrome.storage.local.set({ importedCalendarsMeta: ScheduleState.importedCalendarsMeta });
+        await reconcileImportedCalendarsMetaWithEvents();
 
         // Refresh
         renderCalendarFilters();
@@ -4022,37 +4059,41 @@ async function editImportedCalendar(calId) {
             meta.sourceUrl = urlInput.value.trim() || null;
         }
 
-        // Save to storage
+        // Save metadata first so name/color changes are immediately reflected.
         await chrome.storage.local.set({ importedCalendarsMeta: ScheduleState.importedCalendarsMeta });
-        
-        // Optionally update any events that belong to this calendar
-        // Since getImportedCalendarColor uses meta.color dynamically, the map is enough for colors
-        // For type changes, we update them explicitly
+
+        // Persist type/color changes on existing imported events for this calendar.
         const eventsToUpdate = ScheduleState.events.filter(e => e.importedCalendarId === calId);
-        let eventsChanged = false;
-        
-        eventsToUpdate.forEach(e => {
-            if (e.type !== meta.eventType) {
-                e.type = meta.eventType;
-                eventsChanged = true;
+        for (const event of eventsToUpdate) {
+            let changed = false;
+
+            if (event.type !== meta.eventType) {
+                event.type = meta.eventType;
+                changed = true;
             }
-        });
-        
-        if (eventsChanged) {
-            // Re-save events
-            const allStorageEvents = await ProductivityData.DataStore.getScheduleEvents();
-            allStorageEvents.forEach(se => {
-                if (se.importedCalendarId === calId) {
-                    se.type = meta.eventType;
-                }
-            });
-            await ProductivityData.DataStore.saveScheduleEvents(allStorageEvents);
+
+            if (event.color !== meta.color) {
+                event.color = meta.color;
+                changed = true;
+            }
+
+            if (!changed) continue;
+
+            const eventToSave = (typeof event?.toJSON === 'function')
+                ? event
+                : new ProductivityData.ScheduleEvent(event);
+
+            await ProductivityData.DataStore.saveScheduleEvent(eventToSave);
         }
+
+        await reconcileImportedCalendarsMetaWithEvents();
         
         showToast('success', 'Calendar Updated', 'Calendar settings saved successfully.');
         modal.remove();
 
         renderImportedCalendars();
+        renderImportedCalendarsFilter();
+        renderCalendarFilters();
         renderCurrentView();
     });
 }

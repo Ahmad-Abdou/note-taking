@@ -82,10 +82,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         notifyDataChanged: (cardId) => ipcRenderer.send('widget-data-written', { cardId }),
         notifyMainDataChanged: (cardId) => ipcRenderer.send('main-data-written', { cardId }),
         startFocus: (taskId) => ipcRenderer.send('widget-start-focus', { taskId }),
+        focusControl: (action) => ipcRenderer.send('widget-focus-control', { action }),
         onDataChanged: (callback) => {
             const listener = (event, payload) => callback(payload);
             ipcRenderer.on('widget-data-changed', listener);
             return () => ipcRenderer.removeListener('widget-data-changed', listener);
+        },
+        onFocusControl: (callback) => {
+            const listener = (event, payload) => callback(payload);
+            ipcRenderer.on('widget-focus-control', listener);
+            return () => ipcRenderer.removeListener('widget-focus-control', listener);
         },
         onUnpinned: (callback) => {
             const listener = (event, payload) => callback(payload);

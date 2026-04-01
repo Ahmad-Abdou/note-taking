@@ -72,6 +72,14 @@
             expandedCount: 3,
             collapsedHeight: 100,
             expandedHeight: 310
+        },
+        'focus-session': {
+            icon: 'fa-stopwatch',
+            title: 'Focus Session',
+            collapsedCount: 1,
+            expandedCount: 1,
+            collapsedHeight: 126,
+            expandedHeight: 220
         }
     };
 
@@ -79,6 +87,7 @@
     let cardId = null;
     let expanded = false;
     let config = null;
+    let focusRenderInterval = null;
 
     // ===== Helpers =====
     function getCardId() {
@@ -131,6 +140,21 @@
         const h = Math.floor(minutes / 60);
         const m = Math.round(minutes % 60);
         return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    }
+
+    function formatClock(totalSeconds, options = {}) {
+        const allowSign = options.allowSign === true;
+        const forceHours = options.forceHours === true;
+        const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+        const hours = Math.floor(safe / 3600);
+        const minutes = Math.floor((safe % 3600) / 60);
+        const seconds = safe % 60;
+
+        if (hours > 0 || forceHours) {
+            return `${allowSign ? '+' : ''}${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        return `${allowSign ? '+' : ''}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
 
     function isDailyRecurringTaskForDate(task, targetYmd) {
@@ -468,6 +492,82 @@
         `).join('');
     }
 
+    async function renderFocusSession() {
+        const content = document.getElementById('widget-content');
+        if (!content) return;
+
+        const stored = await chrome.storage.local.get(['focusState']);
+        const state = stored?.focusState;
+
+        if (!state?.isActive) {
+            content.innerHTML = emptyState('No active focus session');
+            return;
+        }
+
+        const now = Date.now();
+        const isPaused = state.isPaused === true;
+        const isOpenEnded = state.isOpenEnded === true;
+
+        let shownSeconds = 0;
+        if (isOpenEnded) {
+            if (isPaused) {
+                shownSeconds = Number(state.pausedElapsedSeconds ?? state.elapsedSeconds ?? 0);
+            } else if (typeof state.startTimestamp === 'number') {
+                shownSeconds = Math.max(0, Math.floor((now - state.startTimestamp) / 1000));
+            } else {
+                shownSeconds = Number(state.elapsedSeconds || 0);
+            }
+        } else {
+            if (isPaused) {
+                shownSeconds = Number(state.pausedRemainingSeconds ?? state.remainingSeconds ?? 0);
+            } else if (typeof state.endTimestamp === 'number') {
+                shownSeconds = Math.max(0, Math.ceil((state.endTimestamp - now) / 1000));
+            } else {
+                shownSeconds = Number(state.remainingSeconds || 0);
+            }
+        }
+
+        const sessionTitle = esc(state.taskTitle || 'Focus Session');
+        const status = isPaused ? 'Paused' : (isOpenEnded ? 'Running' : 'In progress');
+        const clock = isOpenEnded
+            ? formatClock(shownSeconds, { forceHours: shownSeconds >= 3600 })
+            : formatClock(shownSeconds, { forceHours: shownSeconds >= 3600 });
+
+        let progressHtml = '';
+        if (!isOpenEnded) {
+            const totalSeconds = Math.max(1, (Number(state.selectedMinutes) || 25) * 60);
+            const remainingSeconds = Math.max(0, shownSeconds);
+            const progressPct = Math.min(100, Math.max(0, ((totalSeconds - remainingSeconds) / totalSeconds) * 100));
+            progressHtml = `
+                <div class="widget-focus-progress-track">
+                    <div class="widget-focus-progress-fill" style="width:${progressPct.toFixed(1)}%"></div>
+                </div>
+            `;
+        }
+
+        content.innerHTML = `
+            <div class="widget-focus-card ${isPaused ? 'paused' : ''}">
+                <div class="widget-focus-title" title="${sessionTitle}">${sessionTitle}</div>
+                <div class="widget-focus-clock">${clock}</div>
+                <div class="widget-focus-status">${esc(status)}${isOpenEnded ? ' • Free focus' : ''}</div>
+                ${progressHtml}
+                <div class="widget-focus-actions">
+                    <button class="widget-focus-btn secondary" data-action="focus-open" title="Open Focus Page">
+                        <i class="fas fa-external-link-alt"></i>
+                    </button>
+                    <button class="widget-focus-btn" data-action="focus-toggle" title="${isPaused ? 'Resume' : 'Pause'}">
+                        <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
+                    </button>
+                    <button class="widget-focus-btn danger" data-action="focus-stop" title="Stop Session">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        bindFocusSessionActions(content);
+    }
+
     // ===== Shared HTML builders =====
 
     function taskItemHTML(task) {
@@ -577,6 +677,34 @@
         };
     }
 
+    function bindFocusSessionActions(container) {
+        container.onclick = (e) => {
+            const actionEl = e.target.closest('[data-action]');
+            const action = actionEl?.dataset.action;
+            if (!action) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const controls = window.electronAPI?.widgets;
+            if (!controls?.focusControl) return;
+
+            if (action === 'focus-toggle') {
+                controls.focusControl('toggle-pause');
+                return;
+            }
+
+            if (action === 'focus-stop') {
+                controls.focusControl('stop');
+                return;
+            }
+
+            if (action === 'focus-open') {
+                controls.focusControl('open-focus');
+            }
+        };
+    }
+
     // ===== Render Dispatcher =====
 
     const RENDERERS = {
@@ -587,7 +715,8 @@
         'goals': renderGoals,
         'challenges': renderChallenges,
         'progress': renderWeeklyProgress,
-        'review': renderReview
+        'review': renderReview,
+        'focus-session': renderFocusSession
     };
 
     async function render() {
@@ -689,9 +818,25 @@
             });
         }
 
+        if (cardId === 'focus-session') {
+            if (focusRenderInterval) {
+                clearInterval(focusRenderInterval);
+            }
+            focusRenderInterval = setInterval(() => {
+                render();
+            }, 1000);
+        }
+
         // Initial render
         await render();
     }
+
+    window.addEventListener('beforeunload', () => {
+        if (focusRenderInterval) {
+            clearInterval(focusRenderInterval);
+            focusRenderInterval = null;
+        }
+    });
 
     // Wait for DOM
     if (document.readyState === 'loading') {

@@ -975,11 +975,23 @@ function createWidgetWindow(cardId, opts = {}) {
     const saved = store.get('pinned-widgets') || {};
     const savedState = saved[cardId] || {};
 
+    const widgetSizeDefaults = {
+        'focus-session': {
+            width: 320,
+            collapsedHeight: 126,
+            expandedHeight: 220
+        }
+    };
+
+    const defaultSize = widgetSizeDefaults[cardId] || {};
+
     const expanded = opts.expanded ?? savedState.expanded ?? false;
     const x = opts.x ?? savedState.x;
     const y = opts.y ?? savedState.y;
-    const width = savedState.width || 340;
-    const height = expanded ? (savedState.expandedHeight || 420) : (savedState.collapsedHeight || 90);
+    const width = savedState.width || opts.width || defaultSize.width || 340;
+    const collapsedHeight = savedState.collapsedHeight || opts.collapsedHeight || defaultSize.collapsedHeight || 90;
+    const expandedHeight = savedState.expandedHeight || opts.expandedHeight || defaultSize.expandedHeight || 420;
+    const height = expanded ? expandedHeight : collapsedHeight;
 
     const winOpts = {
         width,
@@ -1033,7 +1045,14 @@ function createWidgetWindow(cardId, opts = {}) {
 
     // Save pinned state
     const all = store.get('pinned-widgets') || {};
-    all[cardId] = { ...(all[cardId] || {}), pinned: true, expanded };
+    all[cardId] = {
+        ...(all[cardId] || {}),
+        pinned: true,
+        expanded,
+        width,
+        collapsedHeight,
+        expandedHeight
+    };
     if (typeof x === 'number' && typeof y === 'number') {
         all[cardId].x = x;
         all[cardId].y = y;
@@ -1166,6 +1185,23 @@ ipcMain.on('widget-start-focus', (event, payload) => {
             mainWindow.focus();
             mainWindow.webContents.send('start-focus-on-task', payload);
         }
+    } catch (_) { /* ignore */ }
+});
+
+// IPC: Floating focus widget controls active focus session in main renderer
+ipcMain.on('widget-focus-control', (event, payload) => {
+    try {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+
+        const action = String(payload?.action || '').trim();
+        if (!action) return;
+
+        if (action === 'open-focus') {
+            if (!mainWindow.isVisible()) mainWindow.show();
+            mainWindow.focus();
+        }
+
+        mainWindow.webContents.send('widget-focus-control', { action });
     } catch (_) { /* ignore */ }
 });
 

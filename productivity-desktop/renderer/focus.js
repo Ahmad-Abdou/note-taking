@@ -81,6 +81,10 @@ const AmbientSounds = {
 
 let _lastFocusProgressMinute = -1;
 
+const DESKTOP_FOCUS_WIDGET_CARD_ID = 'focus-session';
+let desktopFocusWidgetAutoPinned = false;
+let desktopFocusWidgetControlListenerBound = false;
+
 function emitFocusDataChanged(detail = {}) {
     window.dispatchEvent(new CustomEvent('productivity:data-changed', {
         detail: {
@@ -88,6 +92,86 @@ function emitFocusDataChanged(detail = {}) {
             ...detail
         }
     }));
+}
+
+async function pinDesktopFocusWidget(options = {}) {
+    const minimizeOverlay = options.minimizeOverlay !== false;
+    const widgetsApi = window.electronAPI?.widgets;
+    if (!widgetsApi?.pin) return;
+
+    try {
+        await widgetsApi.pin(DESKTOP_FOCUS_WIDGET_CARD_ID, {
+            expanded: false,
+            width: 320,
+            collapsedHeight: 126,
+            expandedHeight: 220
+        });
+        desktopFocusWidgetAutoPinned = true;
+
+        if (minimizeOverlay && FocusState.isActive) {
+            hideFocusOverlay({ keepSessionRunning: true });
+            syncFocusStateToStorage();
+        }
+    } catch (error) {
+        console.warn('[Focus] Failed to pin floating widget:', error);
+    }
+}
+
+async function unpinDesktopFocusWidget() {
+    const widgetsApi = window.electronAPI?.widgets;
+    if (!widgetsApi?.unpin) return;
+    if (!desktopFocusWidgetAutoPinned) return;
+
+    try {
+        await widgetsApi.unpin(DESKTOP_FOCUS_WIDGET_CARD_ID);
+    } catch (_) {
+        // ignore
+    }
+
+    desktopFocusWidgetAutoPinned = false;
+}
+
+function handleDesktopFocusWidgetControl(payload) {
+    const action = String(payload?.action || '').trim();
+    if (!action) return;
+
+    if (action === 'toggle-pause') {
+        if (!FocusState.isActive) return;
+        if (FocusState.isPaused) {
+            resumeFocusSession();
+        } else {
+            pauseFocusSession();
+        }
+        return;
+    }
+
+    if (action === 'stop') {
+        if (FocusState.isActive) {
+            stopFocusSession();
+        }
+        return;
+    }
+
+    if (action === 'open-focus') {
+        if (typeof navigateTo === 'function') {
+            navigateTo('focus');
+        }
+        if (FocusState.isActive) {
+            showFocusOverlay();
+            syncFocusStateToStorage();
+        }
+    }
+}
+
+function bindDesktopFocusWidgetControls() {
+    if (desktopFocusWidgetControlListenerBound) return;
+    const onFocusControl = window.electronAPI?.widgets?.onFocusControl;
+    if (!onFocusControl) return;
+
+    desktopFocusWidgetControlListenerBound = true;
+    onFocusControl((payload) => {
+        handleDesktopFocusWidgetControl(payload);
+    });
 }
 
 function ensureFocusResumeSessionButton() {
@@ -501,6 +585,8 @@ async function checkActiveSession() {
 
                 FocusState.isOverlayMinimized = savedState.isOverlayMinimized !== false;
                 updateFocusResumeSessionButton();
+
+                await pinDesktopFocusWidget({ minimizeOverlay: true });
                 
                 // Don't show any toast here — the user will be prompted only when
                 // they try to start a new session (via checkPausedSessionBeforeStart).
@@ -550,6 +636,7 @@ async function checkActiveSession() {
                 FocusState.timerInterval = setInterval(timerTick, 1000);
 
                 syncFocusStateToStorage();
+                await pinDesktopFocusWidget({ minimizeOverlay: true });
                 showToast(
                     FocusState.isOverlayMinimized ? 'info' : 'success',
                     FocusState.isOverlayMinimized ? 'Free Focus Running' : 'Free Focus Restored!',
@@ -592,6 +679,7 @@ async function checkActiveSession() {
                 if (FocusState.timerInterval) clearInterval(FocusState.timerInterval);
                 FocusState.timerInterval = setInterval(timerTick, 1000);
                 syncFocusStateToStorage();
+                await pinDesktopFocusWidget({ minimizeOverlay: true });
 
                 const elapsedMin = savedState.selectedMinutes - Math.ceil(newRemaining / 60);
                 showToast(
@@ -1322,6 +1410,7 @@ async function startFocusSession(minutes = null, options = {}) {
     // Sync state immediately so popup can show it
     syncFocusStateToStorage();
     emitFocusDataChanged({ immediate: true, kind: 'session-started' });
+    await pinDesktopFocusWidget({ minimizeOverlay: true });
 
     // Notify background so it can schedule a completion alarm (MV3-safe)
     try {
@@ -1454,6 +1543,7 @@ async function startOpenEndedSession() {
     // Sync state to storage
     syncFocusStateToStorage();
     emitFocusDataChanged({ immediate: true, kind: 'session-started' });
+    await pinDesktopFocusWidget({ minimizeOverlay: true });
 
     // Notify background so it can keep state in sync; alarms are ignored for open-ended.
     try {
@@ -1917,6 +2007,8 @@ function setFocusPaused(paused) {
 
     // On resume, rebuild timestamps and show overlay
     if (!paused) {
+        const resumeToMinimized = FocusState.isOverlayMinimized === true;
+
         if (FocusState.isOpenEnded) {
             const elapsed = FocusState.pausedElapsedSeconds ?? FocusState.elapsedSeconds ?? 0;
             FocusState.startTimestamp = Date.now() - (elapsed * 1000);
@@ -1929,8 +2021,11 @@ function setFocusPaused(paused) {
             FocusState.pausedRemainingSeconds = null;
         }
 
-        // Show overlay when resuming
-        showFocusOverlay();
+        if (resumeToMinimized) {
+            hideFocusOverlay({ keepSessionRunning: true });
+        } else {
+            showFocusOverlay();
+        }
 
         // Ensure timer interval is running
         if (!FocusState.timerInterval) {
@@ -2765,6 +2860,7 @@ async function endFocusMode() {
 
     // Clear focus state from storage so popup knows session ended
     chrome.storage.local.remove(['focusState', 'focusSession']);
+    await unpinDesktopFocusWidget();
 
     // Reset page title
     document.title = 'Student Productivity Hub';
@@ -3276,6 +3372,8 @@ function createModal(id, content) {
 // INITIALIZATION
 // ============================================================================
 document.addEventListener('DOMContentLoaded', async () => {
+    bindDesktopFocusWidgetControls();
+
     // Load last used duration FIRST before setting up any listeners
     if (chrome.storage && chrome.storage.local) {
         try {
@@ -3756,6 +3854,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (!FocusState.timerInterval) {
                 FocusState.timerInterval = setInterval(timerTick, 1000);
             }
+
+            pinDesktopFocusWidget({ minimizeOverlay: true });
         }
         sendResponse({ success: true });
         return true;
@@ -3793,6 +3893,8 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             if (!FocusState.timerInterval) {
                 FocusState.timerInterval = setInterval(timerTick, 1000);
             }
+
+            pinDesktopFocusWidget({ minimizeOverlay: true });
         }
         // If session was stopped elsewhere
         else if (!newState && FocusState.isActive) {
@@ -3802,6 +3904,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
                 FocusState.timerInterval = null;
             }
             FocusState.isActive = false;
+            unpinDesktopFocusWidget();
         }
         // If pause state changed
         else if (newState && newState.isPaused !== FocusState.isPaused) {
