@@ -78,8 +78,8 @@
             title: 'Focus Session',
             collapsedCount: 1,
             expandedCount: 1,
-            collapsedHeight: 190,
-            expandedHeight: 250
+            collapsedHeight: 210,
+            expandedHeight: 280
         }
     };
 
@@ -556,17 +556,25 @@
 
         content.innerHTML = `
             <div class="widget-focus-card ${isPaused ? 'paused' : ''}">
-                <div class="widget-focus-target-label">Now focusing</div>
                 <div class="widget-focus-target" title="${esc(focusTarget)}">${esc(focusTarget)}</div>
                 <div class="widget-focus-control-wrap">
-                    <div class="widget-focus-split-control" role="group" aria-label="Focus controls">
-                        <button class="widget-focus-half is-toggle" data-action="focus-toggle" title="${isPaused ? 'Resume' : 'Pause'}">
+                    <div class="widget-focus-media-ring" aria-hidden="true"></div>
+                    <button
+                        class="widget-focus-media-btn is-toggle"
+                        data-action="focus-toggle"
+                        title="${isPaused ? 'Resume' : 'Pause'}"
+                        aria-label="${isPaused ? 'Resume session' : 'Pause session'}"
+                    >
                             <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
-                        </button>
-                        <button class="widget-focus-half is-stop" data-action="focus-stop" title="Stop Session">
-                            <i class="fas fa-stop"></i>
-                        </button>
-                    </div>
+                    </button>
+                    <button
+                        class="widget-focus-media-btn is-stop"
+                        data-action="focus-stop"
+                        title="Stop Session"
+                        aria-label="Stop session"
+                    >
+                        <i class="fas fa-stop"></i>
+                    </button>
                     <div class="widget-focus-clock-shell">
                         <div class="widget-focus-clock">${clock}</div>
                     </div>
@@ -805,6 +813,11 @@
         }
 
         config = CARD_CONFIG[cardId];
+
+        const container = document.getElementById('widget-container');
+        if (container) {
+            container.classList.add(`is-card-${cardId}`);
+        }
 
         // Set title
         const titleEl = document.getElementById('widget-title');

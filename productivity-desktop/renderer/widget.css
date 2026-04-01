@@ -156,6 +156,17 @@ body {
     padding: 10px 12px;
 }
 
+.widget-container.is-card-focus-session .widget-body {
+    overflow: hidden;
+}
+
+.widget-container.is-card-focus-session .widget-content {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    padding: 6px 8px 8px;
+}
+
 /* Scrollbar */
 .widget-body::-webkit-scrollbar {
     width: 4px;
@@ -604,22 +615,17 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 2px 2px 4px;
-}
-
-.widget-focus-target-label {
-    font-size: 0.6rem;
-    color: var(--widget-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 0 2px 2px;
+    width: 100%;
+    min-height: 100%;
 }
 
 .widget-focus-target {
     width: 100%;
-    max-width: 250px;
     text-align: center;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--widget-text-secondary);
     white-space: nowrap;
@@ -628,74 +634,83 @@ body {
 }
 
 .widget-focus-control-wrap {
-    width: 112px;
-    height: 112px;
+    width: 102px;
+    height: 102px;
     position: relative;
     display: grid;
     place-items: center;
 }
 
-.widget-focus-split-control {
+.widget-focus-media-ring {
     position: absolute;
-    inset: 0;
-    display: flex;
+    inset: 2px;
     border-radius: 50%;
-    overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    background: rgba(30, 41, 59, 0.8);
-    box-shadow: inset 0 0 18px rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    background: radial-gradient(circle at 32% 28%, #2a3158, #1b1f3d 72%);
+    box-shadow: inset 0 0 18px rgba(15, 23, 42, 0.55);
 }
 
-.widget-focus-half {
-    flex: 1;
-    border: none;
-    color: #e2e8f0;
+.widget-focus-media-btn {
+    position: absolute;
+    top: 50%;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    background: rgba(17, 24, 39, 0.9);
+    color: #f8fafc;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.95rem;
-    transition: background 0.15s ease, color 0.15s ease;
+    font-size: 0.82rem;
+    transform: translateY(-50%);
+    transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+    z-index: 3;
 }
 
-.widget-focus-half + .widget-focus-half {
-    border-left: 1px solid rgba(148, 163, 184, 0.35);
+.widget-focus-media-btn i {
+    line-height: 1;
 }
 
-.widget-focus-half.is-toggle {
-    background: rgba(99, 102, 241, 0.28);
+.widget-focus-media-btn.is-toggle {
+    left: 3px;
 }
 
-.widget-focus-half.is-toggle:hover {
-    background: rgba(99, 102, 241, 0.46);
-    color: #ffffff;
+.widget-focus-media-btn.is-toggle .fa-play {
+    transform: translateX(1px);
 }
 
-.widget-focus-half.is-stop {
-    background: rgba(239, 68, 68, 0.26);
+.widget-focus-media-btn.is-stop {
+    right: 3px;
 }
 
-.widget-focus-half.is-stop:hover {
-    background: rgba(239, 68, 68, 0.44);
-    color: #ffffff;
+.widget-focus-media-btn.is-toggle:hover {
+    background: rgba(79, 70, 229, 0.45);
+    border-color: rgba(129, 140, 248, 0.7);
+}
+
+.widget-focus-media-btn.is-stop:hover {
+    background: rgba(239, 68, 68, 0.4);
+    border-color: rgba(248, 113, 113, 0.72);
 }
 
 .widget-focus-clock-shell {
-    width: 74px;
-    height: 74px;
+    width: 62px;
+    height: 62px;
     border-radius: 50%;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    background: radial-gradient(circle at 32% 30%, #2a3158, #181b33 72%);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: radial-gradient(circle at 34% 30%, #2d3760, #171b33 70%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    z-index: 1;
+    z-index: 4;
     pointer-events: none;
-    box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.45);
+    box-shadow: 0 0 0 5px rgba(15, 23, 42, 0.53);
 }
 
 .widget-focus-clock {
-    font-size: 1.18rem;
+    font-size: 1.02rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: #ffffff;
@@ -708,14 +723,14 @@ body {
 }
 
 .widget-focus-status {
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     color: var(--widget-text-muted);
     text-align: center;
 }
 
 .widget-focus-progress-track {
-    width: min(170px, 100%);
-    height: 5px;
+    width: min(145px, 100%);
+    height: 4px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.1);
     overflow: hidden;

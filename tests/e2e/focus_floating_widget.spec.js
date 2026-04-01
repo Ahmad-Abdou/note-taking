@@ -137,6 +137,14 @@ test.describe('Focus floating widget', () => {
         .toContain('+01:05');
 
       await expect(page.locator('.widget-focus-target')).toContainText('Linear Algebra Review');
+
+      await expect
+        .poll(async () => await page.evaluate(() => {
+          const body = document.getElementById('widget-body');
+          if (!body) return true;
+          return body.scrollHeight <= (body.clientHeight + 1);
+        }), { timeout: 4000 })
+        .toBe(true);
     });
   });
 
