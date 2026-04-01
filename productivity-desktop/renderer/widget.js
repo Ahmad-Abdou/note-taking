@@ -78,7 +78,7 @@
             title: 'Focus Session',
             collapsedCount: 1,
             expandedCount: 1,
-            collapsedHeight: 210,
+            collapsedHeight: 220,
             expandedHeight: 280
         }
     };
@@ -542,45 +542,46 @@
             allowSign: isExtraTime
         });
 
-        let progressHtml = '';
+        let timerWrapStateClass = 'is-static';
+        let timerProgressStyle = '';
         if (!isOpenEnded && !isExtraTime) {
             const totalSeconds = Math.max(1, (Number(state.selectedMinutes) || 25) * 60);
             const remainingSeconds = Math.max(0, shownSeconds);
             const progressPct = Math.min(100, Math.max(0, ((totalSeconds - remainingSeconds) / totalSeconds) * 100));
-            progressHtml = `
-                <div class="widget-focus-progress-track">
-                    <div class="widget-focus-progress-fill" style="width:${progressPct.toFixed(1)}%"></div>
-                </div>
-            `;
+            timerWrapStateClass = 'has-progress';
+            timerProgressStyle = `style="--focus-progress:${progressPct.toFixed(1)}"`;
+        } else if (isOpenEnded || isExtraTime) {
+            timerWrapStateClass = 'is-indeterminate';
         }
 
         content.innerHTML = `
             <div class="widget-focus-card ${isPaused ? 'paused' : ''}">
                 <div class="widget-focus-target" title="${esc(focusTarget)}">${esc(focusTarget)}</div>
-                <div class="widget-focus-control-wrap">
+                <div class="widget-focus-timer-wrap ${timerWrapStateClass}" ${timerProgressStyle}>
                     <div class="widget-focus-media-ring" aria-hidden="true"></div>
+                    <div class="widget-focus-clock-shell">
+                        <div class="widget-focus-clock">${clock}</div>
+                    </div>
+                </div>
+                <div class="widget-focus-controls" role="group" aria-label="Focus controls">
                     <button
-                        class="widget-focus-media-btn is-toggle"
+                        class="widget-focus-control-btn is-primary"
                         data-action="focus-toggle"
                         title="${isPaused ? 'Resume' : 'Pause'}"
                         aria-label="${isPaused ? 'Resume session' : 'Pause session'}"
                     >
-                            <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
+                        <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
                     </button>
                     <button
-                        class="widget-focus-media-btn is-stop"
+                        class="widget-focus-control-btn is-stop"
                         data-action="focus-stop"
                         title="Stop Session"
                         aria-label="Stop session"
                     >
                         <i class="fas fa-stop"></i>
                     </button>
-                    <div class="widget-focus-clock-shell">
-                        <div class="widget-focus-clock">${clock}</div>
-                    </div>
                 </div>
                 <div class="widget-focus-status">${esc(status)}${isOpenEnded ? ' - Free focus' : ''}</div>
-                ${progressHtml}
             </div>
         `;
 

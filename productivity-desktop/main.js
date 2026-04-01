@@ -978,7 +978,7 @@ function createWidgetWindow(cardId, opts = {}) {
     const widgetSizeDefaults = {
         'focus-session': {
             width: 320,
-            collapsedHeight: 210,
+            collapsedHeight: 220,
             expandedHeight: 280,
             minimizedHeight: 40
         }

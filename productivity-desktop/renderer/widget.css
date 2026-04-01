@@ -164,7 +164,7 @@ body {
     display: flex;
     align-items: stretch;
     height: 100%;
-    padding: 6px 8px 8px;
+    padding: 8px 10px 8px;
 }
 
 /* Scrollbar */
@@ -617,123 +617,168 @@ body {
     align-items: center;
     justify-content: flex-start;
     gap: 6px;
-    padding: 0 2px 2px;
+    padding: 0 2px 1px;
     width: 100%;
     min-height: 100%;
+}
+
+.widget-container.is-card-focus-session {
+    background: linear-gradient(180deg, #171717, #0d0d0d);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.widget-container.is-card-focus-session .widget-titlebar {
+    background: #111111;
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+.widget-container.is-card-focus-session .widget-pin-icon {
+    color: #f59e0b;
 }
 
 .widget-focus-target {
     width: 100%;
     text-align: center;
-    font-size: 0.75rem;
+    font-size: 0.74rem;
     font-weight: 600;
-    color: var(--widget-text-secondary);
+    color: #d1d5db;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.widget-focus-control-wrap {
-    width: 102px;
-    height: 102px;
+.widget-focus-timer-wrap {
+    --focus-progress: 0;
+    width: 98px;
+    height: 98px;
     position: relative;
     display: grid;
     place-items: center;
 }
 
+.widget-focus-timer-wrap::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background: radial-gradient(circle at 36% 28%, #262626, #121212 74%);
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.6);
+}
+
 .widget-focus-media-ring {
     position: absolute;
-    inset: 2px;
+    inset: 0;
     border-radius: 50%;
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    background: radial-gradient(circle at 32% 28%, #2a3158, #1b1f3d 72%);
-    box-shadow: inset 0 0 18px rgba(15, 23, 42, 0.55);
+    background: conic-gradient(#f59e0b calc(var(--focus-progress) * 1%), rgba(148, 163, 184, 0.16) 0);
+    transform: rotate(-90deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+    opacity: 0;
+    transition: opacity 0.2s ease, background 0.35s ease;
 }
 
-.widget-focus-media-btn {
-    position: absolute;
-    top: 50%;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 1px solid rgba(148, 163, 184, 0.38);
-    background: rgba(17, 24, 39, 0.9);
-    color: #f8fafc;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.82rem;
-    transform: translateY(-50%);
-    transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
-    z-index: 3;
+.widget-focus-timer-wrap.has-progress .widget-focus-media-ring {
+    opacity: 1;
 }
 
-.widget-focus-media-btn i {
-    line-height: 1;
+.widget-focus-timer-wrap.is-indeterminate .widget-focus-media-ring {
+    opacity: 0.78;
+    background: conic-gradient(#f59e0b 24%, rgba(148, 163, 184, 0.15) 24% 100%);
+    animation: focusRingSpin 2.2s linear infinite;
 }
 
-.widget-focus-media-btn.is-toggle {
-    left: 3px;
-}
-
-.widget-focus-media-btn.is-toggle .fa-play {
-    transform: translateX(1px);
-}
-
-.widget-focus-media-btn.is-stop {
-    right: 3px;
-}
-
-.widget-focus-media-btn.is-toggle:hover {
-    background: rgba(79, 70, 229, 0.45);
-    border-color: rgba(129, 140, 248, 0.7);
-}
-
-.widget-focus-media-btn.is-stop:hover {
-    background: rgba(239, 68, 68, 0.4);
-    border-color: rgba(248, 113, 113, 0.72);
+.widget-focus-timer-wrap.is-static .widget-focus-media-ring {
+    opacity: 0.4;
+    background: conic-gradient(rgba(148, 163, 184, 0.22) 100%, rgba(148, 163, 184, 0.22) 100%);
 }
 
 .widget-focus-clock-shell {
-    width: 62px;
-    height: 62px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    background: radial-gradient(circle at 34% 30%, #2d3760, #171b33 70%);
+    border: 1px solid rgba(251, 191, 36, 0.42);
+    background: radial-gradient(circle at 34% 30%, #242424, #161616 72%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    z-index: 4;
+    z-index: 2;
     pointer-events: none;
-    box-shadow: 0 0 0 5px rgba(15, 23, 42, 0.53);
+    box-shadow: 0 0 0 5px rgba(10, 10, 10, 0.75);
 }
 
 .widget-focus-clock {
-    font-size: 1.02rem;
+    font-size: 1.12rem;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #ffffff;
+    color: #fbbf24;
     line-height: 1;
     text-align: center;
 }
 
 .widget-focus-card.paused .widget-focus-clock {
-    color: #fbbf24;
+    color: #fde68a;
+}
+
+.widget-focus-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 0;
+}
+
+.widget-focus-control-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: linear-gradient(180deg, #2a2a2a, #1d1d1d);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #f8fafc;
+    font-size: 0.82rem;
+    transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.widget-focus-control-btn i {
+    line-height: 1;
+}
+
+.widget-focus-control-btn.is-primary {
+    width: 36px;
+    height: 36px;
+    font-size: 0.88rem;
+}
+
+.widget-focus-control-btn.is-primary .fa-play {
+    transform: translateX(1px);
+}
+
+.widget-focus-control-btn.is-stop {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.58);
+}
+
+.widget-focus-control-btn:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(180deg, #303030, #232323);
+}
+
+.widget-focus-control-btn:active {
+    transform: translateY(0);
 }
 
 .widget-focus-status {
-    font-size: 0.64rem;
-    color: var(--widget-text-muted);
+    font-size: 0.62rem;
+    color: #9ca3af;
     text-align: center;
 }
 
 .widget-focus-progress-track {
-    width: min(145px, 100%);
-    height: 4px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.1);
-    overflow: hidden;
+    display: none;
 }
 
 .widget-focus-progress-fill {
@@ -770,6 +815,11 @@ body {
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes focusRingSpin {
+    from { transform: rotate(-90deg); }
+    to { transform: rotate(270deg); }
 }
 
 .widget-task-item,
