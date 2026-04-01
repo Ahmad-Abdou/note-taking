@@ -978,8 +978,8 @@ function createWidgetWindow(cardId, opts = {}) {
     const widgetSizeDefaults = {
         'focus-session': {
             width: 320,
-            collapsedHeight: 126,
-            expandedHeight: 220,
+            collapsedHeight: 190,
+            expandedHeight: 250,
             minimizedHeight: 40
         }
     };
@@ -991,8 +991,15 @@ function createWidgetWindow(cardId, opts = {}) {
     const x = opts.x ?? savedState.x;
     const y = opts.y ?? savedState.y;
     const width = savedState.width || opts.width || defaultSize.width || 340;
-    const collapsedHeight = savedState.collapsedHeight || opts.collapsedHeight || defaultSize.collapsedHeight || 90;
-    const expandedHeight = savedState.expandedHeight || opts.expandedHeight || defaultSize.expandedHeight || 420;
+    let collapsedHeight = savedState.collapsedHeight || opts.collapsedHeight || defaultSize.collapsedHeight || 90;
+    let expandedHeight = savedState.expandedHeight || opts.expandedHeight || defaultSize.expandedHeight || 420;
+
+    // Keep legacy saved focus-widget heights from being too small for current layout.
+    if (cardId === 'focus-session') {
+        collapsedHeight = Math.max(collapsedHeight, defaultSize.collapsedHeight || collapsedHeight);
+        expandedHeight = Math.max(expandedHeight, defaultSize.expandedHeight || expandedHeight);
+    }
+
     const minimizedHeight = savedState.minimizedHeight || opts.minimizedHeight || defaultSize.minimizedHeight || 40;
     const height = minimized ? minimizedHeight : (expanded ? expandedHeight : collapsedHeight);
 

@@ -78,8 +78,8 @@
             title: 'Focus Session',
             collapsedCount: 1,
             expandedCount: 1,
-            collapsedHeight: 126,
-            expandedHeight: 220
+            collapsedHeight: 190,
+            expandedHeight: 250
         }
     };
 
@@ -528,7 +528,9 @@
             }
         }
 
-        const sessionTitle = esc(state.taskTitle || 'Focus Session');
+        const focusTargetRaw = String(state.taskTitle || state.subject || '').trim();
+        const focusTarget = focusTargetRaw
+            || (state.isBreak ? 'Break Session' : (isOpenEnded ? 'Free Focus' : 'No linked task'));
         const status = isPaused ? 'Paused' : (isOpenEnded ? 'Running' : 'In progress');
         const clock = isOpenEnded
             ? formatClock(shownSeconds, { forceHours: shownSeconds >= 3600 })
@@ -548,21 +550,23 @@
 
         content.innerHTML = `
             <div class="widget-focus-card ${isPaused ? 'paused' : ''}">
-                <div class="widget-focus-title" title="${sessionTitle}">${sessionTitle}</div>
-                <div class="widget-focus-clock">${clock}</div>
-                <div class="widget-focus-status">${esc(status)}${isOpenEnded ? ' • Free focus' : ''}</div>
-                ${progressHtml}
-                <div class="widget-focus-actions">
-                    <button class="widget-focus-btn secondary" data-action="focus-open" title="Open Focus Page">
-                        <i class="fas fa-external-link-alt"></i>
-                    </button>
-                    <button class="widget-focus-btn" data-action="focus-toggle" title="${isPaused ? 'Resume' : 'Pause'}">
-                        <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
-                    </button>
-                    <button class="widget-focus-btn danger" data-action="focus-stop" title="Stop Session">
-                        <i class="fas fa-stop"></i>
-                    </button>
+                <div class="widget-focus-target-label">Now focusing</div>
+                <div class="widget-focus-target" title="${esc(focusTarget)}">${esc(focusTarget)}</div>
+                <div class="widget-focus-control-wrap">
+                    <div class="widget-focus-split-control" role="group" aria-label="Focus controls">
+                        <button class="widget-focus-half is-toggle" data-action="focus-toggle" title="${isPaused ? 'Resume' : 'Pause'}">
+                            <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
+                        </button>
+                        <button class="widget-focus-half is-stop" data-action="focus-stop" title="Stop Session">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                    </div>
+                    <div class="widget-focus-clock-shell">
+                        <div class="widget-focus-clock">${clock}</div>
+                    </div>
                 </div>
+                <div class="widget-focus-status">${esc(status)}${isOpenEnded ? ' - Free focus' : ''}</div>
+                ${progressHtml}
             </div>
         `;
 
