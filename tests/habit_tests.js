@@ -164,6 +164,83 @@ const habitTests = {
                 }
             },
             {
+                name: 'Outside-timeframe challenge completions can save thoughts',
+                fn: async () => {
+                    if (typeof window.HabitTrackerCalendar !== 'function') {
+                        return true;
+                    }
+
+                    const key = `habitTrackerCalendar_test_${Date.now()}`;
+                    const challengeGoalId = 'daily-challenge--outside-note';
+                    const today = new Date();
+                    const outsideDate = new Date(today);
+                    outsideDate.setDate(outsideDate.getDate() - 1);
+
+                    const toIso = (d) => {
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        return `${y}-${m}-${day}`;
+                    };
+
+                    const outsideIso = toIso(outsideDate);
+                    const todayIso = toIso(today);
+
+                    await setStorage({
+                        [key]: {
+                            version: 2,
+                            goalsMeta: [{ id: challengeGoalId, label: 'Daily Challenge' }],
+                            goals: {
+                                [challengeGoalId]: {
+                                    startDate: outsideIso,
+                                    endDate: todayIso,
+                                    completed: { [outsideIso]: 1 },
+                                    missedReasons: {},
+                                    challengeDayStatus: { [outsideIso]: 'outside' },
+                                    challengeTimeWindow: { start: '08:00', end: '10:00' }
+                                }
+                            }
+                        }
+                    });
+
+                    const mount = document.createElement('div');
+                    mount.id = `mount-${Date.now()}`;
+                    document.body.appendChild(mount);
+
+                    const widget = new window.HabitTrackerCalendar({
+                        mountEl: mount,
+                        storageKey: key,
+                        goals: [{ id: challengeGoalId, label: 'Daily Challenge' }]
+                    });
+
+                    await widget.init();
+
+                    let seenContext = null;
+                    widget._showMissedReasonsModal = async ({ context }) => {
+                        seenContext = context;
+                        return { action: 'save', reasons: ['Finished after timeframe due to class'] };
+                    };
+
+                    const cell = mount.querySelector(`button.habit-cell[data-date="${outsideIso}"]`);
+                    if (!cell) throw new Error('Outside-timeframe challenge cell not found');
+
+                    await widget._handleGridClick({ target: cell });
+
+                    const stored = await getStorage(key);
+                    const savedThoughts = stored?.goals?.[challengeGoalId]?.missedReasons?.[outsideIso] || [];
+
+                    if (seenContext !== 'outside') {
+                        throw new Error(`Expected outside context modal, got ${seenContext}`);
+                    }
+                    if (!Array.isArray(savedThoughts) || savedThoughts[0] !== 'Finished after timeframe due to class') {
+                        throw new Error('Expected outside-timeframe thoughts to be saved');
+                    }
+
+                    mount.remove();
+                    return true;
+                }
+            },
+            {
                 name: 'Can delete a habit (while keeping at least one)',
                 fn: async () => {
                     if (typeof window.HabitTrackerCalendar !== 'function') {

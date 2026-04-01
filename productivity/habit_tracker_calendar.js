@@ -472,7 +472,7 @@
 
             const subtitle = document.createElement('div');
             subtitle.className = 'habit-tracker-subtitle';
-            subtitle.textContent = 'Click a day to mark complete. Click missed days to log reasons.';
+            subtitle.textContent = 'Click a day to mark complete. Click missed days or outside-timeframe challenge completions to log thoughts.';
 
             titleWrap.appendChild(title);
             titleWrap.appendChild(subtitle);
@@ -844,9 +844,17 @@
 
                     if (isDone && challengeOutcome === 'outside') {
                         btn.classList.add('is-challenge-outside-window');
-                        btn.title = windowLabel
-                            ? `${iso} — Done outside timeframe (${windowLabel})`
-                            : `${iso} — Done outside timeframe`;
+                        if (reasonCount > 0) {
+                            btn.classList.add('has-missed-reasons');
+                            btn.setAttribute('data-reason-count', String(reasonCount));
+                            btn.title = windowLabel
+                                ? `${iso} — Done outside timeframe (${windowLabel}) - ${reasonCount} thought${reasonCount === 1 ? '' : 's'}`
+                                : `${iso} — Done outside timeframe - ${reasonCount} thought${reasonCount === 1 ? '' : 's'}`;
+                        } else {
+                            btn.title = windowLabel
+                                ? `${iso} — Done outside timeframe (${windowLabel})`
+                                : `${iso} — Done outside timeframe`;
+                        }
                     } else if (isDone) {
                         btn.classList.add('is-challenge-within-window');
                         btn.title = windowLabel
@@ -966,10 +974,15 @@
 
                 const completed = goalData.completed && typeof goalData.completed === 'object' ? goalData.completed : {};
                 const reasonsMap = goalData.missedReasons && typeof goalData.missedReasons === 'object' ? goalData.missedReasons : {};
+                const challengeDayStatus = goalData.challengeDayStatus && typeof goalData.challengeDayStatus === 'object'
+                    ? goalData.challengeDayStatus
+                    : {};
 
                 for (const [dateIso, reasonList] of Object.entries(reasonsMap)) {
                     if (!this._isIsoDate(dateIso)) continue;
-                    if (completed[dateIso]) continue;
+                    const isCompleted = !!completed[dateIso];
+                    const isOutsideCompletion = isCompleted && challengeDayStatus[dateIso] === 'outside';
+                    if (isCompleted && !isOutsideCompletion) continue;
 
                     const reasons = this._normalizeReasonList(reasonList);
                     if (reasons.length === 0) continue;
@@ -978,7 +991,8 @@
                         goalId: goal.id,
                         goalLabel: goal.label,
                         dateIso,
-                        reasons
+                        reasons,
+                        entryType: isOutsideCompletion ? 'outside' : 'missed'
                     });
                 }
             }
@@ -1002,13 +1016,13 @@
 
             const title = document.createElement('div');
             title.className = 'habit-reasons-title';
-            title.textContent = 'Missed-Day Reasons Timeline';
+            title.textContent = 'Thoughts Timeline';
 
             const subtitle = document.createElement('div');
             subtitle.className = 'habit-reasons-subtitle';
             subtitle.textContent = entries.length > 0
-                ? `${entries.length} saved missed-day note${entries.length === 1 ? '' : 's'} across all habits.`
-                : 'No missed-day reasons saved yet.';
+                ? `${entries.length} saved thought${entries.length === 1 ? '' : 's'} across all habits.`
+                : 'No missed-day reasons or outside-timeframe thoughts saved yet.';
 
             header.appendChild(title);
             header.appendChild(subtitle);
@@ -1017,7 +1031,7 @@
             if (entries.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'habit-reasons-empty';
-                empty.textContent = 'Click any missed day in the calendar to add reasons here.';
+                empty.textContent = 'Click any missed day or outside-timeframe completion in the calendar to add thoughts here.';
                 wrap.appendChild(empty);
                 return wrap;
             }
@@ -1032,6 +1046,7 @@
                 item.className = 'habit-reason-item';
                 item.setAttribute('data-goal-id', entry.goalId);
                 item.setAttribute('data-date', entry.dateIso);
+                item.setAttribute('data-entry-type', entry.entryType || 'missed');
 
                 const head = document.createElement('div');
                 head.className = 'habit-reason-item-head';
@@ -1040,11 +1055,26 @@
                 date.className = 'habit-reason-date';
                 date.textContent = entry.dateIso;
 
+                const typeBadge = document.createElement('span');
+                typeBadge.className = 'habit-reason-type';
+                if (entry.entryType === 'outside') {
+                    typeBadge.classList.add('is-outside');
+                    typeBadge.textContent = 'Outside Timeframe';
+                } else {
+                    typeBadge.classList.add('is-missed');
+                    typeBadge.textContent = 'Missed Day';
+                }
+
+                const meta = document.createElement('div');
+                meta.className = 'habit-reason-meta';
+                meta.appendChild(date);
+                meta.appendChild(typeBadge);
+
                 const goal = document.createElement('span');
                 goal.className = 'habit-reason-goal';
                 goal.textContent = entry.goalLabel;
 
-                head.appendChild(date);
+                head.appendChild(meta);
                 head.appendChild(goal);
 
                 const ul = document.createElement('ul');
@@ -1057,7 +1087,9 @@
 
                 const hint = document.createElement('div');
                 hint.className = 'habit-reason-edit-hint';
-                hint.textContent = 'Click to edit or mark complete';
+                hint.textContent = entry.entryType === 'outside'
+                    ? 'Click to edit thoughts'
+                    : 'Click to edit or mark complete';
 
                 item.appendChild(head);
                 item.appendChild(ul);
@@ -1075,6 +1107,7 @@
 
             const goalId = item.getAttribute('data-goal-id');
             const dateIso = item.getAttribute('data-date');
+            const entryType = item.getAttribute('data-entry-type') === 'outside' ? 'outside' : 'missed';
             if (!goalId || !this._isIsoDate(dateIso)) return;
 
             const goalData = this.state.data.goals[goalId];
@@ -1087,7 +1120,8 @@
             const result = await this._showMissedReasonsModal({
                 dateIso,
                 reasons: this._normalizeReasonList(goalData.missedReasons[dateIso]),
-                allowMarkComplete: !isChallengeTiming
+                allowMarkComplete: !isChallengeTiming && entryType !== 'outside',
+                context: entryType
             });
 
             if (!result) return;
@@ -1120,7 +1154,11 @@
 
                 await this._save();
                 this.render();
-                this._flashInfo(result.reasons.length > 0 ? 'Missed-day reasons saved.' : 'Missed-day reasons cleared.');
+                if (entryType === 'outside') {
+                    this._flashInfo(result.reasons.length > 0 ? 'Outside-timeframe thoughts saved.' : 'Outside-timeframe thoughts cleared.');
+                } else {
+                    this._flashInfo(result.reasons.length > 0 ? 'Missed-day reasons saved.' : 'Missed-day reasons cleared.');
+                }
                 this._emitDataChanged('habit', { immediate: true });
             }
         }
@@ -1243,12 +1281,14 @@
             const isDone = !!goalData.completed[iso];
             const isPast = iso < today;
             const reasonsForDay = this._normalizeReasonList(goalData.missedReasons[iso]);
+            const challengeOutcome = goalData.challengeDayStatus?.[iso];
 
             if (isPast && !isDone) {
                 const result = await this._showMissedReasonsModal({
                     dateIso: iso,
                     reasons: reasonsForDay,
-                    allowMarkComplete: !isChallengeTiming
+                    allowMarkComplete: !isChallengeTiming,
+                    context: 'missed'
                 });
 
                 if (!result) return;
@@ -1281,6 +1321,31 @@
                     await this._save();
                     this.render();
                     this._flashInfo(result.reasons.length > 0 ? 'Missed-day reasons saved.' : 'Missed-day reasons cleared.');
+                    this._emitDataChanged('habit', { immediate: true });
+                }
+                return;
+            }
+
+            if (isChallengeTiming && isDone && challengeOutcome === 'outside') {
+                const result = await this._showMissedReasonsModal({
+                    dateIso: iso,
+                    reasons: reasonsForDay,
+                    allowMarkComplete: false,
+                    context: 'outside'
+                });
+
+                if (!result) return;
+
+                if (result.action === 'save') {
+                    if (result.reasons.length > 0) {
+                        goalData.missedReasons[iso] = result.reasons;
+                    } else {
+                        delete goalData.missedReasons[iso];
+                    }
+
+                    await this._save();
+                    this.render();
+                    this._flashInfo(result.reasons.length > 0 ? 'Outside-timeframe thoughts saved.' : 'Outside-timeframe thoughts cleared.');
                     this._emitDataChanged('habit', { immediate: true });
                 }
                 return;
@@ -1607,7 +1672,7 @@
             });
         }
 
-        _showMissedReasonsModal({ dateIso, reasons, allowMarkComplete = true } = {}) {
+        _showMissedReasonsModal({ dateIso, reasons, allowMarkComplete = true, context = 'missed' } = {}) {
             return new Promise((resolve) => {
                 let overlay = document.getElementById('ht-missed-reasons-modal');
                 if (!overlay) {
@@ -1619,22 +1684,32 @@
 
                 const safeDate = this._isIsoDate(dateIso) ? dateIso : this._isoToday();
                 const initialReasons = this._normalizeReasonList(reasons);
+                const isOutsideContext = context === 'outside';
+                const modalTitle = isOutsideContext ? 'Outside-Timeframe Thoughts' : 'Missed Day Reasons';
+                const helperText = isOutsideContext
+                    ? 'Write one thought per line (this creates a list).'
+                    : 'Write one reason per line (this creates a list).';
+                const emptyText = isOutsideContext ? 'No thoughts listed yet.' : 'No reasons listed yet.';
+                const saveActionLabel = isOutsideContext ? 'Save Thoughts' : 'Save Reasons';
+                const placeholder = isOutsideContext
+                    ? 'Example:\nHad to finish after the allowed hours\nI was helping family earlier\nWork shifted later than planned'
+                    : 'Example:\nFelt sick\nUnexpected family event\nHeavy workload from school';
 
                 overlay.innerHTML = `
                     <div class="modal-content" style="max-width:520px;">
                         <div class="modal-header">
-                            <h2>Missed Day Reasons</h2>
+                            <h2>${modalTitle}</h2>
                             <button class="close-modal-btn" type="button">&times;</button>
                         </div>
                         <div class="modal-body" style="padding:16px 20px;">
                             <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Date: ${safeDate}</div>
-                            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">Write one reason per line (this creates a list).</div>
+                            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">${helperText}</div>
                             <div id="ht-missed-reasons-preview" style="margin-bottom:10px;"></div>
-                            <textarea id="ht-missed-reasons-input" rows="7" style="width:100%;resize:vertical;" placeholder="Example:\nFelt sick\nUnexpected family event\nHeavy workload from school"></textarea>
+                            <textarea id="ht-missed-reasons-input" rows="7" style="width:100%;resize:vertical;" placeholder="${placeholder}"></textarea>
                             <div class="modal-actions" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
                                 <button type="button" class="btn-secondary" data-action="cancel">Cancel</button>
                                 ${allowMarkComplete ? '<button type="button" class="habit-ghost" data-action="mark-complete">Mark Complete</button>' : ''}
-                                <button type="button" class="btn-primary" data-action="save">Save Reasons</button>
+                                <button type="button" class="btn-primary" data-action="save">${saveActionLabel}</button>
                             </div>
                         </div>
                     </div>
@@ -1657,7 +1732,7 @@
                         const empty = document.createElement('div');
                         empty.style.fontSize = '12px';
                         empty.style.color = 'var(--text-muted)';
-                        empty.textContent = 'No reasons listed yet.';
+                        empty.textContent = emptyText;
                         preview.appendChild(empty);
                         return;
                     }

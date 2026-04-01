@@ -692,6 +692,40 @@
     color: var(--text-primary);
 }
 
+#habit-tracker-root .habit-reason-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+#habit-tracker-root .habit-reason-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+#habit-tracker-root .habit-reason-type.is-missed {
+    color: #fecaca;
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+#habit-tracker-root .habit-reason-type.is-outside {
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.18);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
 #habit-tracker-root .habit-reason-goal {
     font-size: 11px;
     color: var(--text-muted);

@@ -979,19 +979,22 @@ function createWidgetWindow(cardId, opts = {}) {
         'focus-session': {
             width: 320,
             collapsedHeight: 126,
-            expandedHeight: 220
+            expandedHeight: 220,
+            minimizedHeight: 40
         }
     };
 
     const defaultSize = widgetSizeDefaults[cardId] || {};
 
     const expanded = opts.expanded ?? savedState.expanded ?? false;
+    const minimized = opts.minimized ?? savedState.minimized ?? false;
     const x = opts.x ?? savedState.x;
     const y = opts.y ?? savedState.y;
     const width = savedState.width || opts.width || defaultSize.width || 340;
     const collapsedHeight = savedState.collapsedHeight || opts.collapsedHeight || defaultSize.collapsedHeight || 90;
     const expandedHeight = savedState.expandedHeight || opts.expandedHeight || defaultSize.expandedHeight || 420;
-    const height = expanded ? expandedHeight : collapsedHeight;
+    const minimizedHeight = savedState.minimizedHeight || opts.minimizedHeight || defaultSize.minimizedHeight || 40;
+    const height = minimized ? minimizedHeight : (expanded ? expandedHeight : collapsedHeight);
 
     const winOpts = {
         width,
@@ -1049,9 +1052,11 @@ function createWidgetWindow(cardId, opts = {}) {
         ...(all[cardId] || {}),
         pinned: true,
         expanded,
+        minimized,
         width,
         collapsedHeight,
-        expandedHeight
+        expandedHeight,
+        minimizedHeight
     };
     if (typeof x === 'number' && typeof y === 'number') {
         all[cardId].x = x;
@@ -1138,7 +1143,7 @@ ipcMain.handle('unpin-widget', (event, cardId) => {
 });
 
 // IPC: Resize widget window (expand/collapse)
-ipcMain.handle('widget-resize', (event, cardId, width, height, expanded) => {
+ipcMain.handle('widget-resize', (event, cardId, width, height, expanded, minimized = false) => {
     try {
         const win = widgetWindows.get(cardId);
         if (win && !win.isDestroyed()) {
@@ -1153,7 +1158,8 @@ ipcMain.handle('widget-resize', (event, cardId, width, height, expanded) => {
             ...(all[cardId] || {}),
             width,
             expanded,
-            [expanded ? 'expandedHeight' : 'collapsedHeight']: height
+            minimized: minimized === true,
+            [minimized ? 'minimizedHeight' : (expanded ? 'expandedHeight' : 'collapsedHeight')]: height
         };
         store.set('pinned-widgets', all);
         return { success: true };

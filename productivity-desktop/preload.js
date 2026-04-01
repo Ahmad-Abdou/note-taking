@@ -77,7 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     widgets: {
         pin: (cardId, opts) => ipcRenderer.invoke('pin-widget', cardId, opts),
         unpin: (cardId) => ipcRenderer.invoke('unpin-widget', cardId),
-        resize: (cardId, width, height, expanded) => ipcRenderer.invoke('widget-resize', cardId, width, height, expanded),
+        resize: (cardId, width, height, expanded, minimized = false) => ipcRenderer.invoke('widget-resize', cardId, width, height, expanded, minimized),
         getPinned: () => ipcRenderer.invoke('get-pinned-widgets'),
         notifyDataChanged: (cardId) => ipcRenderer.send('widget-data-written', { cardId }),
         notifyMainDataChanged: (cardId) => ipcRenderer.send('main-data-written', { cardId }),

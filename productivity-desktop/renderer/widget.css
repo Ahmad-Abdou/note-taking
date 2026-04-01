@@ -51,6 +51,10 @@ body {
     border-color: var(--widget-border-active);
 }
 
+.widget-container.is-minimized .widget-body {
+    display: none;
+}
+
 /* ===== Title Bar ===== */
 
 .widget-titlebar {
@@ -119,6 +123,15 @@ body {
 .widget-btn.close-btn:hover {
     background: rgba(239, 68, 68, 0.3);
     color: var(--widget-danger);
+}
+
+.widget-btn.minimize-btn:hover {
+    background: rgba(16, 185, 129, 0.25);
+    color: var(--widget-success);
+}
+
+.widget-btn.minimize-btn i {
+    transform: translateY(-1px);
 }
 
 .widget-btn.expand-btn i {

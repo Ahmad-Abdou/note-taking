@@ -86,6 +86,7 @@
     // ===== State =====
     let cardId = null;
     let expanded = false;
+    let fullyMinimized = false;
     let config = null;
     let focusRenderInterval = null;
 
@@ -734,27 +735,54 @@
 
     // ===== Expand / Collapse =====
 
-    function toggleExpand() {
-        expanded = !expanded;
+    function applyWidgetWindowState({ syncWindow = true } = {}) {
         const container = document.getElementById('widget-container');
-        const icon = document.getElementById('widget-expand-icon');
-
-        if (expanded) {
-            container?.classList.add('expanded');
-        } else {
-            container?.classList.remove('expanded');
+        if (container) {
+            container.classList.toggle('expanded', expanded && !fullyMinimized);
+            container.classList.toggle('is-minimized', fullyMinimized);
         }
 
-        const width = 340;
-        const height = expanded ? config.expandedHeight : config.collapsedHeight;
+        const minimizeIcon = document.getElementById('widget-minimize-icon');
+        const minimizeBtn = document.getElementById('widget-minimize-btn');
+        if (minimizeIcon) {
+            minimizeIcon.className = fullyMinimized ? 'fas fa-window-maximize' : 'fas fa-window-minimize';
+        }
+        if (minimizeBtn) {
+            minimizeBtn.title = fullyMinimized ? 'Restore' : 'Fully Minimize';
+            minimizeBtn.setAttribute('aria-label', fullyMinimized ? 'Restore widget' : 'Fully minimize widget');
+        }
 
-        // Resize via IPC
+        if (!syncWindow) return;
+
+        const width = Math.max(280, Math.floor(window.innerWidth || config?.width || 340));
+        const height = fullyMinimized
+            ? (config?.minimizedHeight || 40)
+            : (expanded ? config.expandedHeight : config.collapsedHeight);
+
         if (window.electronAPI?.widgets?.resize) {
-            window.electronAPI.widgets.resize(cardId, width, height, expanded);
+            window.electronAPI.widgets.resize(cardId, width, height, expanded, fullyMinimized);
         }
+    }
+
+    function toggleExpand() {
+        if (fullyMinimized) {
+            fullyMinimized = false;
+        }
+
+        expanded = !expanded;
+        applyWidgetWindowState();
 
         // Re-render with new item count
         render();
+    }
+
+    function toggleFullMinimize() {
+        fullyMinimized = !fullyMinimized;
+        applyWidgetWindowState();
+
+        if (!fullyMinimized) {
+            render();
+        }
     }
 
     // ===== Init =====
@@ -783,11 +811,13 @@
         if (window.electronAPI?.widgets?.getPinned) {
             try {
                 const pinned = await window.electronAPI.widgets.getPinned();
-                if (pinned[cardId]?.expanded) {
-                    expanded = true;
-                    document.getElementById('widget-container')?.classList.add('expanded');
-                }
+                const savedState = pinned[cardId] || {};
+                expanded = savedState.expanded === true;
+                fullyMinimized = savedState.minimized === true;
+                applyWidgetWindowState({ syncWindow: false });
             } catch (_) { /* ignore */ }
+        } else {
+            applyWidgetWindowState({ syncWindow: false });
         }
 
         // Bind expand button
@@ -796,6 +826,15 @@
             expandBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 toggleExpand();
+            });
+        }
+
+        // Bind full-minimize button
+        const minimizeBtn = document.getElementById('widget-minimize-btn');
+        if (minimizeBtn) {
+            minimizeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFullMinimize();
             });
         }
 
@@ -814,7 +853,9 @@
         if (window.electronAPI?.widgets?.onDataChanged) {
             window.electronAPI.widgets.onDataChanged((payload) => {
                 // Re-render when data changes
-                render();
+                if (!fullyMinimized) {
+                    render();
+                }
             });
         }
 
