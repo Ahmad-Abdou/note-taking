@@ -8,7 +8,7 @@
     "postinstall": "node scripts/patch-metro-hmr-url.js",
     "fix:metro-hmr": "node scripts/patch-metro-hmr-url.js",
     "android": "expo run:android",
-    "android:dev": "expo run:android",
+    "android:dev": "node scripts/run-android-dev-smart.js",
     "android:dev:local": "powershell -ExecutionPolicy Bypass -File scripts/run-local-android-dev.ps1",
     "android:dev:local:fast": "powershell -ExecutionPolicy Bypass -File scripts/run-local-android-dev.ps1 -SkipInstall",
     "android:build": "cd android && gradlew.bat assembleDebug",

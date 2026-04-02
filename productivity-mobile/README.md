@@ -36,6 +36,8 @@ npx expo start --tunnel
 
 If your project is inside OneDrive, Gradle may fail with "Unable to delete directory ..." during Android builds.
 
+`npm run android:dev` now auto-detects OneDrive paths on Windows and automatically uses the local mirror workflow below.
+
 Use the local runner command from this folder:
 
 ```bash

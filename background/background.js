@@ -7,6 +7,18 @@ let blockerState = {
     whitelist: []
 };
 
+let focusBlockingOverrideActive = false;
+
+const BLOCKER_RULE_MIN_ID = 20000;
+const BLOCKER_RULE_MAX_ID = 29999;
+
+function isBlockerRuleId(id) {
+    if (!Number.isInteger(id)) return false;
+    // Keep compatibility with older blocker rules that used low IDs.
+    if (id > 0 && id < 10000) return true;
+    return id >= BLOCKER_RULE_MIN_ID && id <= BLOCKER_RULE_MAX_ID;
+}
+
 // ============================================================================
 // WEBSITE TIME TRACKING
 // ============================================================================
@@ -612,7 +624,9 @@ async function applyBlockRules() {
     try {
         // Get existing rules
         const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-        const existingRuleIds = existingRules.map(rule => rule.id);
+        const existingRuleIds = existingRules
+            .map(rule => rule.id)
+            .filter(isBlockerRuleId);
 
         // Remove existing rules
         if (existingRuleIds.length > 0) {
@@ -636,7 +650,7 @@ async function applyBlockRules() {
         }
 
         const rules = [];
-        let ruleId = 1;
+        let ruleId = BLOCKER_RULE_MIN_ID;
 
         validSites.forEach((url) => {
             // Rule for *.domain.com/*
@@ -665,11 +679,77 @@ async function applyBlockRules() {
     }
 }
 
+function normalizeBlockedHost(site) {
+    const raw = typeof site === 'string' ? site : site?.url;
+    if (!raw) return '';
+
+    return String(raw)
+        .trim()
+        .toLowerCase()
+        .replace(/^[a-z]+:\/\//, '')
+        .replace(/^www\./, '')
+        .replace(/[/?#].*$/, '');
+}
+
+function getEnabledBlockedHosts() {
+    return (blockerState.blockedSites || [])
+        .filter(site => site && (typeof site !== 'object' || site.isEnabled !== false))
+        .map(normalizeBlockedHost)
+        .filter(Boolean);
+}
+
+function findMatchedBlockedHost(rawUrl) {
+    let hostname = '';
+    try {
+        hostname = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, '');
+    } catch (_) {
+        return null;
+    }
+
+    for (const host of getEnabledBlockedHosts()) {
+        if (hostname === host || hostname.endsWith(`.${host}`)) {
+            return host;
+        }
+    }
+
+    return null;
+}
+
+async function redirectOpenBlockedTabs() {
+    if (!blockerState.enabled) return;
+
+    try {
+        const tabs = await chrome.tabs.query({});
+        const blockedPageBase = chrome.runtime.getURL('/productivity/blocked.html');
+
+        for (const tab of tabs) {
+            if (!tab?.id || !tab?.url) continue;
+            if (!/^https?:\/\//i.test(tab.url)) continue;
+
+            const blockedHost = findMatchedBlockedHost(tab.url);
+            if (!blockedHost) continue;
+
+            const redirectUrl = `${blockedPageBase}?site=${encodeURIComponent(blockedHost)}`;
+            if (tab.url.startsWith(blockedPageBase)) continue;
+
+            try {
+                await chrome.tabs.update(tab.id, { url: redirectUrl });
+            } catch (_) {
+                // Ignore tab races (closed/replaced tabs)
+            }
+        }
+    } catch (error) {
+        console.error('[Blocker] Failed to redirect open blocked tabs:', error);
+    }
+}
+
 // Clear all blocking rules
 async function clearBlockRules() {
     try {
         const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-        const existingRuleIds = existingRules.map(rule => rule.id);
+        const existingRuleIds = existingRules
+            .map(rule => rule.id)
+            .filter(isBlockerRuleId);
 
         if (existingRuleIds.length > 0) {
             await chrome.declarativeNetRequest.updateDynamicRules({
@@ -775,11 +855,67 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    // Temporarily enforce blocker rules while a focus session is running.
+    // This does not mutate the user's saved blockerEnabled preference.
+    if (request.type === 'ENABLE_FOCUS_BLOCKING') {
+        (async () => {
+            try {
+                const result = await chrome.storage.local.get(['blockedSites', 'blockerWhitelist']);
+                blockerState.blockedSites = result.blockedSites || [];
+                blockerState.whitelist = result.blockerWhitelist || [];
+
+                focusBlockingOverrideActive = true;
+                blockerState.enabled = true;
+
+                await applyBlockRules();
+                await redirectOpenBlockedTabs();
+
+                sendResponse({
+                    success: true,
+                    blockedCount: getEnabledBlockedHosts().length
+                });
+            } catch (error) {
+                console.error('[Blocker] ENABLE_FOCUS_BLOCKING failed:', error);
+                sendResponse({ success: false, error: String(error?.message || error) });
+            }
+        })();
+
+        return true;
+    }
+
+    if (request.type === 'DISABLE_FOCUS_BLOCKING') {
+        (async () => {
+            try {
+                const result = await chrome.storage.local.get(['blockerEnabled', 'blockedSites', 'blockerWhitelist']);
+                blockerState.blockedSites = result.blockedSites || [];
+                blockerState.whitelist = result.blockerWhitelist || [];
+
+                // Restore user's saved blocker preference after focus ends.
+                blockerState.enabled = result.blockerEnabled === true;
+                focusBlockingOverrideActive = false;
+
+                if (blockerState.enabled) {
+                    await applyBlockRules();
+                } else {
+                    await clearBlockRules();
+                }
+
+                sendResponse({ success: true });
+            } catch (error) {
+                console.error('[Blocker] DISABLE_FOCUS_BLOCKING failed:', error);
+                sendResponse({ success: false, error: String(error?.message || error) });
+            }
+        })();
+
+        return true;
+    }
+
     // Handle get blocker status
     if (request.type === 'GET_BLOCKER_STATUS') {
         sendResponse({
             enabled: blockerState.enabled,
-            blockedCount: blockerState.blockedSites.length
+            blockedCount: blockerState.blockedSites.length,
+            focusOverrideActive: focusBlockingOverrideActive
         });
         return true;
     }

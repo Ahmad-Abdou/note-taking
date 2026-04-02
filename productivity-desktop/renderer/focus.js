@@ -2116,6 +2116,30 @@ function updatePauseButton() {
     }
 }
 
+function ensureFocusSessionForPersistence() {
+    if (FocusState.currentSession && FocusState.currentSession.id) {
+        return FocusState.currentSession;
+    }
+
+    const now = Date.now();
+    const fallbackStart = typeof FocusState.startTimestamp === 'number'
+        ? FocusState.startTimestamp
+        : (now - Math.max(0, (FocusState.selectedMinutes || 0) * 60 * 1000));
+
+    FocusState.currentSession = {
+        id: `restored_${now}`,
+        type: FocusState.isOpenEnded ? 'open-ended' : getSessionType(FocusState.selectedMinutes || 25),
+        plannedDurationMinutes: FocusState.isOpenEnded ? 0 : (FocusState.selectedMinutes || 25),
+        linkedTaskId: FocusState.pendingLinkedTaskId || null,
+        linkedTaskTitle: FocusState.pendingLinkedTaskTitle || '',
+        subject: '',
+        startTime: new Date(fallbackStart).toISOString(),
+        status: 'in-progress'
+    };
+
+    return FocusState.currentSession;
+}
+
 async function stopFocusSession() {
     if (FocusState.isStopping) return;
     FocusState.isStopping = true;
@@ -2142,12 +2166,22 @@ async function stopFocusSession() {
         return;
     }
 
-    // If currently in extra time, finalize without the extra and stop
+    // If currently in extra time, save it and move directly into a break.
     if (FocusState.isExtraTime) {
         closeModal('session-complete-modal');
-        await finalizeExtraTimeSession(false);
-        await endFocusMode();
-        showToast('info', 'Focus Stopped', 'Session ended. Extra time was discarded.');
+
+        const pendingPomodoros = (FocusState.completedPomodoros || 0) + 1;
+        const isLongBreak = pendingPomodoros % FocusState.settings.longBreakInterval === 0;
+        const breakDurationSelect = document.getElementById('break-duration');
+        const userBreakDuration = breakDurationSelect ? parseInt(breakDurationSelect.value, 10) : null;
+        const breakMinutes = isLongBreak
+            ? (FocusState.settings.longBreakMinutes || 15)
+            : (userBreakDuration || FocusState.settings.shortBreakMinutes || 5);
+
+        await finalizeExtraTimeSession(true);
+        startBreak(breakMinutes);
+
+        showToast('success', 'Break Started', `Session saved. Starting a ${breakMinutes} minute break.`);
         loadFocusPage().catch(e => console.error('Failed to reload focus page:', e));
         FocusState.isStopping = false;
         return;
@@ -2215,15 +2249,16 @@ async function stopFocusSession() {
     const shouldSaveAnything = (addTime && elapsedMinutes > 0) || shouldCountSession;
 
     // Save session (completed for open-ended, completed/interrupted for countdown based on user choice)
-    if (FocusState.currentSession && elapsedMinutes > 0 && shouldSaveAnything) {
-        FocusState.currentSession.status = FocusState.isOpenEnded
+    const sessionForSave = ensureFocusSessionForPersistence();
+    if (sessionForSave && elapsedMinutes > 0 && shouldSaveAnything) {
+        sessionForSave.status = FocusState.isOpenEnded
             ? 'completed'
             : (shouldCountSession ? 'completed' : 'interrupted');
-        FocusState.currentSession.endTime = new Date().toISOString();
-        FocusState.currentSession.actualDurationMinutes = elapsedMinutes;
+        sessionForSave.endTime = new Date().toISOString();
+        sessionForSave.actualDurationMinutes = elapsedMinutes;
 
         // Non-blocking save for faster UI response
-        ProductivityData.DataStore.saveFocusSession(FocusState.currentSession).catch(e =>
+        ProductivityData.DataStore.saveFocusSession(sessionForSave).catch(e =>
             console.error('Failed to save focus session:', e)
         );
 
@@ -2421,15 +2456,16 @@ async function finalizeExtraTimeSession(addExtraTime) {
         : FocusState.selectedMinutes;
 
     // Save completed session
-    if (FocusState.currentSession) {
-        FocusState.currentSession.status = 'completed';
-        FocusState.currentSession.endTime = new Date().toISOString();
-        FocusState.currentSession.actualDurationMinutes = totalMinutes;
+    const sessionForSave = ensureFocusSessionForPersistence();
+    if (sessionForSave) {
+        sessionForSave.status = 'completed';
+        sessionForSave.endTime = new Date().toISOString();
+        sessionForSave.actualDurationMinutes = totalMinutes;
         if (addExtraTime && extraMinutes > 0) {
-            FocusState.currentSession.extraTimeMinutes = extraMinutes;
+            sessionForSave.extraTimeMinutes = extraMinutes;
         }
 
-        await ProductivityData.DataStore.saveFocusSession(FocusState.currentSession);
+        await ProductivityData.DataStore.saveFocusSession(sessionForSave);
 
         // Update stats
         await updateFocusStats_Internal(totalMinutes, true);
@@ -2528,12 +2564,13 @@ async function completeFocusSession() {
     }
 
     // Save completed session
-    if (FocusState.currentSession) {
-        FocusState.currentSession.status = 'completed';
-        FocusState.currentSession.endTime = new Date().toISOString();
-        FocusState.currentSession.actualDurationMinutes = FocusState.selectedMinutes;
+    const sessionForSave = ensureFocusSessionForPersistence();
+    if (sessionForSave) {
+        sessionForSave.status = 'completed';
+        sessionForSave.endTime = new Date().toISOString();
+        sessionForSave.actualDurationMinutes = FocusState.selectedMinutes;
 
-        await ProductivityData.DataStore.saveFocusSession(FocusState.currentSession);
+        await ProductivityData.DataStore.saveFocusSession(sessionForSave);
 
         // Update stats
         await updateFocusStats_Internal(FocusState.selectedMinutes, true);
