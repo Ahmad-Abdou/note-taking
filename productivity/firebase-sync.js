@@ -1,6 +1,33 @@
 (function () {
     'use strict';
 
+    const FIREBASE_SYNC_STATE_KEY = 'productivity_firebase_sync_state_v2';
+    const AUTO_SYNC_MIN_INTERVAL_MS = 5000;
+    const AUTO_SYNC_POLL_INTERVAL_MS = 20000;
+    const AUTO_SYNC_MUTE_WINDOW_MS = 3000;
+    const SYNC_RELEVANT_STORAGE_KEYS = new Set([
+        'tasks',
+        'taskLists',
+        'scheduleSchool',
+        'schedulePersonal',
+        'goals',
+        'challenges',
+        'focusSessions',
+        'focusState',
+        'dailyStats',
+        'streaks',
+        'achievements',
+        'settings',
+        'revisions',
+        'blockedSites',
+        'blockedAttempts',
+        'idleRecords',
+        'idleCategories',
+        'websiteTimeLimits',
+        'websiteDailyUsage',
+        'importedCalendarsMeta'
+    ]);
+
     function $(id) {
         return document.getElementById(id);
     }
@@ -21,6 +48,126 @@
     function getMergeOption() {
         const mergeCheckbox = $('sync-merge-option');
         return !!(mergeCheckbox && mergeCheckbox.checked);
+    }
+
+    function hasRelevantDataStorageChange(changes) {
+        if (!changes || typeof changes !== 'object') return false;
+        return Object.keys(changes).some((key) => SYNC_RELEVANT_STORAGE_KEYS.has(key));
+    }
+
+    function stableSerialize(value) {
+        if (Array.isArray(value)) {
+            return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+        }
+
+        if (value && typeof value === 'object') {
+            const keys = Object.keys(value).sort();
+            return `{${keys.map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
+        }
+
+        return JSON.stringify(value);
+    }
+
+    function computePayloadChecksum(payload) {
+        const text = typeof payload === 'string' ? payload : '';
+        let normalized = text;
+
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const clone = { ...parsed };
+                delete clone.exportDate;
+                delete clone.source;
+                normalized = stableSerialize(clone);
+            }
+        } catch (_) {
+            normalized = text;
+        }
+
+        let hash = 2166136261;
+
+        for (let i = 0; i < normalized.length; i += 1) {
+            hash ^= normalized.charCodeAt(i);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+
+        return (hash >>> 0).toString(16).padStart(8, '0');
+    }
+
+    function getRemoteVersion(remoteData) {
+        if (!remoteData || typeof remoteData !== 'object') return 0;
+
+        const explicitMs = Number(remoteData.updatedAtMs);
+        if (Number.isFinite(explicitMs) && explicitMs > 0) {
+            return Math.floor(explicitMs);
+        }
+
+        const ts = remoteData.updatedAt;
+        if (ts && typeof ts.toMillis === 'function') {
+            const millis = Number(ts.toMillis());
+            if (Number.isFinite(millis) && millis > 0) {
+                return Math.floor(millis);
+            }
+        }
+
+        const seconds = Number(ts?.seconds);
+        if (Number.isFinite(seconds) && seconds > 0) {
+            return Math.floor(seconds * 1000);
+        }
+
+        return 0;
+    }
+
+    function hasSyncState(state) {
+        if (!state || typeof state !== 'object') return false;
+        if (typeof state.lastPayloadChecksum === 'string' && state.lastPayloadChecksum) return true;
+        if (typeof state.lastRemoteChecksum === 'string' && state.lastRemoteChecksum) return true;
+        const remoteVersion = Number(state.lastRemoteVersion || 0);
+        return Number.isFinite(remoteVersion) && remoteVersion > 0;
+    }
+
+    async function readSyncState(uid) {
+        if (!uid || !window.ProductivityData?.DataStore?.get) return {};
+
+        const allState = await window.ProductivityData.DataStore.get(FIREBASE_SYNC_STATE_KEY, {});
+        if (!allState || typeof allState !== 'object' || Array.isArray(allState)) {
+            return {};
+        }
+
+        const stateForUser = allState[uid];
+        return stateForUser && typeof stateForUser === 'object' ? stateForUser : {};
+    }
+
+    async function writeSyncState(uid, statePatch) {
+        if (!uid || !window.ProductivityData?.DataStore?.get || !window.ProductivityData?.DataStore?.set) return;
+
+        const allState = await window.ProductivityData.DataStore.get(FIREBASE_SYNC_STATE_KEY, {});
+        const safeAllState = allState && typeof allState === 'object' && !Array.isArray(allState)
+            ? allState
+            : {};
+
+        safeAllState[uid] = {
+            ...(safeAllState[uid] && typeof safeAllState[uid] === 'object' ? safeAllState[uid] : {}),
+            ...statePatch
+        };
+
+        await window.ProductivityData.DataStore.set(FIREBASE_SYNC_STATE_KEY, safeAllState);
+    }
+
+    async function uploadPayload(docRef, payload, updatedBy) {
+        const updatedAtMs = Date.now();
+        const payloadChecksum = computePayloadChecksum(payload);
+
+        await docRef.set({
+            payload,
+            payloadChecksum,
+            schemaVersion: 2,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAtMs,
+            updatedBy
+        }, { merge: true });
+
+        return { updatedAtMs, payloadChecksum };
     }
 
     function getEmailPassword() {
@@ -238,7 +385,9 @@
         }
     }
 
-    async function syncNow() {
+    async function syncNow(options = {}) {
+        const silent = options.silent === true;
+        const reloadOnImport = options.reloadOnImport !== false;
         const { auth, db } = ensureFirebaseInitialized();
         const user = auth.currentUser;
         if (!user) throw new Error('Sign in first.');
@@ -246,39 +395,186 @@
             throw new Error('DataStore not available.');
         }
 
-        const merge = getMergeOption();
+        // Strict replace mode prevents deleted items from being resurrected by merge semantics.
+        const merge = false;
         const docRef = db.collection('syncSnapshots').doc(user.uid);
+        const previousState = await readSyncState(user.uid);
+        const hasPriorState = hasSyncState(previousState);
 
         let didImport = false;
+        let didUpload = false;
 
-        setStatus('Syncing… downloading cloud data', 'info');
+        if (!silent) setStatus('Syncing… downloading cloud data', 'info');
         const snap = await docRef.get();
-        const remotePayload = snap.exists ? snap.data()?.payload : null;
+        const remoteData = snap.exists ? (snap.data() || {}) : {};
+        const remotePayload = typeof remoteData.payload === 'string' ? remoteData.payload : '';
+        const hasRemotePayload = !!remotePayload.trim();
+        const remoteChecksum = hasRemotePayload
+            ? (typeof remoteData.payloadChecksum === 'string' && remoteData.payloadChecksum
+                ? remoteData.payloadChecksum
+                : computePayloadChecksum(remotePayload))
+            : '';
+        const remoteVersion = hasRemotePayload ? getRemoteVersion(remoteData) : 0;
 
-        if (typeof remotePayload === 'string' && remotePayload.trim()) {
+        let localPayload = await window.ProductivityData.DataStore.exportAllData();
+        let localChecksum = computePayloadChecksum(localPayload);
+
+        const localChangedSinceLastSync = !hasPriorState || localChecksum !== previousState.lastPayloadChecksum;
+        const remoteChangedSinceLastSync = hasRemotePayload && (
+            !hasPriorState
+            || remoteChecksum !== previousState.lastRemoteChecksum
+            || remoteVersion > Number(previousState.lastRemoteVersion || 0)
+        );
+        const staleStateMismatch = hasRemotePayload
+            && !localChangedSinceLastSync
+            && !remoteChangedSinceLastSync
+            && localChecksum !== remoteChecksum;
+
+        let latestRemoteChecksum = remoteChecksum;
+        let latestRemoteVersion = remoteVersion;
+
+        const importRemote = async () => {
             const result = await window.ProductivityData.DataStore.importAllData(remotePayload, { merge });
             if (!result?.success) throw new Error(result?.error || 'Import failed');
             didImport = true;
+            localPayload = await window.ProductivityData.DataStore.exportAllData();
+            localChecksum = computePayloadChecksum(localPayload);
+        };
+
+        if (staleStateMismatch) {
+            if (!silent) setStatus('Syncing… repairing stale local snapshot', 'info');
+            await importRemote();
+        } else if (hasRemotePayload && !hasPriorState) {
+            if (!silent) setStatus('Syncing… initializing from cloud snapshot', 'info');
+            await importRemote();
+
+            if (localChecksum !== remoteChecksum) {
+                if (!silent) setStatus('Syncing… uploading merged local data', 'info');
+                const uploadMeta = await uploadPayload(docRef, localPayload, 'client');
+                latestRemoteChecksum = uploadMeta.payloadChecksum;
+                latestRemoteVersion = uploadMeta.updatedAtMs;
+                didUpload = true;
+            }
+        } else if (hasRemotePayload && remoteChangedSinceLastSync && !localChangedSinceLastSync) {
+            if (!silent) setStatus('Syncing… applying cloud changes', 'info');
+            await importRemote();
+        } else if (hasRemotePayload && remoteChangedSinceLastSync && localChangedSinceLastSync) {
+            if (!silent) setStatus('Syncing… conflict detected, keeping local changes', 'info');
+            const uploadMeta = await uploadPayload(docRef, localPayload, 'client');
+            latestRemoteChecksum = uploadMeta.payloadChecksum;
+            latestRemoteVersion = uploadMeta.updatedAtMs;
+            didUpload = true;
+        } else if (!hasRemotePayload || localChangedSinceLastSync) {
+            if (!silent) setStatus('Syncing… uploading local data', 'info');
+            const uploadMeta = await uploadPayload(docRef, localPayload, 'client');
+            latestRemoteChecksum = uploadMeta.payloadChecksum;
+            latestRemoteVersion = uploadMeta.updatedAtMs;
+            didUpload = true;
         }
 
-        setStatus('Syncing… uploading local data', 'info');
-        const localPayload = await window.ProductivityData.DataStore.exportAllData();
+        await writeSyncState(user.uid, {
+            lastPayloadChecksum: localChecksum,
+            lastRemoteChecksum: latestRemoteChecksum || localChecksum,
+            lastRemoteVersion: latestRemoteVersion || Date.now(),
+            lastSyncAt: new Date().toISOString()
+        });
 
-        await docRef.set({
-            payload: localPayload,
-            schemaVersion: 2,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedBy: 'client'
-        }, { merge: true });
+        autoSyncMutedUntil = Date.now() + AUTO_SYNC_MUTE_WINDOW_MS;
 
         if (didImport) {
-            setStatus('Synced successfully. Reloading to show updated data…', 'success');
-            setTimeout(() => {
-                try { window.location.reload(); } catch (_) { /* ignore */ }
-            }, 700);
+            if (!silent) setStatus('Synced successfully. Reloading to show updated data…', 'success');
+            if (reloadOnImport) {
+                setTimeout(() => {
+                    try { window.location.reload(); } catch (_) { /* ignore */ }
+                }, 700);
+            }
+        } else if (didUpload) {
+            if (!silent) setStatus('Synced successfully.', 'success');
         } else {
-            setStatus('Synced successfully.', 'success');
+            if (!silent) setStatus('Already up to date.', 'success');
         }
+    }
+
+    let autoSyncTimer = null;
+    let autoSyncInFlight = false;
+    let autoSyncPollTimer = null;
+    let remoteSnapshotUnsubscribe = null;
+    let autoSyncMutedUntil = 0;
+    let lastAutoSyncAt = 0;
+
+    function scheduleAutoSync() {
+        if (Date.now() < autoSyncMutedUntil) return;
+
+        const now = Date.now();
+        const waitMs = Math.max(0, AUTO_SYNC_MIN_INTERVAL_MS - (now - lastAutoSyncAt));
+
+        if (autoSyncTimer) {
+            clearTimeout(autoSyncTimer);
+        }
+
+        autoSyncTimer = setTimeout(async () => {
+            autoSyncTimer = null;
+            if (autoSyncInFlight) return;
+
+            autoSyncInFlight = true;
+            try {
+                await syncNow({ silent: true, reloadOnImport: false });
+                lastAutoSyncAt = Date.now();
+            } catch (_) {
+                // Keep background auto-sync best-effort.
+            } finally {
+                autoSyncInFlight = false;
+            }
+        }, waitMs);
+    }
+
+    function startAutoSyncPolling() {
+        if (autoSyncPollTimer) {
+            clearInterval(autoSyncPollTimer);
+        }
+
+        autoSyncPollTimer = setInterval(() => {
+            scheduleAutoSync();
+        }, AUTO_SYNC_POLL_INTERVAL_MS);
+
+        scheduleAutoSync();
+    }
+
+    function stopAutoSyncPolling() {
+        if (autoSyncTimer) {
+            clearTimeout(autoSyncTimer);
+            autoSyncTimer = null;
+        }
+        if (autoSyncPollTimer) {
+            clearInterval(autoSyncPollTimer);
+            autoSyncPollTimer = null;
+        }
+    }
+
+    function startRemoteSnapshotListener(db, user) {
+        if (remoteSnapshotUnsubscribe) {
+            remoteSnapshotUnsubscribe();
+            remoteSnapshotUnsubscribe = null;
+        }
+
+        if (!db || !user?.uid) return;
+
+        const docRef = db.collection('syncSnapshots').doc(user.uid);
+        remoteSnapshotUnsubscribe = docRef.onSnapshot(
+            () => {
+                if (Date.now() < autoSyncMutedUntil) return;
+                scheduleAutoSync();
+            },
+            () => {
+                // Keep live-listener best-effort.
+            }
+        );
+    }
+
+    function stopRemoteSnapshotListener() {
+        if (!remoteSnapshotUnsubscribe) return;
+        remoteSnapshotUnsubscribe();
+        remoteSnapshotUnsubscribe = null;
     }
 
     function wire() {
@@ -291,15 +587,33 @@
 
         if (!googleBtn || !emailSignInBtn || !signupBtn || !syncBtn || !signOutBtn) return;
 
+        if (window.chrome?.storage?.onChanged?.addListener) {
+            chrome.storage.onChanged.addListener((changes, namespace) => {
+                if (namespace !== 'local') return;
+                if (Object.prototype.hasOwnProperty.call(changes, FIREBASE_SYNC_STATE_KEY)) return;
+                if (!hasRelevantDataStorageChange(changes)) return;
+                scheduleAutoSync();
+            });
+        }
+
         try {
-            const { auth } = ensureFirebaseInitialized();
+            const { auth, db } = ensureFirebaseInitialized();
             auth.onAuthStateChanged((user) => {
                 updateUiState(user);
+                if (user) {
+                    startAutoSyncPolling();
+                    startRemoteSnapshotListener(db, user);
+                } else {
+                    stopAutoSyncPolling();
+                    stopRemoteSnapshotListener();
+                }
             });
         } catch (e) {
             console.warn(e);
             setStatus(e.message || 'Firebase not ready.', 'error');
             updateUiState(null);
+            stopAutoSyncPolling();
+            stopRemoteSnapshotListener();
         }
 
         googleBtn.addEventListener('click', () => {

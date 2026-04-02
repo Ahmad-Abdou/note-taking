@@ -89,6 +89,11 @@
     let fullyMinimized = false;
     let config = null;
     let focusRenderInterval = null;
+    const DEFAULT_WIDGET_ACCENT = '#6366f1';
+    const THEME_SYNC_INTERVAL_MS = 2000;
+    let appliedTheme = null;
+    let appliedAccent = null;
+    let lastThemeSyncAt = 0;
 
     // ===== Helpers =====
     function getCardId() {
@@ -181,6 +186,83 @@
     }
 
     const DS = () => window.ProductivityData?.DataStore;
+
+    function normalizeHexColor(value, fallback = DEFAULT_WIDGET_ACCENT) {
+        if (typeof value !== 'string') return fallback;
+        const raw = value.trim();
+        if (/^#[0-9a-f]{3}$/i.test(raw)) {
+            const chars = raw.slice(1).split('');
+            return `#${chars.map(ch => ch + ch).join('')}`.toLowerCase();
+        }
+        if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+        return fallback;
+    }
+
+    function adjustHexColor(color, amount) {
+        const normalized = normalizeHexColor(color);
+        const num = parseInt(normalized.slice(1), 16);
+        const r = Math.min(255, Math.max(0, (num >> 16) + amount));
+        const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00ff) + amount));
+        const b = Math.min(255, Math.max(0, (num & 0x0000ff) + amount));
+        return `#${(1 << 24 | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+    }
+
+    function hexWithAlpha(color, alphaHex) {
+        return `${normalizeHexColor(color)}${alphaHex}`;
+    }
+
+    function resolveTheme(themePreference) {
+        const normalized = String(themePreference || 'dark').toLowerCase();
+        if (normalized === 'auto') {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return normalized === 'light' ? 'light' : 'dark';
+    }
+
+    function applyWidgetThemeFromSettings(settings = {}) {
+        const root = document.documentElement;
+        const theme = resolveTheme(settings.theme);
+        const accent = normalizeHexColor(settings.accentColor);
+
+        if (appliedTheme !== theme) {
+            root.setAttribute('data-theme', theme);
+            appliedTheme = theme;
+        }
+
+        if (appliedAccent !== accent) {
+            root.style.setProperty('--widget-primary', accent);
+            root.style.setProperty('--widget-primary-hover', adjustHexColor(accent, -20));
+            root.style.setProperty('--widget-border', hexWithAlpha(accent, '33'));
+            root.style.setProperty('--widget-border-active', hexWithAlpha(accent, '80'));
+            root.style.setProperty('--widget-accent-soft', hexWithAlpha(accent, '26'));
+            root.style.setProperty('--widget-accent-medium', hexWithAlpha(accent, '4d'));
+            root.style.setProperty('--widget-focus-ring-track', hexWithAlpha(accent, '29'));
+            root.style.setProperty('--widget-focus-ring-idle', hexWithAlpha(accent, '38'));
+            root.style.setProperty('--widget-focus-shell-border', hexWithAlpha(accent, '6b'));
+            root.style.setProperty('--widget-focus-clock', accent);
+            root.style.setProperty('--widget-focus-clock-paused', adjustHexColor(accent, 24));
+            appliedAccent = accent;
+        }
+    }
+
+    async function syncWidgetTheme(force = false) {
+        const now = Date.now();
+        if (!force && now - lastThemeSyncAt < THEME_SYNC_INTERVAL_MS) return;
+        lastThemeSyncAt = now;
+
+        const store = DS();
+        if (!store?.getSettings) {
+            applyWidgetThemeFromSettings({});
+            return;
+        }
+
+        try {
+            const settings = await store.getSettings();
+            applyWidgetThemeFromSettings(settings || {});
+        } catch (_) {
+            applyWidgetThemeFromSettings({});
+        }
+    }
 
     // ===== Renderers =====
 
@@ -431,7 +513,7 @@
         // Expanded: show bar chart + summary
         const barsHTML = weekData.map(d => {
             const pct = maxHours > 0 ? (d.hours / maxHours * 100) : 0;
-            const barColor = d.isToday ? 'var(--widget-primary)' : 'rgba(99, 102, 241, 0.4)';
+            const barColor = d.isToday ? 'var(--widget-primary)' : 'var(--widget-accent-medium)';
             return `
                 <div class="widget-chart-bar-container">
                     <div class="widget-chart-bar-wrapper">
@@ -740,6 +822,8 @@
     };
 
     async function render() {
+        await syncWidgetTheme();
+
         const renderer = RENDERERS[cardId];
         if (renderer) {
             try {
@@ -813,6 +897,8 @@
             return;
         }
 
+        await syncWidgetTheme(true);
+
         config = CARD_CONFIG[cardId];
 
         const container = document.getElementById('widget-container');
@@ -876,6 +962,8 @@
         // Listen for data changes from other windows
         if (window.electronAPI?.widgets?.onDataChanged) {
             window.electronAPI.widgets.onDataChanged((payload) => {
+                syncWidgetTheme(true);
+
                 // Re-render when data changes
                 if (!fullyMinimized) {
                     render();

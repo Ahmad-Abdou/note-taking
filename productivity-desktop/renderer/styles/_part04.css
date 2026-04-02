@@ -31,6 +31,42 @@ body:has(.calendar-event.dragging) .calendar-event {
     text-overflow: ellipsis;
 }
 
+.calendar-event .event-title-row,
+.day-event .event-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.calendar-event .event-title-row .event-title,
+.day-event .event-title-row .event-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.event-source-badge {
+    display: inline-flex;
+    align-items: center;
+    max-width: 180px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.calendar-event .event-source-badge,
+.day-event .event-source-badge {
+    max-width: 130px;
+    font-size: 0.58rem;
+}
+
 .calendar-event .event-time {
     font-size: 0.7rem;
     opacity: 0.8;
@@ -368,6 +404,15 @@ body:has(.calendar-event.dragging) .calendar-event {
 .agenda-event-location {
     font-size: 0.85rem;
     color: var(--text-muted);
+}
+
+.agenda-event-content .event-source-badge {
+    margin-bottom: 4px;
+}
+
+.event-detail-row .event-source-badge {
+    margin-left: auto;
+    max-width: 220px;
 }
 
 .agenda-event-type {

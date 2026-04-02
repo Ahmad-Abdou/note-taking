@@ -560,7 +560,8 @@ async function loadDashboard() {
             allTasks,
             todayEvents,
             activeGoals,
-            weekStats
+            weekStats,
+            importedCalendarsMeta
         ] = await Promise.all([
             loadWithFallback('settings', () => ProductivityData.DataStore.getSettings(), {}),
             loadWithFallback('today stats', () => ProductivityData.DataStore.getDailyStats(), {
@@ -574,7 +575,14 @@ async function loadDashboard() {
             loadWithFallback('tasks', () => ProductivityData.DataStore.getTasks(), []),
             loadWithFallback('today events', () => ProductivityData.DataStore.getEventsForDate(ProductivityData.getTodayDate()), []),
             loadWithFallback('active goals', () => ProductivityData.DataStore.getActiveGoals(), []),
-            loadWithFallback('weekly stats', () => ProductivityData.DataStore.calculateWeeklyStats(), null)
+            loadWithFallback('weekly stats', () => ProductivityData.DataStore.calculateWeeklyStats(), null),
+            loadWithFallback('imported calendars metadata', async () => {
+                if (typeof chrome === 'undefined' || !chrome?.storage?.local?.get) return {};
+                const stored = await chrome.storage.local.get(['importedCalendarsMeta']);
+                return stored && typeof stored.importedCalendarsMeta === 'object'
+                    ? stored.importedCalendarsMeta
+                    : {};
+            }, {})
         ]);
 
         const allGoals = await loadWithFallback('all goals', () => ProductivityData.DataStore.getGoals(), []);
@@ -591,7 +599,12 @@ async function loadDashboard() {
         updateQuickStats(streakData, todayStats);
 
         // Update today's schedule (tasks + imported/legacy schedule events)
-        const todayAgenda = buildTodayAgendaItems(ProductivityData.getTodayDate(), todayEvents, allTasks);
+        const todayAgenda = buildTodayAgendaItems(
+            ProductivityData.getTodayDate(),
+            todayEvents,
+            allTasks,
+            importedCalendarsMeta
+        );
         renderTodaySchedule(todayAgenda);
 
         // Populate TaskState so dashboard action handlers can access task data
@@ -1408,6 +1421,44 @@ function updateQuickStats(streakData, todayStats) {
     if (currentStreakDisplay) currentStreakDisplay.textContent = streakData.currentStreak;
 }
 
+function normalizeDashboardBadgeColor(color, fallback = '#6366f1') {
+    if (typeof color !== 'string') return fallback;
+    const value = color.trim();
+    const shortHex = /^#([0-9a-fA-F]{3})$/.exec(value);
+    if (shortHex) {
+        const chars = shortHex[1].split('');
+        return `#${chars.map((ch) => ch + ch).join('')}`;
+    }
+    if (/^#([0-9a-fA-F]{6})$/.test(value)) {
+        return value;
+    }
+    return fallback;
+}
+
+function getDashboardImportedSource(event, importedCalendarsMeta = {}) {
+    const importedCalendarId = typeof event?.importedCalendarId === 'string'
+        ? event.importedCalendarId.trim()
+        : '';
+
+    if (!importedCalendarId) return null;
+
+    const rawMeta = importedCalendarsMeta && typeof importedCalendarsMeta === 'object'
+        ? importedCalendarsMeta[importedCalendarId]
+        : null;
+    const meta = rawMeta && typeof rawMeta === 'object' ? rawMeta : null;
+
+    const sourceName = typeof meta?.name === 'string' && meta.name.trim()
+        ? meta.name.trim()
+        : 'Imported Calendar';
+
+    const sourceColor = normalizeDashboardBadgeColor(
+        (typeof meta?.color === 'string' && meta.color.trim()) ? meta.color : event?.color,
+        '#6366f1'
+    );
+
+    return { sourceName, sourceColor };
+}
+
 function renderTodaySchedule(events) {
     const container = document.getElementById('today-schedule');
     if (!container) return;
@@ -1434,7 +1485,10 @@ function renderTodaySchedule(events) {
         <div class="timeline-item" data-task-id="${event.taskId || ''}">
             <span class="timeline-time">${formatTime(event.startTime)}</span>
             <div class="timeline-content ${event.type}">
-                <div class="timeline-title">${event.isTask ? '<i class="fas fa-tasks" style="margin-right:6px;opacity:0.85;"></i>' : ''}${escapeHtml(event.title)}</div>
+                <div class="timeline-title-row">
+                    <div class="timeline-title">${event.isTask ? '<i class="fas fa-tasks" style="margin-right:6px;opacity:0.85;"></i>' : ''}${escapeHtml(event.title)}</div>
+                    ${event.sourceLabel ? `<span class="timeline-source-badge" style="color:${event.sourceColor};border-color:${event.sourceColor}66;background:${event.sourceColor}20;" title="${escapeHtml(`Imported from: ${event.sourceLabel}`)}">${escapeHtml(event.sourceLabel)}</span>` : ''}
+                </div>
                 <div class="timeline-meta">
                     ${event.location ? `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(event.location)}` : ''}
                     ${event.endTime ? `<span>${formatTime(event.startTime)} - ${formatTime(event.endTime)}</span>` : ''}
@@ -1462,11 +1516,13 @@ function renderTodaySchedule(events) {
     });
 }
 
-function buildTodayAgendaItems(dateStr, scheduleEvents, tasks) {
+function buildTodayAgendaItems(dateStr, scheduleEvents, tasks, importedCalendarsMeta = {}) {
     const items = [];
 
     for (const ev of (scheduleEvents || [])) {
         if (!ev?.startTime) continue;
+
+        const source = getDashboardImportedSource(ev, importedCalendarsMeta);
         items.push({
             id: ev.id,
             title: ev.title || 'Untitled',
@@ -1474,6 +1530,8 @@ function buildTodayAgendaItems(dateStr, scheduleEvents, tasks) {
             startTime: ev.startTime,
             endTime: ev.endTime || null,
             location: ev.location || '',
+            sourceLabel: source?.sourceName || '',
+            sourceColor: source?.sourceColor || '',
             isTask: false
         });
     }
@@ -1495,6 +1553,8 @@ function buildTodayAgendaItems(dateStr, scheduleEvents, tasks) {
             startTime,
             endTime,
             location: t.subject || '',
+            sourceLabel: '',
+            sourceColor: '',
             isTask: true
         });
     }

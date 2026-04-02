@@ -18,6 +18,86 @@
     --widget-danger: #ef4444;
     --widget-radius: 14px;
     --widget-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+    --widget-btn-hover-bg: rgba(255, 255, 255, 0.1);
+    --widget-scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --widget-scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+    --widget-muted-surface: rgba(255, 255, 255, 0.08);
+    --widget-accent-soft: rgba(99, 102, 241, 0.15);
+    --widget-accent-medium: rgba(99, 102, 241, 0.3);
+
+    --widget-focus-bg-start: #171717;
+    --widget-focus-bg-end: #0d0d0d;
+    --widget-focus-titlebar-bg: #111111;
+    --widget-focus-border: rgba(255, 255, 255, 0.14);
+    --widget-focus-titlebar-border: rgba(255, 255, 255, 0.12);
+    --widget-focus-pin: #f59e0b;
+    --widget-focus-target: #d1d5db;
+    --widget-focus-wrap-border: rgba(148, 163, 184, 0.2);
+    --widget-focus-wrap-bg-start: #262626;
+    --widget-focus-wrap-bg-end: #121212;
+    --widget-focus-wrap-shadow: rgba(0, 0, 0, 0.6);
+    --widget-focus-ring-track: rgba(148, 163, 184, 0.16);
+    --widget-focus-ring-idle: rgba(148, 163, 184, 0.22);
+    --widget-focus-shell-border: rgba(251, 191, 36, 0.42);
+    --widget-focus-shell-bg-start: #242424;
+    --widget-focus-shell-bg-end: #161616;
+    --widget-focus-shell-outer: rgba(10, 10, 10, 0.75);
+    --widget-focus-clock: #fbbf24;
+    --widget-focus-clock-paused: #fde68a;
+    --widget-focus-control-border: rgba(255, 255, 255, 0.22);
+    --widget-focus-control-bg-start: #2a2a2a;
+    --widget-focus-control-bg-end: #1d1d1d;
+    --widget-focus-control-text: #f8fafc;
+    --widget-focus-control-stop: #fb7185;
+    --widget-focus-control-stop-border: rgba(251, 113, 133, 0.58);
+    --widget-focus-control-hover-start: #303030;
+    --widget-focus-control-hover-end: #232323;
+    --widget-focus-status: #9ca3af;
+}
+
+[data-theme="light"] {
+    --widget-bg: #ffffff;
+    --widget-bg-card: #f3f5fb;
+    --widget-bg-hover: #e9eefb;
+    --widget-border: rgba(99, 102, 241, 0.22);
+    --widget-border-active: rgba(99, 102, 241, 0.4);
+    --widget-text: #0f172a;
+    --widget-text-secondary: #334155;
+    --widget-text-muted: #64748b;
+    --widget-shadow: 0 10px 28px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.1);
+    --widget-btn-hover-bg: rgba(15, 23, 42, 0.08);
+    --widget-scrollbar-thumb: rgba(15, 23, 42, 0.2);
+    --widget-scrollbar-thumb-hover: rgba(15, 23, 42, 0.3);
+    --widget-muted-surface: rgba(15, 23, 42, 0.08);
+
+    --widget-focus-bg-start: #ffffff;
+    --widget-focus-bg-end: #eef2ff;
+    --widget-focus-titlebar-bg: #f8fafc;
+    --widget-focus-border: rgba(99, 102, 241, 0.28);
+    --widget-focus-titlebar-border: rgba(99, 102, 241, 0.2);
+    --widget-focus-pin: var(--widget-primary);
+    --widget-focus-target: #1e293b;
+    --widget-focus-wrap-border: rgba(99, 102, 241, 0.24);
+    --widget-focus-wrap-bg-start: #f8fafc;
+    --widget-focus-wrap-bg-end: #e2e8f0;
+    --widget-focus-wrap-shadow: rgba(148, 163, 184, 0.34);
+    --widget-focus-ring-track: rgba(99, 102, 241, 0.2);
+    --widget-focus-ring-idle: rgba(99, 102, 241, 0.16);
+    --widget-focus-shell-border: rgba(99, 102, 241, 0.42);
+    --widget-focus-shell-bg-start: #ffffff;
+    --widget-focus-shell-bg-end: #e2e8f0;
+    --widget-focus-shell-outer: rgba(99, 102, 241, 0.2);
+    --widget-focus-clock: var(--widget-primary);
+    --widget-focus-clock-paused: #4338ca;
+    --widget-focus-control-border: rgba(99, 102, 241, 0.34);
+    --widget-focus-control-bg-start: #f8fafc;
+    --widget-focus-control-bg-end: #e2e8f0;
+    --widget-focus-control-text: #1e293b;
+    --widget-focus-control-stop: #e11d48;
+    --widget-focus-control-stop-border: rgba(225, 29, 72, 0.45);
+    --widget-focus-control-hover-start: #eef2ff;
+    --widget-focus-control-hover-end: #e2e8f0;
+    --widget-focus-status: #475569;
 }
 
 * {
@@ -116,7 +196,7 @@ body {
 }
 
 .widget-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--widget-btn-hover-bg);
     color: var(--widget-text);
 }
 
@@ -177,12 +257,12 @@ body {
 }
 
 .widget-body::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--widget-scrollbar-thumb);
     border-radius: 2px;
 }
 
 .widget-body::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--widget-scrollbar-thumb-hover);
 }
 
 /* ===== Task Items ===== */
@@ -293,7 +373,7 @@ body {
 }
 
 .widget-task-actions button:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--widget-btn-hover-bg);
     color: var(--widget-text);
 }
 
@@ -351,7 +431,7 @@ body {
     height: 24px;
     border: none;
     border-radius: 6px;
-    background: rgba(99, 102, 241, 0.15);
+    background: var(--widget-accent-soft);
     color: var(--widget-primary);
     cursor: pointer;
     display: flex;
@@ -368,7 +448,7 @@ body {
 }
 
 .widget-schedule-focus-btn:hover {
-    background: rgba(99, 102, 241, 0.3);
+    background: var(--widget-accent-medium);
 }
 
 /* ===== Deadline Items ===== */
@@ -450,7 +530,7 @@ body {
 
 .widget-goal-bar {
     height: 4px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--widget-muted-surface);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -484,7 +564,7 @@ body {
 
 .widget-challenge-bar {
     height: 4px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--widget-muted-surface);
     border-radius: 2px;
     overflow: hidden;
     margin-top: 4px;
@@ -582,7 +662,7 @@ body {
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    background: rgba(99, 102, 241, 0.15);
+    background: var(--widget-accent-soft);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -623,17 +703,17 @@ body {
 }
 
 .widget-container.is-card-focus-session {
-    background: linear-gradient(180deg, #171717, #0d0d0d);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: linear-gradient(180deg, var(--widget-focus-bg-start), var(--widget-focus-bg-end));
+    border-color: var(--widget-focus-border);
 }
 
 .widget-container.is-card-focus-session .widget-titlebar {
-    background: #111111;
-    border-bottom-color: rgba(255, 255, 255, 0.12);
+    background: var(--widget-focus-titlebar-bg);
+    border-bottom-color: var(--widget-focus-titlebar-border);
 }
 
 .widget-container.is-card-focus-session .widget-pin-icon {
-    color: #f59e0b;
+    color: var(--widget-focus-pin);
 }
 
 .widget-focus-target {
@@ -641,7 +721,7 @@ body {
     text-align: center;
     font-size: 0.74rem;
     font-weight: 600;
-    color: #d1d5db;
+    color: var(--widget-focus-target);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -661,16 +741,16 @@ body {
     position: absolute;
     inset: 4px;
     border-radius: 50%;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    background: radial-gradient(circle at 36% 28%, #262626, #121212 74%);
-    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--widget-focus-wrap-border);
+    background: radial-gradient(circle at 36% 28%, var(--widget-focus-wrap-bg-start), var(--widget-focus-wrap-bg-end) 74%);
+    box-shadow: inset 0 0 14px var(--widget-focus-wrap-shadow);
 }
 
 .widget-focus-media-ring {
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background: conic-gradient(#f59e0b calc(var(--focus-progress) * 1%), rgba(148, 163, 184, 0.16) 0);
+    background: conic-gradient(var(--widget-focus-clock) calc(var(--focus-progress) * 1%), var(--widget-focus-ring-track) 0);
     transform: rotate(-90deg);
     -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
     mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
@@ -684,40 +764,40 @@ body {
 
 .widget-focus-timer-wrap.is-indeterminate .widget-focus-media-ring {
     opacity: 0.78;
-    background: conic-gradient(#f59e0b 24%, rgba(148, 163, 184, 0.15) 24% 100%);
+    background: conic-gradient(var(--widget-focus-clock) 24%, var(--widget-focus-ring-track) 24% 100%);
     animation: focusRingSpin 2.2s linear infinite;
 }
 
 .widget-focus-timer-wrap.is-static .widget-focus-media-ring {
     opacity: 0.4;
-    background: conic-gradient(rgba(148, 163, 184, 0.22) 100%, rgba(148, 163, 184, 0.22) 100%);
+    background: conic-gradient(var(--widget-focus-ring-idle) 100%, var(--widget-focus-ring-idle) 100%);
 }
 
 .widget-focus-clock-shell {
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    border: 1px solid rgba(251, 191, 36, 0.42);
-    background: radial-gradient(circle at 34% 30%, #242424, #161616 72%);
+    border: 1px solid var(--widget-focus-shell-border);
+    background: radial-gradient(circle at 34% 30%, var(--widget-focus-shell-bg-start), var(--widget-focus-shell-bg-end) 72%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     z-index: 2;
     pointer-events: none;
-    box-shadow: 0 0 0 5px rgba(10, 10, 10, 0.75);
+    box-shadow: 0 0 0 5px var(--widget-focus-shell-outer);
 }
 
 .widget-focus-clock {
     font-size: 1.12rem;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #fbbf24;
+    color: var(--widget-focus-clock);
     line-height: 1;
     text-align: center;
 }
 
 .widget-focus-card.paused .widget-focus-clock {
-    color: #fde68a;
+    color: var(--widget-focus-clock-paused);
 }
 
 .widget-focus-controls {
@@ -732,13 +812,13 @@ body {
     width: 34px;
     height: 34px;
     border-radius: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: linear-gradient(180deg, #2a2a2a, #1d1d1d);
+    border: 1px solid var(--widget-focus-control-border);
+    background: linear-gradient(180deg, var(--widget-focus-control-bg-start), var(--widget-focus-control-bg-end));
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #f8fafc;
+    color: var(--widget-focus-control-text);
     font-size: 0.82rem;
     transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
@@ -758,13 +838,13 @@ body {
 }
 
 .widget-focus-control-btn.is-stop {
-    color: #fb7185;
-    border-color: rgba(251, 113, 133, 0.58);
+    color: var(--widget-focus-control-stop);
+    border-color: var(--widget-focus-control-stop-border);
 }
 
 .widget-focus-control-btn:hover {
     transform: translateY(-1px);
-    background: linear-gradient(180deg, #303030, #232323);
+    background: linear-gradient(180deg, var(--widget-focus-control-hover-start), var(--widget-focus-control-hover-end));
 }
 
 .widget-focus-control-btn:active {
@@ -773,7 +853,7 @@ body {
 
 .widget-focus-status {
     font-size: 0.62rem;
-    color: #9ca3af;
+    color: var(--widget-focus-status);
     text-align: center;
 }
 

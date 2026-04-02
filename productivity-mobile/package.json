@@ -9,12 +9,15 @@
     "fix:metro-hmr": "node scripts/patch-metro-hmr-url.js",
     "android": "expo run:android",
     "android:dev": "expo run:android",
+    "android:dev:local": "powershell -ExecutionPolicy Bypass -File scripts/run-local-android-dev.ps1",
+    "android:dev:local:fast": "powershell -ExecutionPolicy Bypass -File scripts/run-local-android-dev.ps1 -SkipInstall",
     "android:build": "cd android && gradlew.bat assembleDebug",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "expo": "~54.0.33",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.20",

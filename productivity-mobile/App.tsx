@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import Constants from 'expo-constants';
 import {
   createUserWithEmailAndPassword,
@@ -31,6 +32,10 @@ import { auth, db } from './src/firebase';
 type NotificationsModule = typeof import('expo-notifications');
 
 let notificationsModule: NotificationsModule | null = null;
+const focusNotificationRuntime = {
+  dndEnabled: false,
+  focusRunning: false,
+};
 
 function isExpoGoAndroidRuntime() {
   return Platform.OS === 'android'
@@ -43,13 +48,16 @@ function getNotificationsModule(): NotificationsModule | null {
 
   const loaded = require('expo-notifications') as NotificationsModule;
   loaded.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
+    handleNotification: async () => {
+      const dndActive = focusNotificationRuntime.dndEnabled && focusNotificationRuntime.focusRunning;
+      return {
+      shouldShowAlert: !dndActive,
+      shouldPlaySound: !dndActive,
       shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+      shouldShowBanner: !dndActive,
+      shouldShowList: !dndActive,
+      };
+    },
   });
 
   notificationsModule = loaded;
@@ -58,11 +66,20 @@ function getNotificationsModule(): NotificationsModule | null {
 
 const SYNC_COLLECTION = 'syncSnapshots';
 const LOCAL_CACHE_KEY = 'productivity_mobile_snapshot_cache_v2';
+const MOBILE_SYNC_STATE_PREFIX = 'productivity_mobile_sync_state_v2';
 const DAILY_NOTIFICATION_ID_KEY = 'productivity_mobile_daily_notification_id';
+const SMART_REMINDER_SETTINGS_KEY = 'productivity_mobile_smart_reminder_settings_v1';
+const SMART_REMINDER_NOTIFICATION_IDS_KEY = 'productivity_mobile_smart_reminder_notification_ids_v1';
+const TASK_REMINDER_NOTIFICATION_IDS_KEY = 'productivity_mobile_task_reminder_notification_ids_v1';
 const ANDROID_NOTIFICATION_CHANNEL_ID = 'daily-reminders';
 const ANDROID_INTERACTION_CHANNEL_ID = 'interaction-feedback';
+const ANDROID_FOCUS_SILENT_CHANNEL_ID = 'focus-session-silent';
 const INTERACTION_NOTIFICATION_COOLDOWN_MS = 2500;
 const CLICK_VIBRATION_MS = 8;
+const FOCUS_STATE_SYNC_INTERVAL_SECONDS = 10;
+const REMINDER_LEAD_MINUTES_OPTIONS = [10, 15, 30, 60, 120, 180, 1440] as const;
+const SMART_REMINDER_LOOKAHEAD_DAYS = 10;
+const SMART_REMINDER_MAX_PER_CATEGORY = 20;
 
 const COLORS = {
   bgPrimary: '#0f0f23',
@@ -86,6 +103,7 @@ let lastPressFeedbackAt = 0;
 
 function triggerPressFeedback() {
   if (Platform.OS === 'web') return;
+  if (focusNotificationRuntime.dndEnabled && focusNotificationRuntime.focusRunning) return;
   const now = Date.now();
   if (now - lastPressFeedbackAt < 25) return;
   lastPressFeedbackAt = now;
@@ -93,14 +111,14 @@ function triggerPressFeedback() {
 }
 
 function Pressable(props: PressableProps) {
-  const { onPressIn, onLongPress, ...rest } = props;
+  const { onPress, onLongPress, ...rest } = props;
 
   return (
     <RNPressable
       {...rest}
-      onPressIn={(event) => {
+      onPress={(event) => {
         triggerPressFeedback();
-        onPressIn?.(event);
+        onPress?.(event);
       }}
       onLongPress={(event) => {
         triggerPressFeedback();
@@ -112,6 +130,7 @@ function Pressable(props: PressableProps) {
 
 type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 type TaskStatus = 'not-started' | 'in-progress' | 'completed';
+type ReminderCategory = 'tasks' | 'schedule' | 'challenges';
 type ChallengeType = 'daily' | 'weekly' | 'custom';
 type ChallengeStatus = 'active' | 'completed';
 type GoalCategory = 'academic' | 'skill' | 'project' | 'career' | 'personal' | 'other';
@@ -122,8 +141,43 @@ type HubScheduleType = 'school' | 'personal';
 type HubScheduleRecurrence = 'daily' | 'weekly' | 'monthly' | null;
 type ScheduleView = 'school' | 'personal' | 'combined';
 type ScheduleCalendarMode = 'month' | 'week';
+
+interface ReminderCategorySetting {
+  enabled: boolean;
+  leadMinutes: number;
+}
+
+interface SmartReminderSettings {
+  tasks: ReminderCategorySetting;
+  schedule: ReminderCategorySetting;
+  challenges: ReminderCategorySetting;
+}
+
+interface SmartReminderDraft {
+  category: ReminderCategory;
+  itemKey: string;
+  title: string;
+  body: string;
+  triggerAtMs: number;
+}
+
+interface TaskReminderDraft {
+  taskId: string;
+  itemKey: string;
+  title: string;
+  body: string;
+  triggerAtMs: number;
+}
+
+const DEFAULT_SMART_REMINDER_SETTINGS: SmartReminderSettings = {
+  tasks: { enabled: true, leadMinutes: 60 },
+  schedule: { enabled: true, leadMinutes: 30 },
+  challenges: { enabled: false, leadMinutes: 120 },
+};
+
 type AppTab =
   | 'dashboard'
+  | 'today'
   | 'schedule'
   | 'tasks'
   | 'goals'
@@ -141,6 +195,7 @@ interface HubTask {
   linkUrl: string | null;
   dueDate: string | null;
   dueTime: string | null;
+  reminderMinutes: number | null;
   priority: TaskPriority;
   status: TaskStatus;
   category: string;
@@ -208,6 +263,25 @@ interface HubFocusSession {
   date: string;
 }
 
+interface HubFocusState {
+  isActive: boolean;
+  isPaused: boolean;
+  isBreak: boolean;
+  isOpenEnded: boolean;
+  isExtraTime: boolean;
+  extraTimeSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number;
+  selectedMinutes: number;
+  isOverlayMinimized: boolean;
+  taskTitle: string | null;
+  startTimestamp: number | null;
+  endTimestamp: number | null;
+  pausedRemainingSeconds: number | null;
+  pausedElapsedSeconds: number | null;
+  updatedAtMs: number;
+}
+
 interface HubScheduleEvent {
   id: string;
   title: string;
@@ -217,10 +291,12 @@ interface HubScheduleEvent {
   endTime: string | null;
   location: string;
   scheduleType: HubScheduleType;
+  isImported: boolean;
   isRecurring: boolean;
   recurrence: HubScheduleRecurrence;
   weekdays: number[];
   recurrenceEndDate: string | null;
+  importedCalendarId: string | null;
   color: string | null;
   description: string;
 }
@@ -250,6 +326,19 @@ interface ScheduleAgendaItem {
   event: HubScheduleEvent | null;
 }
 
+interface TodayAgendaItem {
+  id: string;
+  taskId: string | null;
+  title: string;
+  type: string;
+  startTime: string;
+  endTime: string | null;
+  location: string;
+  isTask: boolean;
+  sourceLabel?: string;
+  sourceColor?: string;
+}
+
 interface HubDailyStats {
   date: string;
   tasksCompleted: number;
@@ -270,6 +359,7 @@ interface HubSnapshot {
   challenges: HubChallenge[];
   goals: HubGoal[];
   focusSessions: HubFocusSession[];
+  focusState: HubFocusState | null;
   dailyStats: Record<string, HubDailyStats>;
   streaks: Record<string, unknown>;
   achievements: Record<string, unknown>;
@@ -288,8 +378,108 @@ interface HubSnapshot {
   [key: string]: unknown;
 }
 
+interface MobileSyncState {
+  lastPayloadChecksum: string;
+  lastRemoteChecksum: string;
+  lastRemoteVersion: number;
+  lastSyncAt: string;
+}
+
 function nowIso() {
   return new Date().toISOString();
+}
+
+function computePayloadChecksum(payload: string) {
+  const stableSerialize = (value: unknown): string => {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+    }
+
+    if (value && typeof value === 'object') {
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      return `{${keys.map((key) => `${JSON.stringify(key)}:${stableSerialize(obj[key])}`).join(',')}}`;
+    }
+
+    return JSON.stringify(value);
+  };
+
+  let normalized = payload;
+
+  try {
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const clone: Record<string, unknown> = { ...parsed };
+      delete clone.exportDate;
+      delete clone.source;
+      normalized = stableSerialize(clone);
+    }
+  } catch {
+    normalized = payload;
+  }
+
+  let hash = 2166136261;
+
+  for (let i = 0; i < normalized.length; i += 1) {
+    hash ^= normalized.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function getSyncStateStorageKey(uid: string) {
+  return `${MOBILE_SYNC_STATE_PREFIX}:${uid}`;
+}
+
+function getRemoteVersionFromSnapshotData(data: Record<string, unknown>) {
+  const explicitMs = Number(data.updatedAtMs);
+  if (Number.isFinite(explicitMs) && explicitMs > 0) {
+    return Math.floor(explicitMs);
+  }
+
+  const updatedAt = data.updatedAt as { toMillis?: () => number; seconds?: number } | undefined;
+
+  if (updatedAt?.toMillis) {
+    const millis = Number(updatedAt.toMillis());
+    if (Number.isFinite(millis) && millis > 0) {
+      return Math.floor(millis);
+    }
+  }
+
+  const seconds = Number(updatedAt?.seconds);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.floor(seconds * 1000);
+  }
+
+  return 0;
+}
+
+function hasSyncState(state: MobileSyncState | null) {
+  if (!state) return false;
+  if (state.lastPayloadChecksum || state.lastRemoteChecksum) return true;
+  return Number.isFinite(state.lastRemoteVersion) && state.lastRemoteVersion > 0;
+}
+
+async function readSyncState(uid: string): Promise<MobileSyncState | null> {
+  try {
+    const raw = await AsyncStorage.getItem(getSyncStateStorageKey(uid));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<MobileSyncState>;
+    return {
+      lastPayloadChecksum: typeof parsed.lastPayloadChecksum === 'string' ? parsed.lastPayloadChecksum : '',
+      lastRemoteChecksum: typeof parsed.lastRemoteChecksum === 'string' ? parsed.lastRemoteChecksum : '',
+      lastRemoteVersion: Number.isFinite(Number(parsed.lastRemoteVersion)) ? Number(parsed.lastRemoteVersion) : 0,
+      lastSyncAt: typeof parsed.lastSyncAt === 'string' ? parsed.lastSyncAt : nowIso(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeSyncState(uid: string, state: MobileSyncState) {
+  await AsyncStorage.setItem(getSyncStateStorageKey(uid), JSON.stringify(state));
 }
 
 function formatLocalYmd(date: Date) {
@@ -400,6 +590,13 @@ function normalizeOptionalTimeValue(value: unknown): string | null {
   return normalized || null;
 }
 
+function normalizeTaskReminderMinutes(value: unknown): number | null {
+  if (value == null) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.round(numeric);
+}
+
 function normalizeScheduleWeekdays(value: unknown) {
   const weekdayValues = safeArray(value)
     .map((entry) => Number(entry))
@@ -408,10 +605,53 @@ function normalizeScheduleWeekdays(value: unknown) {
   return Array.from(new Set(weekdayValues));
 }
 
+function normalizeImportedCalendarId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function normalizeScheduleBadgeColor(value: unknown, fallback = '#6366f1') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  const shortHex = /^#([0-9a-fA-F]{3})$/.exec(trimmed);
+  if (shortHex) {
+    const [r, g, b] = shortHex[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  if (/^#([0-9a-fA-F]{6})$/.test(trimmed)) return trimmed;
+  return fallback;
+}
+
+function getImportedSourceDetails(
+  event: HubScheduleEvent,
+  importedCalendarsMeta: Record<string, unknown>,
+): { label: string; color: string } | null {
+  if (!event.importedCalendarId && !event.isImported) return null;
+
+  const meta = event.importedCalendarId
+    ? safeObj(importedCalendarsMeta[event.importedCalendarId])
+    : {};
+  const label = typeof meta.name === 'string' && meta.name.trim()
+    ? meta.name.trim()
+    : 'Imported Calendar';
+  const color = normalizeScheduleBadgeColor(
+    (typeof meta.color === 'string' && meta.color.trim()) ? meta.color : event.color,
+    '#6366f1',
+  );
+
+  return { label, color };
+}
+
 function normalizeScheduleEvent(raw: unknown, fallbackType: HubScheduleType): HubScheduleEvent {
   const data = safeObj(raw);
   const recurrence = normalizeScheduleRecurrence(data.recurrence);
   const isRecurring = Boolean(data.isRecurring || recurrence);
+  const importedCalendarId = normalizeImportedCalendarId(
+    data.importedCalendarId
+      ?? data.sourceCalendarId
+      ?? data.calendarId,
+  );
 
   return {
     id: typeof data.id === 'string' && data.id ? data.id : generateId('event'),
@@ -422,10 +662,12 @@ function normalizeScheduleEvent(raw: unknown, fallbackType: HubScheduleType): Hu
     endTime: normalizeOptionalTimeValue(data.endTime),
     location: typeof data.location === 'string' ? data.location.trim() : '',
     scheduleType: normalizeScheduleType(data.scheduleType, fallbackType),
+    isImported: Boolean(data.isImported || importedCalendarId),
     isRecurring,
     recurrence,
     weekdays: normalizeScheduleWeekdays(data.weekdays),
     recurrenceEndDate: toYmd(data.recurrenceEndDate),
+    importedCalendarId,
     color: typeof data.color === 'string' && data.color.trim() ? data.color.trim() : null,
     description: typeof data.description === 'string' ? data.description : '',
   };
@@ -531,6 +773,7 @@ function normalizeTask(raw: unknown): HubTask {
       : (typeof data.url === 'string' ? data.url : null),
     dueDate: toYmd(data.dueDate),
     dueTime: typeof data.dueTime === 'string' && data.dueTime.trim() ? data.dueTime.trim() : null,
+    reminderMinutes: normalizeTaskReminderMinutes(data.reminderMinutes),
     priority: normalizeTaskPriority(data.priority),
     status: normalizeTaskStatus(data.status),
     category: typeof data.category === 'string' && data.category.trim() ? data.category.trim() : 'homework',
@@ -631,6 +874,66 @@ function normalizeFocusSession(raw: unknown): HubFocusSession {
   };
 }
 
+function normalizeFocusState(raw: unknown): HubFocusState | null {
+  const data = safeObj(raw);
+  if (!Object.keys(data).length) return null;
+
+  const isActive = Boolean(data.isActive);
+  if (!isActive) return null;
+
+  const selectedMinutes = Math.max(1, Math.round(toFinite(data.selectedMinutes, 25)));
+  const isPaused = Boolean(data.isPaused);
+  const isOpenEnded = Boolean(data.isOpenEnded);
+  const isExtraTime = Boolean(data.isExtraTime);
+
+  let remainingSeconds = Math.max(0, Math.round(toFinite(data.remainingSeconds, selectedMinutes * 60)));
+  const endTimestampRaw = Number(data.endTimestamp);
+  let endTimestamp = Number.isFinite(endTimestampRaw) && endTimestampRaw > 0
+    ? Math.round(endTimestampRaw)
+    : null;
+
+  if (!isPaused && !isOpenEnded && !isExtraTime && typeof endTimestamp === 'number') {
+    remainingSeconds = Math.max(0, Math.ceil((endTimestamp - Date.now()) / 1000));
+  }
+
+  if ((isOpenEnded || isExtraTime) && remainingSeconds !== 0) {
+    remainingSeconds = 0;
+    endTimestamp = null;
+  }
+
+  const startTimestampRaw = Number(data.startTimestamp);
+  const startTimestamp = Number.isFinite(startTimestampRaw) && startTimestampRaw > 0
+    ? Math.round(startTimestampRaw)
+    : null;
+
+  const pausedRemainingSeconds = isPaused
+    ? Math.max(0, Math.round(toFinite(data.pausedRemainingSeconds, remainingSeconds)))
+    : null;
+
+  const pausedElapsedSeconds = isPaused
+    ? Math.max(0, Math.round(toFinite(data.pausedElapsedSeconds, (selectedMinutes * 60) - remainingSeconds)))
+    : null;
+
+  return {
+    isActive: true,
+    isPaused,
+    isBreak: Boolean(data.isBreak),
+    isOpenEnded,
+    isExtraTime,
+    extraTimeSeconds: Math.max(0, Math.round(toFinite(data.extraTimeSeconds, 0))),
+    elapsedSeconds: Math.max(0, Math.round(toFinite(data.elapsedSeconds, 0))),
+    remainingSeconds,
+    selectedMinutes,
+    isOverlayMinimized: Boolean(data.isOverlayMinimized),
+    taskTitle: typeof data.taskTitle === 'string' && data.taskTitle.trim() ? data.taskTitle.trim() : null,
+    startTimestamp,
+    endTimestamp,
+    pausedRemainingSeconds,
+    pausedElapsedSeconds,
+    updatedAtMs: Math.max(0, Math.round(toFinite(data.updatedAtMs, Date.now()))),
+  };
+}
+
 function normalizeDailyStats(raw: unknown): HubDailyStats {
   const data = safeObj(raw);
   return {
@@ -655,6 +958,7 @@ function createEmptySnapshot(): HubSnapshot {
     challenges: [],
     goals: [],
     focusSessions: [],
+    focusState: null,
     dailyStats: {},
     streaks: {},
     achievements: {},
@@ -676,6 +980,8 @@ function createEmptySnapshot(): HubSnapshot {
 function normalizeSnapshot(raw: unknown): HubSnapshot {
   const base = createEmptySnapshot();
   const data = safeObj(raw);
+  const settings = safeObj(data.settings);
+  const normalizedFocusState = normalizeFocusState(data.focusState ?? settings.focusState);
   const statsInput = safeObj(data.dailyStats);
   const normalizedStats: Record<string, HubDailyStats> = {};
 
@@ -693,10 +999,11 @@ function normalizeSnapshot(raw: unknown): HubSnapshot {
     challenges: safeArray(data.challenges).map(normalizeChallenge),
     goals: safeArray(data.goals).map(normalizeGoal),
     focusSessions: safeArray(data.focusSessions).map(normalizeFocusSession),
+    focusState: normalizedFocusState,
     dailyStats: normalizedStats,
     streaks: safeObj(data.streaks),
     achievements: safeObj(data.achievements),
-    settings: safeObj(data.settings),
+    settings,
     revisions: safeArray(data.revisions),
     scheduleSchool: safeArray(data.scheduleSchool).map((event) => normalizeScheduleEvent(event, 'school')),
     schedulePersonal: safeArray(data.schedulePersonal).map((event) => normalizeScheduleEvent(event, 'personal')),
@@ -726,6 +1033,55 @@ function getWeekStartYmd(ymd: string) {
   const diff = parsed.getDate() - day + (day === 0 ? -6 : 1);
   const monday = new Date(parsed.getFullYear(), parsed.getMonth(), diff);
   return formatLocalYmd(monday);
+}
+
+function getWeekEndYmd(ymd: string) {
+  const start = getWeekStartYmd(ymd);
+  return addDaysToYmd(start, 6);
+}
+
+function getTimestampForYmdTime(ymd: string | null, time: string | null, fallbackTime: string) {
+  const day = toYmd(ymd);
+  if (!day) return null;
+  const normalizedTime = normalizeTimeValue(time, fallbackTime);
+  if (!normalizedTime) return null;
+
+  const ts = new Date(`${day}T${normalizedTime}:00`).getTime();
+  if (!Number.isFinite(ts)) return null;
+  return ts;
+}
+
+function formatLeadMinutes(minutes: number) {
+  const safe = Math.max(1, Math.round(toFinite(minutes, 60)));
+  if (safe % 1440 === 0) {
+    const days = Math.round(safe / 1440);
+    return `${days}d before`;
+  }
+  if (safe >= 60 && safe % 60 === 0) {
+    const hours = Math.round(safe / 60);
+    return `${hours}h before`;
+  }
+  return `${safe}m before`;
+}
+
+function normalizeSmartReminderSettings(raw: unknown): SmartReminderSettings {
+  const candidate = safeObj(raw);
+
+  const toCategory = (key: ReminderCategory): ReminderCategorySetting => {
+    const current = safeObj(candidate[key]);
+    const defaultSetting = DEFAULT_SMART_REMINDER_SETTINGS[key];
+    const lead = Math.max(1, Math.round(toFinite(current.leadMinutes, defaultSetting.leadMinutes)));
+    return {
+      enabled: typeof current.enabled === 'boolean' ? current.enabled : defaultSetting.enabled,
+      leadMinutes: lead,
+    };
+  };
+
+  return {
+    tasks: toCategory('tasks'),
+    schedule: toCategory('schedule'),
+    challenges: toCategory('challenges'),
+  };
 }
 
 function refreshChallengePeriods(challenges: HubChallenge[]) {
@@ -1307,11 +1663,13 @@ export default function App() {
 
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskDueTime, setTaskDueTime] = useState('');
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
   const [dashboardTaskInput, setDashboardTaskInput] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskTitle, setEditingTaskTitle] = useState('');
   const [editingTaskDueDate, setEditingTaskDueDate] = useState('');
+  const [editingTaskDueTime, setEditingTaskDueTime] = useState('');
   const [editingTaskPriority, setEditingTaskPriority] = useState<TaskPriority>('medium');
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'all' | TaskStatus>('all');
@@ -1342,17 +1700,29 @@ export default function App() {
   const [focusRemainingSeconds, setFocusRemainingSeconds] = useState(25 * 60);
   const [focusTargetMinutes, setFocusTargetMinutes] = useState(25);
   const [focusStartedAt, setFocusStartedAt] = useState<string | null>(null);
+  const [focusDndEnabled, setFocusDndEnabled] = useState(false);
 
   const [reminderHour, setReminderHour] = useState('20');
   const [reminderMinute, setReminderMinute] = useState('00');
+  const [smartReminderSettings, setSmartReminderSettings] = useState<SmartReminderSettings>(
+    DEFAULT_SMART_REMINDER_SETTINGS,
+  );
+  const [smartReminderStatus, setSmartReminderStatus] = useState('Custom reminders are not configured yet.');
   const [interactionPermissionPrompted, setInteractionPermissionPrompted] = useState(false);
   const lastInteractionNotificationAtRef = useRef(0);
+  const focusStateSyncBusyRef = useRef(false);
+  const lastFocusStateSyncAtRef = useRef(0);
+  const lastFocusStateSyncedSecondRef = useRef<number | null>(null);
+  const taskReminderSyncBusyRef = useRef(false);
+  const focusRunningRef = useRef(false);
+  const focusDndEnabledRef = useRef(false);
 
   const isExpoGoAndroid = Platform.OS === 'android'
     && (Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo');
 
   const tabs: Array<{ key: AppTab; label: string }> = [
     { key: 'dashboard', label: 'Dashboard' },
+    { key: 'today', label: 'Today' },
     { key: 'schedule', label: 'Schedule' },
     { key: 'tasks', label: 'Tasks' },
     { key: 'goals', label: 'Goals' },
@@ -1504,6 +1874,94 @@ export default function App() {
       })
       .slice(0, 8);
   }, [snapshot.tasks]);
+
+  const todayChallengeHighlights = useMemo(() => {
+    const today = todayYmd();
+
+    return snapshot.challenges
+      .filter((challenge) => challenge.targetProgress > 0 && challenge.title)
+      .filter((challenge) => challenge.status === 'active' || challenge.status === 'completed')
+      .map((challenge) => {
+        const percent = Math.max(
+          0,
+          Math.min(100, Math.round((challenge.currentProgress / Math.max(1, challenge.targetProgress)) * 100)),
+        );
+        const needsProgressToday = challenge.status === 'active'
+          && challenge.type === 'daily'
+          && challenge.lastProgressDate !== today;
+
+        return {
+          challenge,
+          percent,
+          needsProgressToday,
+        };
+      })
+      .sort((a, b) => {
+        if (a.needsProgressToday !== b.needsProgressToday) return a.needsProgressToday ? -1 : 1;
+
+        const aRank = a.challenge.status === 'active' ? 0 : 1;
+        const bRank = b.challenge.status === 'active' ? 0 : 1;
+        if (aRank !== bRank) return aRank - bRank;
+
+        if (a.challenge.type !== b.challenge.type) {
+          if (a.challenge.type === 'daily') return -1;
+          if (b.challenge.type === 'daily') return 1;
+        }
+
+        return b.percent - a.percent;
+      })
+      .slice(0, 8);
+  }, [snapshot.challenges]);
+
+  const todayAgendaItems = useMemo<TodayAgendaItem[]>(() => {
+    return [
+      ...dashboardTodaySchedule.map((event) => {
+        const source = getImportedSourceDetails(event, snapshot.importedCalendarsMeta);
+        return {
+          id: event.id,
+          taskId: null,
+          title: event.title,
+          type: event.type,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          location: event.location,
+          isTask: false,
+          sourceLabel: source?.label,
+          sourceColor: source?.color,
+        };
+      }),
+      ...dashboardTodayTasks.map((task) => ({
+        id: `task_${task.id}`,
+        taskId: task.id,
+        title: task.title,
+        type: 'task',
+        startTime: task.dueTime || '09:00',
+        endTime: task.dueTime || null,
+        location: '',
+        isTask: true,
+        sourceLabel: undefined,
+        sourceColor: undefined,
+      })),
+    ].sort((a, b) => scheduleTimeToMinutes(a.startTime) - scheduleTimeToMinutes(b.startTime));
+  }, [dashboardTodaySchedule, dashboardTodayTasks, snapshot.importedCalendarsMeta]);
+
+  const todayDigest = useMemo(() => {
+    const activeChallengeCount = todayChallengeHighlights.filter((entry) => entry.challenge.status === 'active').length;
+    const nextTask = dashboardTodayTasks[0]?.title || '';
+    const nextEvent = dashboardTodaySchedule[0];
+    const nextEventLabel = nextEvent
+      ? `${nextEvent.title} at ${formatTimeLabel(nextEvent.startTime)}`
+      : '';
+
+    const details: string[] = [];
+    if (nextTask) details.push(`Top task: ${nextTask}.`);
+    if (nextEventLabel) details.push(`Next event: ${nextEventLabel}.`);
+
+    return {
+      title: 'Today in Productivity Hub',
+      body: `${dashboardTodayTasks.length} tasks, ${dashboardTodaySchedule.length} schedule items, ${activeChallengeCount} active challenges.${details.length ? ` ${details.join(' ')}` : ''}`,
+    };
+  }, [dashboardTodayTasks, dashboardTodaySchedule, todayChallengeHighlights]);
 
   const dashboardGoalsSummary = useMemo(() => {
     const goalRows = snapshot.goals
@@ -1722,24 +2180,268 @@ export default function App() {
     return Math.round(total / weeklySeries.length);
   }, [weeklySeries]);
 
+  const smartReminderCategories: Array<{
+    key: ReminderCategory;
+    label: string;
+    description: string;
+  }> = [
+    {
+      key: 'tasks',
+      label: 'Tasks',
+      description: 'Notify before due tasks',
+    },
+    {
+      key: 'schedule',
+      label: 'Schedules',
+      description: 'Notify before events start',
+    },
+    {
+      key: 'challenges',
+      label: 'Challenges',
+      description: 'Notify before daily/weekly challenge deadlines',
+    },
+  ];
+
+  function isFocusDndActive() {
+    return focusDndEnabledRef.current && focusRunningRef.current;
+  }
+
+  async function configureAndroidNotificationChannels(silent: boolean) {
+    if (Platform.OS !== 'android') return;
+
+    const notifications = getNotificationsModule();
+    if (!notifications) return;
+
+    const dailyImportance = silent
+      ? notifications.AndroidImportance.LOW
+      : notifications.AndroidImportance.DEFAULT;
+    const interactionImportance = silent
+      ? notifications.AndroidImportance.MIN
+      : notifications.AndroidImportance.HIGH;
+
+    await notifications.setNotificationChannelAsync(ANDROID_NOTIFICATION_CHANNEL_ID, {
+      name: 'Daily reminders',
+      importance: dailyImportance,
+      sound: silent ? null : 'default',
+      vibrationPattern: silent ? [0] : [0, 250, 250, 250],
+    }).catch(() => undefined);
+
+    await notifications.setNotificationChannelAsync(ANDROID_INTERACTION_CHANNEL_ID, {
+      name: 'Interaction feedback',
+      importance: interactionImportance,
+      sound: silent ? null : 'default',
+      vibrationPattern: silent ? [0] : [0, 120],
+    }).catch(() => undefined);
+
+    await notifications.setNotificationChannelAsync(ANDROID_FOCUS_SILENT_CHANNEL_ID, {
+      name: 'Focus DND (silent)',
+      importance: notifications.AndroidImportance.MIN,
+      sound: null,
+      vibrationPattern: [0],
+    }).catch(() => undefined);
+  }
+
+  function buildFocusStateFromRuntime(): HubFocusState | null {
+    if (!focusRunning) return null;
+
+    const selectedMinutes = Math.max(1, Math.round(toFinite(focusTargetMinutes, getSelectedFocusMinutes())));
+    const remainingSeconds = Math.max(0, Math.round(toFinite(focusRemainingSeconds, selectedMinutes * 60)));
+    const parsedStart = focusStartedAt ? Date.parse(focusStartedAt) : Number.NaN;
+    const startTimestamp = Number.isFinite(parsedStart)
+      ? Math.round(parsedStart)
+      : Date.now() - Math.max(0, ((selectedMinutes * 60) - remainingSeconds) * 1000);
+    const linkedTask = snapshot.tasks.find((task) => task.id === focusLinkedTaskId);
+
+    return {
+      isActive: true,
+      isPaused: focusPaused,
+      isBreak: false,
+      isOpenEnded: false,
+      isExtraTime: false,
+      extraTimeSeconds: 0,
+      elapsedSeconds: Math.max(0, (selectedMinutes * 60) - remainingSeconds),
+      remainingSeconds,
+      selectedMinutes,
+      isOverlayMinimized: false,
+      taskTitle: linkedTask?.title || null,
+      startTimestamp,
+      endTimestamp: Date.now() + (remainingSeconds * 1000),
+      pausedRemainingSeconds: focusPaused ? remainingSeconds : null,
+      pausedElapsedSeconds: focusPaused ? Math.max(0, (selectedMinutes * 60) - remainingSeconds) : null,
+      updatedAtMs: Date.now(),
+    };
+  }
+
+  function hydrateFocusStateFromSnapshot(sourceSnapshot: HubSnapshot) {
+    const incoming = normalizeFocusState(sourceSnapshot.focusState);
+    if (!incoming?.isActive) return;
+
+    const selectedMinutes = Math.max(1, incoming.selectedMinutes || 25);
+    let remainingSeconds = Math.max(0, incoming.remainingSeconds || 0);
+
+    if (incoming.isPaused) {
+      remainingSeconds = Math.max(0, incoming.pausedRemainingSeconds ?? remainingSeconds);
+    } else if (typeof incoming.endTimestamp === 'number') {
+      remainingSeconds = Math.max(0, Math.ceil((incoming.endTimestamp - Date.now()) / 1000));
+    }
+
+    if (!incoming.isPaused && remainingSeconds <= 0) return;
+
+    setFocusTargetMinutes(selectedMinutes);
+    setFocusRemainingSeconds(remainingSeconds);
+    setFocusStartedAt(incoming.startTimestamp ? new Date(incoming.startTimestamp).toISOString() : nowIso());
+    setFocusPaused(incoming.isPaused);
+    setFocusRunning(true);
+
+    if (incoming.taskTitle) {
+      const linked = sourceSnapshot.tasks.find((task) => task.title === incoming.taskTitle);
+      if (linked?.id) setFocusLinkedTaskId(linked.id);
+    }
+
+    lastFocusStateSyncedSecondRef.current = remainingSeconds;
+    lastFocusStateSyncAtRef.current = Date.now();
+  }
+
+  async function syncFocusStateSnapshot(force = false) {
+    if (!focusRunning) return;
+    if (focusStateSyncBusyRef.current) return;
+
+    const currentSecond = Math.max(0, Math.round(focusRemainingSeconds));
+    if (!force) {
+      if (focusPaused) return;
+      if (currentSecond <= 0) return;
+      if (currentSecond % FOCUS_STATE_SYNC_INTERVAL_SECONDS !== 0) return;
+      if (lastFocusStateSyncedSecondRef.current === currentSecond) return;
+    }
+
+    const nextFocusState = buildFocusStateFromRuntime();
+    if (!nextFocusState) return;
+
+    focusStateSyncBusyRef.current = true;
+
+    try {
+      const saved = await saveLocalSnapshot(normalizeSnapshot({
+        ...snapshot,
+        focusState: nextFocusState,
+      }));
+
+      lastFocusStateSyncAtRef.current = Date.now();
+      lastFocusStateSyncedSecondRef.current = currentSecond;
+
+      if (currentUser) {
+        await pushToCloud(saved, { silent: true, allowConflictUpload: true });
+      }
+    } finally {
+      focusStateSyncBusyRef.current = false;
+    }
+  }
+
+  async function updateFocusDndSetting(enabled: boolean) {
+    setFocusDndEnabled(enabled);
+
+    const nextSettings = {
+      ...safeObj(snapshot.settings),
+      focusDndDuringSession: enabled,
+    };
+
+    await applyLocalChanges(normalizeSnapshot({
+      ...snapshot,
+      settings: nextSettings,
+    }));
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    const hydrateSmartReminderState = async () => {
+      try {
+        const storedSettings = await AsyncStorage.getItem(SMART_REMINDER_SETTINGS_KEY);
+        if (storedSettings && active) {
+          setSmartReminderSettings(normalizeSmartReminderSettings(JSON.parse(storedSettings)));
+        }
+      } catch {
+        // Keep defaults on parse/storage failure.
+      }
+
+      try {
+        const storedIds = await AsyncStorage.getItem(SMART_REMINDER_NOTIFICATION_IDS_KEY);
+        const ids = storedIds ? safeArray<string>(JSON.parse(storedIds)) : [];
+        if (active) {
+          setSmartReminderStatus(
+            ids.length > 0
+              ? `${ids.length} custom reminder${ids.length === 1 ? '' : 's'} currently scheduled.`
+              : 'No custom reminders scheduled.',
+          );
+        }
+      } catch {
+        if (active) setSmartReminderStatus('No custom reminders scheduled.');
+      }
+    };
+
+    void hydrateSmartReminderState();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    focusRunningRef.current = focusRunning;
+    focusNotificationRuntime.focusRunning = focusRunning;
+  }, [focusRunning]);
+
+  useEffect(() => {
+    focusDndEnabledRef.current = focusDndEnabled;
+    focusNotificationRuntime.dndEnabled = focusDndEnabled;
+  }, [focusDndEnabled]);
+
+  useEffect(() => {
+    const dndActive = focusDndEnabled && focusRunning;
+    void configureAndroidNotificationChannels(dndActive);
+  }, [focusDndEnabled, focusRunning]);
+
+  useEffect(() => {
+    void syncTaskRemindersForSnapshot(snapshot);
+  }, [snapshot.tasks]);
+
+  useEffect(() => {
+    if (!focusRunning) {
+      lastFocusStateSyncedSecondRef.current = null;
+      return;
+    }
+
+    void syncFocusStateSnapshot(true);
+  }, [focusRunning, focusPaused, focusLinkedTaskId]);
+
+  useEffect(() => {
+    if (!focusRunning || focusPaused) return;
+    void syncFocusStateSnapshot(false);
+  }, [focusRunning, focusPaused, focusRemainingSeconds]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const intervalMs = focusRunning ? 45000 : 8000;
+    void pullFromCloud(currentUser, true);
+
+    const timer = setInterval(() => {
+      void pullFromCloud(currentUser, true);
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [currentUser, focusRunning]);
+
   useEffect(() => {
     if (Platform.OS !== 'android') return;
 
     const notifications = getNotificationsModule();
     if (!notifications) return;
 
-    notifications.setNotificationChannelAsync(ANDROID_NOTIFICATION_CHANNEL_ID, {
-      name: 'Daily reminders',
-      importance: notifications.AndroidImportance.DEFAULT,
-      sound: 'default',
-      vibrationPattern: [0, 250, 250, 250],
-    }).catch(() => undefined);
-
-    notifications.setNotificationChannelAsync(ANDROID_INTERACTION_CHANNEL_ID, {
-      name: 'Interaction feedback',
-      importance: notifications.AndroidImportance.HIGH,
-      sound: 'default',
-      vibrationPattern: [0, 120],
+    notifications.setNotificationChannelAsync(ANDROID_FOCUS_SILENT_CHANNEL_ID, {
+      name: 'Focus DND (silent)',
+      importance: notifications.AndroidImportance.MIN,
+      sound: null,
+      vibrationPattern: [0],
     }).catch(() => undefined);
   }, []);
 
@@ -1764,10 +2466,12 @@ export default function App() {
     const dailyStudyTarget = Math.max(1, Math.round(toFinite(settings.dailyStudyTarget, 8)));
     const dailyTaskTarget = Math.max(1, Math.round(toFinite(settings.dailyTaskTarget, 5)));
     const weeklyStudyTarget = Math.max(1, Math.round(toFinite(settings.weeklyStudyTarget, 40)));
+    const focusDnd = Boolean(settings.focusDndDuringSession);
 
     setDailyStudyTargetInput(String(dailyStudyTarget));
     setDailyTaskTargetInput(String(dailyTaskTarget));
     setWeeklyStudyTargetInput(String(weeklyStudyTarget));
+    setFocusDndEnabled(focusDnd);
   }
 
   async function saveLocalSnapshot(next: HubSnapshot) {
@@ -1793,16 +2497,27 @@ export default function App() {
         return;
       }
 
-      const payload = snap.data()?.payload;
+      const cloudData = (snap.data() || {}) as Record<string, unknown>;
+      const payload = cloudData.payload;
       if (typeof payload !== 'string' || !payload.trim()) {
         if (!silent) setSyncStatus('Cloud snapshot exists but payload is empty.');
         return;
       }
 
+      const remoteChecksum = computePayloadChecksum(payload);
+      const remoteVersion = getRemoteVersionFromSnapshotData(cloudData);
+
       const parsed = JSON.parse(payload);
       const normalized = normalizeSnapshot(parsed);
       const saved = await saveLocalSnapshot(normalized);
       hydrateSettingsInputs(saved);
+      hydrateFocusStateFromSnapshot(saved);
+      await writeSyncState(user.uid, {
+        lastPayloadChecksum: remoteChecksum,
+        lastRemoteChecksum: remoteChecksum,
+        lastRemoteVersion: remoteVersion || Date.now(),
+        lastSyncAt: nowIso(),
+      });
       setLastSyncAt(nowIso());
       if (!silent) setSyncStatus('Pulled latest data from cloud.');
     } catch (error) {
@@ -1813,9 +2528,14 @@ export default function App() {
     }
   }
 
-  async function pushToCloud(snapshotOverride?: HubSnapshot) {
+  async function pushToCloud(
+    snapshotOverride?: HubSnapshot,
+    options: { allowConflictUpload?: boolean; silent?: boolean } = {},
+  ) {
+    const { allowConflictUpload = false, silent = false } = options;
+
     if (!currentUser) {
-      setSyncStatus('Sign in before syncing.');
+      if (!silent) setSyncStatus('Sign in before syncing.');
       return;
     }
 
@@ -1832,24 +2552,76 @@ export default function App() {
       null,
       2,
     );
+    const localChecksum = computePayloadChecksum(payload);
 
     setSyncBusy(true);
-    setSyncStatus('Pushing local data to cloud...');
+    if (!silent) setSyncStatus('Pushing local data to cloud...');
 
     try {
       const docRef = doc(db, SYNC_COLLECTION, currentUser.uid);
+      const remoteSnap = await getDoc(docRef);
+      const remoteData = remoteSnap.exists()
+        ? ((remoteSnap.data() || {}) as Record<string, unknown>)
+        : {};
+      const remotePayload = typeof remoteData.payload === 'string' ? remoteData.payload : '';
+      const hasRemotePayload = !!remotePayload.trim();
+      const remoteChecksum = hasRemotePayload ? computePayloadChecksum(remotePayload) : '';
+      const remoteVersion = hasRemotePayload ? getRemoteVersionFromSnapshotData(remoteData) : 0;
+
+      const previousState = await readSyncState(currentUser.uid);
+      const hasPriorState = hasSyncState(previousState);
+      const localChangedSinceLastSync = !hasPriorState
+        || localChecksum !== (previousState?.lastPayloadChecksum || '');
+      const remoteChangedSinceLastSync = hasRemotePayload && (
+        !hasPriorState
+        || remoteChecksum !== (previousState?.lastRemoteChecksum || '')
+        || remoteVersion > Number(previousState?.lastRemoteVersion || 0)
+      );
+
+      if (remoteChangedSinceLastSync && !localChangedSinceLastSync) {
+        const parsed = JSON.parse(remotePayload);
+        const normalized = normalizeSnapshot(parsed);
+        const savedRemote = await saveLocalSnapshot(normalized);
+        hydrateSettingsInputs(savedRemote);
+        await writeSyncState(currentUser.uid, {
+          lastPayloadChecksum: remoteChecksum,
+          lastRemoteChecksum: remoteChecksum,
+          lastRemoteVersion: remoteVersion || Date.now(),
+          lastSyncAt: nowIso(),
+        });
+        setLastSyncAt(nowIso());
+        if (!silent) setSyncStatus('Cloud had newer data. Pulled latest snapshot instead of overwriting.');
+        return;
+      }
+
+      if (remoteChangedSinceLastSync && localChangedSinceLastSync && !allowConflictUpload) {
+        if (!silent) {
+          setSyncStatus('Sync blocked: cloud changed on another device. Pull latest first to avoid resurrecting deleted tasks.');
+        }
+        return;
+      }
+
+      const updatedAtMs = Date.now();
       await setDoc(
         docRef,
         {
           payload,
+          payloadChecksum: localChecksum,
           schemaVersion: 2,
           updatedAt: serverTimestamp(),
+          updatedAtMs,
           updatedBy: 'mobile-app',
         },
         { merge: true },
       );
+      await writeSyncState(currentUser.uid, {
+        lastPayloadChecksum: localChecksum,
+        lastRemoteChecksum: localChecksum,
+        lastRemoteVersion: updatedAtMs,
+        lastSyncAt: nowIso(),
+      });
       setLastSyncAt(nowIso());
-      setSyncStatus('Cloud sync successful.');
+      if (!silent) setSyncStatus('Cloud sync successful.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown sync error';
       setSyncStatus(`Push failed: ${message}`);
@@ -1861,7 +2633,7 @@ export default function App() {
   async function applyLocalChanges(next: HubSnapshot) {
     const saved = await saveLocalSnapshot(next);
     if (currentUser) {
-      await pushToCloud(saved);
+      await pushToCloud(saved, { silent: true, allowConflictUpload: true });
     }
   }
 
@@ -1883,6 +2655,7 @@ export default function App() {
           const normalized = finalizeSnapshot(normalizeSnapshot(parsed));
           setSnapshot(normalized);
           hydrateSettingsInputs(normalized);
+          hydrateFocusStateFromSnapshot(normalized);
         } else {
           const empty = createEmptySnapshot();
           setSnapshot(empty);
@@ -1947,6 +2720,75 @@ export default function App() {
     }
   }
 
+  function openTaskDueDatePicker(editing = false) {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Date picker', 'Date picker is available on Android in this build.');
+      return;
+    }
+
+    const sourceValue = editing ? editingTaskDueDate : taskDueDate;
+    const seedYmd = toYmd(sourceValue) || todayYmd();
+    const seedDate = new Date(`${seedYmd}T00:00:00`);
+
+    DateTimePickerAndroid.open({
+      mode: 'date',
+      value: Number.isNaN(seedDate.getTime()) ? new Date() : seedDate,
+      onChange: (event, selectedDate) => {
+        if (event.type !== 'set' || !selectedDate) return;
+        const ymd = formatLocalYmd(selectedDate);
+        if (editing) {
+          setEditingTaskDueDate(ymd);
+        } else {
+          setTaskDueDate(ymd);
+        }
+      },
+    });
+  }
+
+  function openTaskDueTimePicker(editing = false) {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Time picker', 'Time picker is available on Android in this build.');
+      return;
+    }
+
+    const sourceValue = editing ? editingTaskDueTime : taskDueTime;
+    const normalized = normalizeTimeValue(sourceValue, '09:00');
+    const [hours, minutes] = normalized.split(':').map((part) => Number(part));
+    const seedDate = new Date();
+    seedDate.setHours(hours, minutes, 0, 0);
+
+    DateTimePickerAndroid.open({
+      mode: 'time',
+      value: seedDate,
+      is24Hour: true,
+      onChange: (event, selectedDate) => {
+        if (event.type !== 'set' || !selectedDate) return;
+        const next = `${String(selectedDate.getHours()).padStart(2, '0')}:${String(selectedDate.getMinutes()).padStart(2, '0')}`;
+        if (editing) {
+          setEditingTaskDueTime(next);
+        } else {
+          setTaskDueTime(next);
+        }
+      },
+    });
+  }
+
+  function clearTaskDueDate(editing = false) {
+    if (editing) {
+      setEditingTaskDueDate('');
+      return;
+    }
+    setTaskDueDate('');
+  }
+
+  function clearTaskDueTime(editing = false) {
+    if (editing) {
+      setEditingTaskDueTime('');
+      return;
+    }
+    setTaskDueTime('');
+  }
+
   async function handleAddTask() {
     const title = taskTitle.trim();
     if (!title) {
@@ -1960,13 +2802,20 @@ export default function App() {
       return;
     }
 
+    const dueTime = normalizeOptionalTimeValue(taskDueTime.trim());
+    if (taskDueTime.trim() && !dueTime) {
+      Alert.alert('Invalid time', 'Use HH:mm format (for example 09:30).');
+      return;
+    }
+
     const newTask: HubTask = {
       id: generateId('task'),
       title,
       description: '',
       linkUrl: null,
       dueDate: due,
-      dueTime: null,
+      dueTime,
+      reminderMinutes: null,
       priority: taskPriority,
       status: 'not-started',
       category: 'homework',
@@ -1987,6 +2836,7 @@ export default function App() {
     await applyLocalChanges(next);
     setTaskTitle('');
     setTaskDueDate('');
+    setTaskDueTime('');
     await sendInteractionNotification('Task added', `${title} was added to your tasks.`);
   }
 
@@ -2001,6 +2851,7 @@ export default function App() {
       linkUrl: null,
       dueDate: todayYmd(),
       dueTime: null,
+      reminderMinutes: null,
       priority: 'medium',
       status: 'not-started',
       category: 'homework',
@@ -2078,6 +2929,7 @@ export default function App() {
     setEditingTaskId(task.id);
     setEditingTaskTitle(task.title);
     setEditingTaskDueDate(task.dueDate || '');
+    setEditingTaskDueTime(task.dueTime || '');
     setEditingTaskPriority(task.priority);
     setActiveTab('tasks');
   }
@@ -2086,6 +2938,7 @@ export default function App() {
     setEditingTaskId(null);
     setEditingTaskTitle('');
     setEditingTaskDueDate('');
+    setEditingTaskDueTime('');
     setEditingTaskPriority('medium');
   }
 
@@ -2104,12 +2957,19 @@ export default function App() {
       return;
     }
 
+    const dueTime = normalizeOptionalTimeValue(editingTaskDueTime.trim());
+    if (editingTaskDueTime.trim() && !dueTime) {
+      Alert.alert('Invalid time', 'Use HH:mm format (for example 09:30).');
+      return;
+    }
+
     const nextTasks = snapshot.tasks.map((task) => {
       if (task.id !== editingTaskId) return task;
       return {
         ...task,
         title,
         dueDate: due,
+        dueTime,
         priority: editingTaskPriority,
         updatedAt: nowIso(),
       };
@@ -2157,7 +3017,11 @@ export default function App() {
     const details = [
       task.priority.toUpperCase(),
       task.status,
-      task.dueDate ? task.dueDate : 'No due date',
+      task.dueDate ? formatYmdLabel(task.dueDate) : 'No due date',
+      task.dueTime ? formatTimeLabel(task.dueTime) : 'No due time',
+      task.reminderMinutes == null || task.reminderMinutes < 0
+        ? 'Reminder off'
+        : `Reminder ${task.reminderMinutes} min early`,
     ].join(' | ');
 
     Alert.alert(task.title, details, [
@@ -2438,6 +3302,7 @@ export default function App() {
 
     let next = normalizeSnapshot({
       ...snapshot,
+      focusState: null,
       focusSessions: [session, ...snapshot.focusSessions],
     });
 
@@ -2468,6 +3333,347 @@ export default function App() {
     }
   }
 
+  function buildSmartReminderDrafts(settings: SmartReminderSettings): SmartReminderDraft[] {
+    const now = Date.now();
+    const minimumTriggerTs = now + (30 * 1000);
+    const drafts: SmartReminderDraft[] = [];
+
+    if (settings.tasks.enabled) {
+      const leadMs = settings.tasks.leadMinutes * 60 * 1000;
+
+      const taskDrafts = snapshot.tasks
+        .filter((task) => task.status !== 'completed' && Boolean(toYmd(task.dueDate)))
+        .map((task) => {
+          const dueTs = getTimestampForYmdTime(task.dueDate, task.dueTime, '21:00');
+          if (dueTs == null || dueTs <= now) return null;
+
+          const triggerAtMs = dueTs - leadMs;
+          if (triggerAtMs < minimumTriggerTs) return null;
+
+          const dueDateLabel = formatYmdLabel(task.dueDate);
+          const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
+
+          return {
+            category: 'tasks' as ReminderCategory,
+            itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_${settings.tasks.leadMinutes}`,
+            title: 'Task reminder',
+            body: `${task.title} is due ${dueDateLabel} at ${dueTimeLabel}.`,
+            triggerAtMs,
+          };
+        })
+        .filter((entry): entry is SmartReminderDraft => Boolean(entry))
+        .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+        .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
+
+      drafts.push(...taskDrafts);
+    }
+
+    if (settings.schedule.enabled) {
+      const leadMs = settings.schedule.leadMinutes * 60 * 1000;
+
+      const scheduleDrafts = buildScheduleOccurrences(allScheduleEvents, todayYmd(), SMART_REMINDER_LOOKAHEAD_DAYS)
+        .map((occurrence) => {
+          const eventTs = getTimestampForYmdTime(occurrence.occurrenceDate, occurrence.event.startTime, '09:00');
+          if (eventTs == null || eventTs <= now) return null;
+
+          const triggerAtMs = eventTs - leadMs;
+          if (triggerAtMs < minimumTriggerTs) return null;
+
+          return {
+            category: 'schedule' as ReminderCategory,
+            itemKey: `event_${occurrence.key}_${settings.schedule.leadMinutes}`,
+            title: 'Schedule reminder',
+            body: `${occurrence.event.title} starts ${formatYmdLabel(occurrence.occurrenceDate)} at ${formatTimeLabel(occurrence.event.startTime)}.`,
+            triggerAtMs,
+          };
+        })
+        .filter((entry): entry is SmartReminderDraft => Boolean(entry))
+        .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+        .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
+
+      drafts.push(...scheduleDrafts);
+    }
+
+    if (settings.challenges.enabled) {
+      const leadMs = settings.challenges.leadMinutes * 60 * 1000;
+      const today = todayYmd();
+      const weekEnd = getWeekEndYmd(today);
+
+      const challengeDrafts = snapshot.challenges
+        .filter((challenge) => challenge.status === 'active' && challenge.currentProgress < challenge.targetProgress)
+        .map((challenge) => {
+          const dueYmd = challenge.type === 'weekly' ? weekEnd : today;
+          const dueTs = getTimestampForYmdTime(dueYmd, '21:00', '21:00');
+          if (dueTs == null || dueTs <= now) return null;
+
+          const triggerAtMs = dueTs - leadMs;
+          if (triggerAtMs < minimumTriggerTs) return null;
+
+          return {
+            category: 'challenges' as ReminderCategory,
+            itemKey: `challenge_${challenge.id}_${dueYmd}_${settings.challenges.leadMinutes}`,
+            title: 'Challenge reminder',
+            body: `${challenge.title}: ${challenge.currentProgress}/${challenge.targetProgress} done. Keep your streak alive.`,
+            triggerAtMs,
+          };
+        })
+        .filter((entry): entry is SmartReminderDraft => Boolean(entry))
+        .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+        .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
+
+      drafts.push(...challengeDrafts);
+    }
+
+    return drafts.sort((a, b) => a.triggerAtMs - b.triggerAtMs);
+  }
+
+  function buildTaskReminderDrafts(tasks: HubTask[]): TaskReminderDraft[] {
+    const now = Date.now();
+    const minimumTriggerTs = now + (30 * 1000);
+
+    return tasks
+      .filter((task) => task.status !== 'completed' && Boolean(toYmd(task.dueDate)))
+      .map((task) => {
+        if (task.reminderMinutes == null) return null;
+
+        const reminderMinutes = Math.round(toFinite(task.reminderMinutes, Number.NaN));
+        if (!Number.isFinite(reminderMinutes) || reminderMinutes < 0) return null;
+
+        const dueTs = getTimestampForYmdTime(task.dueDate, task.dueTime, '21:00');
+        if (dueTs == null || dueTs <= now) return null;
+
+        const triggerAtMs = dueTs - (reminderMinutes * 60 * 1000);
+        if (triggerAtMs < minimumTriggerTs) return null;
+
+        const dueDateLabel = formatYmdLabel(task.dueDate);
+        const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
+
+        return {
+          taskId: task.id,
+          itemKey: `task_direct_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_${reminderMinutes}`,
+          title: 'Task reminder',
+          body: `${task.title} is due ${dueDateLabel} at ${dueTimeLabel}.`,
+          triggerAtMs,
+        };
+      })
+      .filter((entry): entry is TaskReminderDraft => Boolean(entry))
+      .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+      .slice(0, SMART_REMINDER_MAX_PER_CATEGORY * 3);
+  }
+
+  async function syncTaskRemindersForSnapshot(nextSnapshot: HubSnapshot) {
+    if (isExpoGoAndroid) return;
+    if (taskReminderSyncBusyRef.current) return;
+
+    const notifications = getNotificationsModule();
+    if (!notifications) return;
+
+    taskReminderSyncBusyRef.current = true;
+
+    try {
+      const permission = await notifications.getPermissionsAsync();
+      if (!permission.granted) return;
+
+      const storedRaw = await AsyncStorage.getItem(TASK_REMINDER_NOTIFICATION_IDS_KEY);
+      const storedParsed = storedRaw ? safeObj(JSON.parse(storedRaw)) : {};
+      const storedMap: Record<string, string> = {};
+
+      for (const [itemKey, notificationId] of Object.entries(storedParsed)) {
+        if (typeof itemKey !== 'string' || !itemKey.trim()) continue;
+        if (typeof notificationId !== 'string' || !notificationId.trim()) continue;
+        storedMap[itemKey] = notificationId;
+      }
+
+      const drafts = buildTaskReminderDrafts(nextSnapshot.tasks);
+      const draftByKey = new Map(drafts.map((draft) => [draft.itemKey, draft]));
+
+      for (const [itemKey, notificationId] of Object.entries(storedMap)) {
+        if (draftByKey.has(itemKey)) continue;
+        await notifications.cancelScheduledNotificationAsync(notificationId).catch(() => undefined);
+      }
+
+      const nextMap: Record<string, string> = {};
+
+      for (const draft of drafts) {
+        const existingId = storedMap[draft.itemKey];
+        if (existingId) {
+          nextMap[draft.itemKey] = existingId;
+          continue;
+        }
+
+        const content: import('expo-notifications').NotificationContentInput = {
+          title: draft.title,
+          body: draft.body,
+          sound: 'default',
+          data: {
+            scope: 'task-reminder',
+            taskId: draft.taskId,
+            itemKey: draft.itemKey,
+          },
+        };
+
+        const dateTrigger = new Date(draft.triggerAtMs);
+
+        try {
+          const preferredTrigger = (
+            Platform.OS === 'android'
+              ? {
+                  type: notifications.SchedulableTriggerInputTypes.DATE,
+                  date: dateTrigger,
+                  channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+                }
+              : {
+                  type: notifications.SchedulableTriggerInputTypes.DATE,
+                  date: dateTrigger,
+                }
+          ) as import('expo-notifications').NotificationTriggerInput;
+
+          let id = '';
+          try {
+            id = await notifications.scheduleNotificationAsync({
+              content,
+              trigger: preferredTrigger,
+            });
+          } catch {
+            id = await notifications.scheduleNotificationAsync({
+              content,
+              trigger: dateTrigger as unknown as import('expo-notifications').NotificationTriggerInput,
+            });
+          }
+
+          if (id) {
+            nextMap[draft.itemKey] = id;
+          }
+        } catch {
+          // Keep automatic reminder syncing best-effort.
+        }
+      }
+
+      await AsyncStorage.setItem(TASK_REMINDER_NOTIFICATION_IDS_KEY, JSON.stringify(nextMap));
+    } catch {
+      // Keep automatic reminder syncing non-blocking.
+    } finally {
+      taskReminderSyncBusyRef.current = false;
+    }
+  }
+
+  async function clearSmartReminders(options: { showAlert?: boolean } = {}) {
+    const notifications = getNotificationsModule();
+    const showAlert = options.showAlert !== false;
+
+    try {
+      const stored = await AsyncStorage.getItem(SMART_REMINDER_NOTIFICATION_IDS_KEY);
+      const ids = stored ? safeArray<string>(JSON.parse(stored)) : [];
+
+      if (notifications) {
+        for (const id of ids) {
+          await notifications.cancelScheduledNotificationAsync(id).catch(() => undefined);
+        }
+      }
+
+      await AsyncStorage.removeItem(SMART_REMINDER_NOTIFICATION_IDS_KEY);
+      setSmartReminderStatus('Custom reminders cleared.');
+
+      if (showAlert) {
+        Alert.alert('Custom reminders cleared', 'Per-category reminders have been removed.');
+      }
+    } catch {
+      if (showAlert) {
+        Alert.alert('Reminder error', 'Could not clear custom reminders.');
+      }
+    }
+  }
+
+  async function applySmartReminders() {
+    if (isExpoGoAndroid) {
+      Alert.alert(
+        'Development build required',
+        'Expo Go does not fully support Android notifications. Build and open the development app to use custom reminders.',
+      );
+      return;
+    }
+
+    const normalizedSettings = normalizeSmartReminderSettings(smartReminderSettings);
+    setSmartReminderSettings(normalizedSettings);
+    await AsyncStorage.setItem(SMART_REMINDER_SETTINGS_KEY, JSON.stringify(normalizedSettings));
+
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+
+    const notifications = getNotificationsModule();
+    if (!notifications) return;
+
+    await clearSmartReminders({ showAlert: false });
+
+    const drafts = buildSmartReminderDrafts(normalizedSettings);
+    if (!drafts.length) {
+      setSmartReminderStatus('No upcoming items matched your reminder settings.');
+      Alert.alert('No reminders scheduled', 'No upcoming tasks/events/challenges matched the selected lead times.');
+      return;
+    }
+
+    const counts: Record<ReminderCategory, number> = {
+      tasks: 0,
+      schedule: 0,
+      challenges: 0,
+    };
+    const scheduledIds: string[] = [];
+
+    for (const draft of drafts) {
+      const content: import('expo-notifications').NotificationContentInput = {
+        title: draft.title,
+        body: draft.body,
+        sound: 'default',
+        data: {
+          scope: 'custom-reminder',
+          category: draft.category,
+          itemKey: draft.itemKey,
+        },
+      };
+
+      const dateTrigger = new Date(draft.triggerAtMs);
+
+      try {
+        const preferredTrigger = (
+          Platform.OS === 'android'
+            ? {
+                type: notifications.SchedulableTriggerInputTypes.DATE,
+                date: dateTrigger,
+                channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+              }
+            : {
+                type: notifications.SchedulableTriggerInputTypes.DATE,
+                date: dateTrigger,
+              }
+        ) as import('expo-notifications').NotificationTriggerInput;
+
+        let id = '';
+        try {
+          id = await notifications.scheduleNotificationAsync({
+            content,
+            trigger: preferredTrigger,
+          });
+        } catch {
+          id = await notifications.scheduleNotificationAsync({
+            content,
+            trigger: dateTrigger as unknown as import('expo-notifications').NotificationTriggerInput,
+          });
+        }
+
+        scheduledIds.push(id);
+        counts[draft.category] += 1;
+      } catch {
+        // Keep scheduling best-effort so one bad entry does not block others.
+      }
+    }
+
+    await AsyncStorage.setItem(SMART_REMINDER_NOTIFICATION_IDS_KEY, JSON.stringify(scheduledIds));
+
+    const summary = `Scheduled ${scheduledIds.length} custom reminders (Tasks ${counts.tasks}, Schedule ${counts.schedule}, Challenges ${counts.challenges}).`;
+    setSmartReminderStatus(summary);
+    Alert.alert('Custom reminders ready', summary);
+  }
+
   async function requestNotificationPermission() {
     if (isExpoGoAndroid) {
       Alert.alert(
@@ -2494,11 +3700,18 @@ export default function App() {
     }
 
     setSyncStatus('Notifications permission granted.');
+    void syncTaskRemindersForSnapshot(snapshot);
     return true;
+  }
+
+  function getNotificationChannelId(defaultId: string) {
+    if (Platform.OS !== 'android') return defaultId;
+    return isFocusDndActive() ? ANDROID_FOCUS_SILENT_CHANNEL_ID : defaultId;
   }
 
   async function sendInteractionNotification(title: string, body: string) {
     if (isExpoGoAndroid) return;
+    if (isFocusDndActive()) return;
 
     const notifications = getNotificationsModule();
     if (!notifications) return;
@@ -2523,13 +3736,50 @@ export default function App() {
         content: {
           title,
           body,
-          sound: 'default',
-          data: { channelId: ANDROID_INTERACTION_CHANNEL_ID },
+          sound: isFocusDndActive() ? false : 'default',
+          data: { channelId: getNotificationChannelId(ANDROID_INTERACTION_CHANNEL_ID) },
         },
         trigger: null,
       });
     } catch {
       // Keep interaction feedback best-effort and non-blocking.
+    }
+  }
+
+  async function sendTodaySummaryNotification() {
+    if (isExpoGoAndroid) {
+      Alert.alert(
+        'Development build required',
+        'Android notifications are limited in Expo Go. Use the development build to send summary notifications.',
+      );
+      return;
+    }
+
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+
+    const notifications = getNotificationsModule();
+    if (!notifications) return;
+
+    try {
+      await notifications.scheduleNotificationAsync({
+        content: {
+          title: todayDigest.title,
+          body: todayDigest.body,
+          sound: isFocusDndActive() ? false : 'default',
+          data: {
+            channelId: getNotificationChannelId(ANDROID_NOTIFICATION_CHANNEL_ID),
+            scope: 'today-summary',
+            date: todayYmd(),
+          },
+        },
+        trigger: null,
+      });
+
+      Alert.alert('Summary sent', 'Today\'s summary was sent to your notifications.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown notification error';
+      Alert.alert('Notification error', message);
     }
   }
 
@@ -2559,9 +3809,13 @@ export default function App() {
     }
 
     const content: import('expo-notifications').NotificationContentInput = {
-      title: 'Productivity Hub reminder',
-      body: 'Review tasks, goals, and challenge progress.',
-      sound: 'default',
+      title: todayDigest.title,
+      body: todayDigest.body,
+      sound: isFocusDndActive() ? false : 'default',
+      data: {
+        channelId: getNotificationChannelId(ANDROID_NOTIFICATION_CHANNEL_ID),
+        scope: 'daily-reminder',
+      },
     };
 
     try {
@@ -2571,7 +3825,7 @@ export default function App() {
               type: notifications.SchedulableTriggerInputTypes.DAILY,
               hour,
               minute,
-              channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+              channelId: getNotificationChannelId(ANDROID_NOTIFICATION_CHANNEL_ID),
             }
           : {
               type: notifications.SchedulableTriggerInputTypes.CALENDAR,
@@ -2758,6 +4012,41 @@ export default function App() {
     );
   }
 
+  function openTodayAgendaItem(item: TodayAgendaItem) {
+    if (item.isTask && item.taskId) {
+      const task = snapshot.tasks.find((entry) => entry.id === item.taskId);
+      if (task) {
+        openTaskActions(task);
+      }
+      return;
+    }
+
+    const lines = [
+      formatTimeLabel(item.startTime),
+      item.endTime ? `${formatTimeLabel(item.startTime)} - ${formatTimeLabel(item.endTime)}` : null,
+      item.sourceLabel ? `Source: ${item.sourceLabel}` : null,
+      item.location || null,
+    ].filter(Boolean);
+
+    Alert.alert(item.title, lines.join('\n') || 'Schedule item', [
+      {
+        text: 'Start Focus',
+        onPress: () => setActiveTab('focus'),
+      },
+      {
+        text: 'Open Schedule',
+        onPress: () => {
+          const today = todayYmd();
+          setScheduleSelectedDate(today);
+          setScheduleMonthCursor(getMonthStartYmd(today));
+          setScheduleWeekCursor(getCalendarWeekStartYmd(today));
+          setActiveTab('schedule');
+        },
+      },
+      { text: 'Close', style: 'cancel' },
+    ]);
+  }
+
   function renderDashboardTab() {
     const greetingText = `${getDashboardGreeting()}, Scholar!`;
     const dateLabel = new Date().toLocaleDateString('en-US', {
@@ -2767,39 +4056,7 @@ export default function App() {
       day: 'numeric',
     });
 
-    const visibleChallenges = snapshot.challenges
-      .filter((challenge) => challenge.targetProgress > 0 && challenge.title)
-      .filter((challenge) => challenge.status === 'active' || challenge.status === 'completed')
-      .sort((a, b) => {
-        const aRank = a.status === 'active' ? 0 : 1;
-        const bRank = b.status === 'active' ? 0 : 1;
-        if (aRank !== bRank) return aRank - bRank;
-        return a.title.localeCompare(b.title);
-      })
-      .slice(0, 3);
-
-    const todayAgendaItems = [
-      ...dashboardTodaySchedule.map((event) => ({
-        id: event.id,
-        taskId: null,
-        title: event.title,
-        type: event.type,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        location: event.location,
-        isTask: false,
-      })),
-      ...dashboardTodayTasks.map((task) => ({
-        id: `task_${task.id}`,
-        taskId: task.id,
-        title: task.title,
-        type: 'task',
-        startTime: task.dueTime || '09:00',
-        endTime: task.dueTime || null,
-        location: '',
-        isTask: true,
-      })),
-    ].sort((a, b) => scheduleTimeToMinutes(a.startTime) - scheduleTimeToMinutes(b.startTime));
+    const visibleChallenges = todayChallengeHighlights.slice(0, 3);
 
     const formatRecordTime = (minutes: number) => {
       const safeMinutes = Math.max(0, Math.round(minutes));
@@ -2812,45 +4069,141 @@ export default function App() {
 
     const goalFillStyles = [styles.goalFill1, styles.goalFill2, styles.goalFill3, styles.goalFill4];
 
-    const openDashboardAgendaItem = (item: (typeof todayAgendaItems)[number]) => {
-      if (item.isTask && item.taskId) {
-        const task = snapshot.tasks.find((entry) => entry.id === item.taskId);
-        if (task) {
-          openTaskActions(task);
-        }
-        return;
-      }
-
-      const lines = [
-        formatTimeLabel(item.startTime),
-        item.endTime ? `${formatTimeLabel(item.startTime)} - ${formatTimeLabel(item.endTime)}` : null,
-        item.location || null,
-      ].filter(Boolean);
-
-      Alert.alert(item.title, lines.join('\n') || 'Schedule item', [
-        {
-          text: 'Start Focus',
-          onPress: () => setActiveTab('focus'),
-        },
-        {
-          text: 'Open Schedule',
-          onPress: () => {
-            const today = todayYmd();
-            setScheduleSelectedDate(today);
-            setScheduleMonthCursor(getMonthStartYmd(today));
-            setScheduleWeekCursor(getCalendarWeekStartYmd(today));
-            setActiveTab('schedule');
-          },
-        },
-        { text: 'Close', style: 'cancel' },
-      ]);
-    };
-
     return (
       <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
         <View style={styles.dashboardHeaderPanel}>
           <Text style={styles.dashboardGreeting}>{greetingText}</Text>
           <Text style={styles.dashboardDate}>{dateLabel}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardTitle}>Today's Hub</Text>
+            <Text style={styles.cardCount}>{dashboardTodayTasks.length + dashboardTodaySchedule.length + todayChallengeHighlights.length}</Text>
+          </View>
+
+          <Text style={styles.mutedText}>{todayDigest.body}</Text>
+
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Tasks</Text>
+              <Text style={styles.summaryValue}>{dashboardTodayTasks.length}</Text>
+              <Text style={styles.summaryMeta}>Today</Text>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Events</Text>
+              <Text style={styles.summaryValue}>{dashboardTodaySchedule.length}</Text>
+              <Text style={styles.summaryMeta}>Today</Text>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Challenges</Text>
+              <Text style={styles.summaryValue}>{todayChallengeHighlights.length}</Text>
+              <Text style={styles.summaryMeta}>Today</Text>
+            </View>
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Focus</Text>
+              <Text style={styles.summaryValue}>{formatMinutes(todayStats.focusMinutes)}</Text>
+              <Text style={styles.summaryMeta}>Today</Text>
+            </View>
+          </View>
+
+          <View style={styles.todayDigestSection}>
+            <Text style={styles.summaryLabel}>Next Tasks</Text>
+            {dashboardTodayTasks.length === 0 ? (
+              <Text style={styles.summaryMeta}>No tasks due today.</Text>
+            ) : (
+              dashboardTodayTasks.slice(0, 3).map((task) => (
+                <Pressable key={`hub-task-${task.id}`} style={styles.todayDigestRow} onPress={() => openTaskActions(task)}>
+                  <Text style={styles.compactTitle}>{task.title}</Text>
+                  <Text style={styles.compactMeta}>
+                    {task.dueTime ? formatTimeLabel(task.dueTime) : 'Any time'} | {task.priority.toUpperCase()}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </View>
+
+          <View style={styles.todayDigestSection}>
+            <Text style={styles.summaryLabel}>Next Events</Text>
+            {dashboardTodaySchedule.length === 0 ? (
+              <Text style={styles.summaryMeta}>No events scheduled today.</Text>
+            ) : (
+              dashboardTodaySchedule.slice(0, 3).map((event) => {
+                const source = getImportedSourceDetails(event, snapshot.importedCalendarsMeta);
+
+                return (
+                  <Pressable key={`hub-event-${event.id}`} style={styles.todayDigestRow} onPress={() => openTodayAgendaItem({
+                    id: event.id,
+                    taskId: null,
+                    title: event.title,
+                    type: event.type,
+                    startTime: event.startTime,
+                    endTime: event.endTime,
+                    location: event.location,
+                    isTask: false,
+                    sourceLabel: source?.label,
+                    sourceColor: source?.color,
+                  })}>
+                    <Text style={styles.compactTitle}>{event.title}</Text>
+                    {source ? (
+                      <View
+                        style={[
+                          styles.scheduleSourceBadge,
+                          {
+                            borderColor: `${source.color}88`,
+                            backgroundColor: `${source.color}22`,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.scheduleSourceBadgeText, { color: source.color }]} numberOfLines={1}>
+                          {source.label}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <Text style={styles.compactMeta}>
+                      {formatTimeLabel(event.startTime)}{event.endTime ? ` - ${formatTimeLabel(event.endTime)}` : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            )}
+          </View>
+
+          <View style={styles.todayDigestSection}>
+            <Text style={styles.summaryLabel}>Challenge Progress</Text>
+            {todayChallengeHighlights.length === 0 ? (
+              <Text style={styles.summaryMeta}>No challenges for today.</Text>
+            ) : (
+              todayChallengeHighlights.slice(0, 3).map((entry) => {
+                const { challenge, percent, needsProgressToday } = entry;
+                return (
+                  <Pressable key={`hub-challenge-${challenge.id}`} style={styles.todayDigestRow} onPress={() => setActiveTab('challenges')}>
+                    <Text style={styles.compactTitle}>{challenge.title}</Text>
+                    <Text style={styles.compactMeta}>
+                      {challenge.currentProgress}/{challenge.targetProgress} ({percent}%)
+                      {needsProgressToday ? ' | Due today' : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            )}
+          </View>
+
+          <View style={styles.inlineButtonsRow}>
+            <Pressable style={styles.primaryButtonInline} onPress={() => setActiveTab('today')}>
+              <Text style={styles.primaryButtonText}>Open Today</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.secondaryButtonInline, isExpoGoAndroid ? styles.buttonDisabled : undefined]}
+              onPress={() => void sendTodaySummaryNotification()}
+              disabled={isExpoGoAndroid}
+            >
+              <Text style={styles.secondaryButtonText}>Notify me</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -3059,11 +4412,26 @@ export default function App() {
               <Pressable
                 key={`${item.id}_${item.startTime}`}
                 style={styles.scheduleRow}
-                onPress={() => openDashboardAgendaItem(item)}
+                onPress={() => openTodayAgendaItem(item)}
               >
                 <Text style={styles.scheduleTime}>{formatTimeLabel(item.startTime)}</Text>
                 <View style={styles.scheduleBody}>
                   <Text style={styles.scheduleTitle}>{item.title}</Text>
+                  {item.sourceLabel ? (
+                    <View
+                      style={[
+                        styles.scheduleSourceBadge,
+                        {
+                          borderColor: `${(item.sourceColor || '#6366f1')}88`,
+                          backgroundColor: `${(item.sourceColor || '#6366f1')}22`,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.scheduleSourceBadgeText, { color: item.sourceColor || '#6366f1' }]} numberOfLines={1}>
+                        {item.sourceLabel}
+                      </Text>
+                    </View>
+                  ) : null}
                   <Text style={styles.scheduleMeta}>
                     {item.endTime ? `${formatTimeLabel(item.startTime)} - ${formatTimeLabel(item.endTime)} | ` : ''}
                     {item.isTask ? 'Task' : toLabelCase(item.type)}
@@ -3145,8 +4513,8 @@ export default function App() {
               <Text style={styles.summaryMeta}>Create one to track progress automatically.</Text>
             </>
           ) : (
-            visibleChallenges.map((challenge) => {
-              const percent = Math.max(0, Math.min(100, Math.round((challenge.currentProgress / challenge.targetProgress) * 100)));
+            visibleChallenges.map((entry) => {
+              const { challenge, percent } = entry;
 
               return (
                 <Pressable key={challenge.id} style={styles.progressCard} onPress={() => setActiveTab('challenges')}>
@@ -3172,6 +4540,176 @@ export default function App() {
           <Pressable style={styles.linkButton} onPress={() => setActiveTab('challenges')}>
             <Text style={styles.linkButtonText}>View All</Text>
           </Pressable>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderTodayTab() {
+    const activeChallenges = todayChallengeHighlights.filter((entry) => entry.challenge.status === 'active');
+
+    return (
+      <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Today's Snapshot</Text>
+          <Text style={styles.mutedText}>{todayDigest.body}</Text>
+
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Tasks</Text>
+              <Text style={styles.summaryValue}>{dashboardTodayTasks.length}</Text>
+              <Text style={styles.summaryMeta}>Due today</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Schedule</Text>
+              <Text style={styles.summaryValue}>{todayAgendaItems.length}</Text>
+              <Text style={styles.summaryMeta}>Items today</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Challenges</Text>
+              <Text style={styles.summaryValue}>{activeChallenges.length}</Text>
+              <Text style={styles.summaryMeta}>Active now</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Focus</Text>
+              <Text style={styles.summaryValue}>{formatMinutes(focusMinutesToday)}</Text>
+              <Text style={styles.summaryMeta}>Today</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardTitle}>Today's Tasks</Text>
+            <Text style={styles.cardCount}>{dashboardTodayTasks.length}</Text>
+          </View>
+
+          {dashboardTodayTasks.length === 0 ? (
+            <Text style={styles.mutedText}>No tasks planned for today.</Text>
+          ) : (
+            dashboardTodayTasks.map((task) => (
+              <Pressable key={task.id} style={styles.compactRow} onPress={() => openTaskActions(task)}>
+                <Text style={styles.compactTitle}>{task.title}</Text>
+                <Text style={styles.compactMeta}>
+                  {task.dueTime ? `${formatTimeLabel(task.dueTime)} | ` : ''}{task.priority.toUpperCase()}
+                </Text>
+                {renderCompactTaskActions(task)}
+              </Pressable>
+            ))
+          )}
+
+          <Pressable style={styles.linkButton} onPress={() => setActiveTab('tasks')}>
+            <Text style={styles.linkButtonText}>Open Tasks</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardTitle}>Today's Schedule</Text>
+            <Text style={styles.cardCount}>{todayAgendaItems.length}</Text>
+          </View>
+
+          {todayAgendaItems.length === 0 ? (
+            <Text style={styles.mutedText}>No schedule items today.</Text>
+          ) : (
+            todayAgendaItems.map((item) => (
+              <Pressable
+                key={`${item.id}_${item.startTime}`}
+                style={styles.scheduleRow}
+                onPress={() => openTodayAgendaItem(item)}
+              >
+                <Text style={styles.scheduleTime}>{formatTimeLabel(item.startTime)}</Text>
+                <View style={styles.scheduleBody}>
+                  <Text style={styles.scheduleTitle}>{item.title}</Text>
+                  {item.sourceLabel ? (
+                    <View
+                      style={[
+                        styles.scheduleSourceBadge,
+                        {
+                          borderColor: `${(item.sourceColor || '#6366f1')}88`,
+                          backgroundColor: `${(item.sourceColor || '#6366f1')}22`,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.scheduleSourceBadgeText, { color: item.sourceColor || '#6366f1' }]} numberOfLines={1}>
+                        {item.sourceLabel}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <Text style={styles.scheduleMeta}>
+                    {item.endTime ? `${formatTimeLabel(item.startTime)} - ${formatTimeLabel(item.endTime)} | ` : ''}
+                    {item.isTask ? 'Task' : toLabelCase(item.type)}
+                  </Text>
+                  {item.location ? <Text style={styles.scheduleMeta}>{item.location}</Text> : null}
+                </View>
+              </Pressable>
+            ))
+          )}
+
+          <Pressable
+            style={styles.linkButton}
+            onPress={() => {
+              const today = todayYmd();
+              setScheduleView('combined');
+              setScheduleSelectedDate(today);
+              setScheduleMonthCursor(getMonthStartYmd(today));
+              setScheduleWeekCursor(getCalendarWeekStartYmd(today));
+              setActiveTab('schedule');
+            }}
+          >
+            <Text style={styles.linkButtonText}>Open Schedule</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardTitle}>Today's Challenges</Text>
+            <Text style={styles.cardCount}>{todayChallengeHighlights.length}</Text>
+          </View>
+
+          {todayChallengeHighlights.length === 0 ? (
+            <Text style={styles.mutedText}>No challenges set for today.</Text>
+          ) : (
+            todayChallengeHighlights.map((entry) => {
+              const { challenge, percent, needsProgressToday } = entry;
+
+              return (
+                <View key={challenge.id} style={styles.progressCard}>
+                  <View style={styles.cardHeadingRow}>
+                    <Text style={styles.compactTitle}>{challenge.title}</Text>
+                    <Text style={styles.compactMeta}>{challenge.currentProgress}/{challenge.targetProgress}</Text>
+                  </View>
+
+                  <Text style={styles.summaryMeta}>
+                    {toLabelCase(challenge.type)} | {toLabelCase(challenge.metric)}
+                    {needsProgressToday ? ' | Due today' : ''}
+                  </Text>
+
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        challenge.status === 'completed' ? styles.progressFillDone : undefined,
+                        { width: `${percent}%` },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.itemButtonsRow}>
+                    {challenge.status === 'active' ? (
+                      <Pressable style={styles.smallButton} onPress={pressAction(() => void incrementChallenge(challenge.id))}>
+                        <Text style={styles.smallButtonText}>+1 Progress</Text>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable style={styles.smallButton} onPress={pressAction(() => setActiveTab('challenges'))}>
+                      <Text style={styles.smallButtonText}>Open</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     );
@@ -3233,11 +4771,13 @@ export default function App() {
       const timeRange = event.endTime
         ? `${formatTimeLabel(event.startTime)} - ${formatTimeLabel(event.endTime)}`
         : formatTimeLabel(event.startTime);
+      const source = getImportedSourceDetails(event, snapshot.importedCalendarsMeta);
 
       const lines = [
         eventDate ? formatYmdLabel(eventDate) : null,
         timeRange,
         `${toLabelCase(event.type)} | ${toLabelCase(event.scheduleType)}`,
+        source ? `Source: ${source.label}` : null,
         event.location || null,
       ].filter(Boolean);
 
@@ -3405,6 +4945,9 @@ export default function App() {
               const timeRange = item.endTime
                 ? `${formatTimeLabel(item.startTime)} - ${formatTimeLabel(item.endTime)}`
                 : formatTimeLabel(item.startTime);
+              const source = !item.isTask && item.event
+                ? getImportedSourceDetails(item.event, snapshot.importedCalendarsMeta)
+                : null;
 
               return (
                 <Pressable
@@ -3415,6 +4958,21 @@ export default function App() {
                   <Text style={styles.scheduleTime}>{formatTimeLabel(item.startTime)}</Text>
                   <View style={styles.scheduleBody}>
                     <Text style={styles.scheduleTitle}>{item.title}</Text>
+                    {source ? (
+                      <View
+                        style={[
+                          styles.scheduleSourceBadge,
+                          {
+                            borderColor: `${source.color}88`,
+                            backgroundColor: `${source.color}22`,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.scheduleSourceBadgeText, { color: source.color }]} numberOfLines={1}>
+                          {source.label}
+                        </Text>
+                      </View>
+                    ) : null}
                     <Text style={styles.scheduleMeta}>{timeRange} | {item.isTask ? 'Task' : toLabelCase(item.type)}</Text>
                     {item.location ? <Text style={styles.scheduleMeta}>{item.location}</Text> : null}
 
@@ -3455,6 +5013,7 @@ export default function App() {
               const timeRange = occurrence.event.endTime
                 ? `${formatTimeLabel(occurrence.event.startTime)} - ${formatTimeLabel(occurrence.event.endTime)}`
                 : formatTimeLabel(occurrence.event.startTime);
+              const source = getImportedSourceDetails(occurrence.event, snapshot.importedCalendarsMeta);
 
               return (
                 <Pressable
@@ -3465,6 +5024,21 @@ export default function App() {
                   <Text style={styles.scheduleTime}>{formatYmdLabel(occurrence.occurrenceDate)}</Text>
                   <View style={styles.scheduleBody}>
                     <Text style={styles.scheduleTitle}>{occurrence.event.title}</Text>
+                    {source ? (
+                      <View
+                        style={[
+                          styles.scheduleSourceBadge,
+                          {
+                            borderColor: `${source.color}88`,
+                            backgroundColor: `${source.color}22`,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.scheduleSourceBadgeText, { color: source.color }]} numberOfLines={1}>
+                          {source.label}
+                        </Text>
+                      </View>
+                    ) : null}
                     <Text style={styles.scheduleMeta}>
                       {timeRange} | {toLabelCase(occurrence.event.type)} | {toLabelCase(occurrence.event.scheduleType)}
                     </Text>
@@ -3494,13 +5068,31 @@ export default function App() {
               style={styles.input}
             />
 
-            <TextInput
-              value={editingTaskDueDate}
-              onChangeText={setEditingTaskDueDate}
-              placeholder="Due date (YYYY-MM-DD)"
-              placeholderTextColor={COLORS.textMuted}
-              style={styles.input}
-            />
+            <Text style={styles.summaryMeta}>
+              Due date: {editingTaskDueDate ? formatYmdLabel(editingTaskDueDate) : 'Not set'}
+            </Text>
+
+            <View style={styles.inlineButtonsRow}>
+              <Pressable style={styles.secondaryButtonInline} onPress={() => openTaskDueDatePicker(true)}>
+                <Text style={styles.secondaryButtonText}>Pick date</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButtonInline} onPress={() => clearTaskDueDate(true)}>
+                <Text style={styles.secondaryButtonText}>Clear date</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.summaryMeta}>
+              Due time: {editingTaskDueTime ? formatTimeLabel(editingTaskDueTime) : 'Not set'}
+            </Text>
+
+            <View style={styles.inlineButtonsRow}>
+              <Pressable style={styles.secondaryButtonInline} onPress={() => openTaskDueTimePicker(true)}>
+                <Text style={styles.secondaryButtonText}>Pick time</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButtonInline} onPress={() => clearTaskDueTime(true)}>
+                <Text style={styles.secondaryButtonText}>Clear time</Text>
+              </Pressable>
+            </View>
 
             <View style={styles.chipRow}>
               {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((priority) => (
@@ -3538,13 +5130,31 @@ export default function App() {
             style={styles.input}
           />
 
-          <TextInput
-            value={taskDueDate}
-            onChangeText={setTaskDueDate}
-            placeholder="Due date (YYYY-MM-DD)"
-            placeholderTextColor={COLORS.textMuted}
-            style={styles.input}
-          />
+          <Text style={styles.summaryMeta}>
+            Due date: {taskDueDate ? formatYmdLabel(taskDueDate) : 'Not set'}
+          </Text>
+
+          <View style={styles.inlineButtonsRow}>
+            <Pressable style={styles.secondaryButtonInline} onPress={() => openTaskDueDatePicker(false)}>
+              <Text style={styles.secondaryButtonText}>Pick date</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButtonInline} onPress={() => clearTaskDueDate(false)}>
+              <Text style={styles.secondaryButtonText}>Clear date</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.summaryMeta}>
+            Due time: {taskDueTime ? formatTimeLabel(taskDueTime) : 'Not set'}
+          </Text>
+
+          <View style={styles.inlineButtonsRow}>
+            <Pressable style={styles.secondaryButtonInline} onPress={() => openTaskDueTimePicker(false)}>
+              <Text style={styles.secondaryButtonText}>Pick time</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButtonInline} onPress={() => clearTaskDueTime(false)}>
+              <Text style={styles.secondaryButtonText}>Clear time</Text>
+            </Pressable>
+          </View>
 
           <View style={styles.chipRow}>
             {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((priority) => (
@@ -4157,11 +5767,49 @@ export default function App() {
           <Text style={styles.cardTitle}>Daily reminder</Text>
           <Text style={styles.mutedText}>Set a local reminder to review tasks, goals, and challenges every day.</Text>
 
+          <View style={styles.reminderPreviewBox}>
+            <Text style={styles.summaryLabel}>Preview</Text>
+            <Text style={styles.reminderPreviewTitle}>{todayDigest.title}</Text>
+            <Text style={styles.reminderPreviewText}>{todayDigest.body}</Text>
+          </View>
+
+          <View style={styles.reminderCategoryCard}>
+            <View style={styles.cardHeadingRow}>
+              <View style={styles.reminderCategoryTextWrap}>
+                <Text style={styles.compactTitle}>Focus Do Not Disturb</Text>
+                <Text style={styles.summaryMeta}>Silence app notifications and touch vibration while a focus session is running.</Text>
+              </View>
+
+              <Pressable
+                style={[
+                  styles.reminderToggleButton,
+                  focusDndEnabled ? styles.reminderToggleButtonOn : styles.reminderToggleButtonOff,
+                ]}
+                onPress={() => void updateFocusDndSetting(!focusDndEnabled)}
+              >
+                <Text style={styles.reminderToggleButtonText}>{focusDndEnabled ? 'On' : 'Off'}</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.summaryMeta}>
+              {focusDndEnabled
+                ? (focusRunning ? 'Focus DND is active now.' : 'Focus DND will activate when you start a focus session.')
+                : 'Focus DND is currently disabled.'}
+            </Text>
+            <Text style={styles.warningText}>
+              OS limitation: this app cannot force-silence phone calls. This mode only silences app notifications and vibration while focusing.
+            </Text>
+          </View>
+
           {isExpoGoAndroid ? (
             <View style={styles.warningBox}>
               <Text style={styles.warningText}>
                 Expo Go on Android does not fully support notifications. Use the development build for this feature.
               </Text>
+              <Text style={styles.warningText}>1. Build once: npm run android:dev</Text>
+              <Text style={styles.warningText}>2. Start dev server: npm run start:dev</Text>
+              <Text style={styles.warningText}>3. Open the installed Productivity Hub Mobile app (not Expo Go)</Text>
+              <Text style={styles.warningText}>4. Return here and tap Schedule reminder</Text>
             </View>
           ) : null}
 
@@ -4206,10 +5854,107 @@ export default function App() {
           <Pressable
             style={[styles.secondaryButton, isExpoGoAndroid ? styles.buttonDisabled : undefined]}
             disabled={isExpoGoAndroid}
+            onPress={() => void sendTodaySummaryNotification()}
+          >
+            <Text style={styles.secondaryButtonText}>Send today's summary now</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.secondaryButton, isExpoGoAndroid ? styles.buttonDisabled : undefined]}
+            disabled={isExpoGoAndroid}
             onPress={() => void sendInteractionNotification('Interaction test', 'Notification sound and interaction feedback are active.')}
           >
             <Text style={styles.secondaryButtonText}>Send test notification</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Custom reminders by type</Text>
+          <Text style={styles.mutedText}>
+            Choose which categories should notify you and how long before each item starts or is due.
+          </Text>
+
+          {smartReminderCategories.map((category) => {
+            const config = smartReminderSettings[category.key];
+
+            return (
+              <View key={category.key} style={styles.reminderCategoryCard}>
+                <View style={styles.cardHeadingRow}>
+                  <View style={styles.reminderCategoryTextWrap}>
+                    <Text style={styles.compactTitle}>{category.label}</Text>
+                    <Text style={styles.summaryMeta}>{category.description}</Text>
+                  </View>
+
+                  <Pressable
+                    style={[
+                      styles.reminderToggleButton,
+                      config.enabled ? styles.reminderToggleButtonOn : styles.reminderToggleButtonOff,
+                    ]}
+                    onPress={() => {
+                      setSmartReminderSettings((prev) => ({
+                        ...prev,
+                        [category.key]: {
+                          ...prev[category.key],
+                          enabled: !prev[category.key].enabled,
+                        },
+                      }));
+                    }}
+                  >
+                    <Text style={styles.reminderToggleButtonText}>{config.enabled ? 'On' : 'Off'}</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.summaryMeta}>Lead time: {formatLeadMinutes(config.leadMinutes)}</Text>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalChips}>
+                  <View style={styles.chipRow}>
+                    {REMINDER_LEAD_MINUTES_OPTIONS.map((minutes) => {
+                      const selected = config.leadMinutes === minutes;
+                      return (
+                        <Pressable
+                          key={`${category.key}_${minutes}`}
+                          style={[styles.chipButton, selected ? styles.chipButtonActive : undefined]}
+                          onPress={() => {
+                            setSmartReminderSettings((prev) => ({
+                              ...prev,
+                              [category.key]: {
+                                ...prev[category.key],
+                                leadMinutes: minutes,
+                              },
+                            }));
+                          }}
+                        >
+                          <Text style={[styles.chipText, selected ? styles.chipTextActive : undefined]}>
+                            {formatLeadMinutes(minutes)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+            );
+          })}
+
+          <View style={styles.inlineButtonsRow}>
+            <Pressable
+              style={[styles.primaryButtonInline, isExpoGoAndroid ? styles.buttonDisabled : undefined]}
+              onPress={() => void applySmartReminders()}
+              disabled={isExpoGoAndroid}
+            >
+              <Text style={styles.primaryButtonText}>Apply custom reminders</Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.secondaryButtonInline, isExpoGoAndroid ? styles.buttonDisabled : undefined]}
+              onPress={() => void clearSmartReminders()}
+              disabled={isExpoGoAndroid}
+            >
+              <Text style={styles.secondaryButtonText}>Clear</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.statusText}>{smartReminderStatus}</Text>
         </View>
       </ScrollView>
     );
@@ -4217,6 +5962,7 @@ export default function App() {
 
   function renderActiveTab() {
     if (activeTab === 'dashboard') return renderDashboardTab();
+    if (activeTab === 'today') return renderTodayTab();
     if (activeTab === 'schedule') return renderScheduleTab();
     if (activeTab === 'tasks') return renderTasksTab();
     if (activeTab === 'goals') return renderGoalsTab();
@@ -4670,6 +6416,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  todayDigestSection: {
+    gap: 6,
+  },
+  todayDigestRow: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: COLORS.bgSecondary,
+    gap: 2,
+  },
   compactActionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -4725,6 +6483,20 @@ const styles = StyleSheet.create({
   scheduleTitle: {
     color: COLORS.textPrimary,
     fontSize: 14,
+    fontWeight: '700',
+  },
+  scheduleSourceBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 1,
+    marginBottom: 1,
+    maxWidth: '100%',
+  },
+  scheduleSourceBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
   },
   scheduleMeta: {
@@ -4982,6 +6754,58 @@ const styles = StyleSheet.create({
   mutedText: {
     color: COLORS.textSecondary,
     fontSize: 13,
+  },
+  reminderPreviewBox: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    backgroundColor: COLORS.bgSecondary,
+    padding: 10,
+    gap: 4,
+  },
+  reminderPreviewTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  reminderPreviewText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  reminderCategoryCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    backgroundColor: COLORS.bgSecondary,
+    padding: 10,
+    gap: 8,
+  },
+  reminderCategoryTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  reminderToggleButton: {
+    minWidth: 58,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reminderToggleButtonOn: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: COLORS.success,
+  },
+  reminderToggleButtonOff: {
+    backgroundColor: 'rgba(107, 114, 128, 0.2)',
+    borderColor: COLORS.borderLight,
+  },
+  reminderToggleButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   warningBox: {
     borderWidth: 1,

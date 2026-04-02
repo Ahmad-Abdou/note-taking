@@ -2276,6 +2276,7 @@ const DataStore = {
             goals: await this.get(STORAGE_KEYS.GOALS, []),
             challenges: await this.get(STORAGE_KEYS.CHALLENGES, []),
             focusSessions: await this.get(STORAGE_KEYS.FOCUS_SESSIONS, []),
+            focusState: await this.get('focusState', null),
             dailyStats: await this.get(STORAGE_KEYS.DAILY_STATS, {}),
             streaks: await this.get(STORAGE_KEYS.STREAKS, {}),
             blockedSites: await this.get(STORAGE_KEYS.BLOCKED_SITES, []),
@@ -2340,6 +2341,15 @@ const DataStore = {
             await mergeOrReplace(STORAGE_KEYS.GOALS, data.goals);
             await mergeOrReplace(STORAGE_KEYS.CHALLENGES, data.challenges);
             await mergeOrReplace(STORAGE_KEYS.FOCUS_SESSIONS, data.focusSessions);
+
+            if (Object.prototype.hasOwnProperty.call(data, 'focusState')) {
+                if (data.focusState && typeof data.focusState === 'object') {
+                    await this.set('focusState', data.focusState);
+                } else {
+                    await this.remove('focusState');
+                }
+            }
+
             await mergeOrReplaceObj(STORAGE_KEYS.DAILY_STATS, data.dailyStats);
             await mergeOrReplaceObj(STORAGE_KEYS.STREAKS, data.streaks);
             await mergeOrReplace(STORAGE_KEYS.BLOCKED_SITES, data.blockedSites);

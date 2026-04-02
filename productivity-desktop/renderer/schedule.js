@@ -119,6 +119,56 @@ function getImportedCalendarColor(event) {
     return meta?.color || null;
 }
 
+function normalizeBadgeColor(color, fallback = '#667eea') {
+    if (typeof color !== 'string') return fallback;
+    const value = color.trim();
+    const shortHex = /^#([0-9a-fA-F]{3})$/.exec(value);
+    if (shortHex) {
+        const chars = shortHex[1].split('');
+        return `#${chars.map((ch) => ch + ch).join('')}`;
+    }
+    if (/^#([0-9a-fA-F]{6})$/.test(value)) {
+        return value;
+    }
+    return fallback;
+}
+
+function getImportedCalendarMeta(event) {
+    if (!event?.importedCalendarId) return null;
+    return ScheduleState.importedCalendarsMeta?.[event.importedCalendarId] || null;
+}
+
+function getImportedCalendarName(event) {
+    const meta = getImportedCalendarMeta(event);
+    if (!meta) return '';
+    if (typeof meta.name === 'string' && meta.name.trim()) {
+        return meta.name.trim();
+    }
+    return 'Imported Calendar';
+}
+
+function renderImportedSourceBadge(event, options = {}) {
+    const fullName = getImportedCalendarName(event);
+    if (!fullName) return '';
+
+    const maxLength = Number.isFinite(options.maxLength)
+        ? Math.max(6, Number(options.maxLength))
+        : 18;
+    const shortName = fullName.length > maxLength
+        ? `${fullName.slice(0, maxLength - 3)}...`
+        : fullName;
+    const titlePrefix = typeof options.titlePrefix === 'string' ? options.titlePrefix : 'Imported from';
+
+    const meta = getImportedCalendarMeta(event);
+    const badgeColor = normalizeBadgeColor(meta?.color || getImportedCalendarColor(event) || event?.color, '#667eea');
+
+    return `
+        <span class="event-source-badge" style="color: ${badgeColor}; border-color: ${badgeColor}66; background: ${badgeColor}20;" title="${escapeHtml(`${titlePrefix}: ${fullName}`)}">
+            ${escapeHtml(shortName)}
+        </span>
+    `;
+}
+
 function getEventDisplayColors(event) {
     const typeColors = getEventColors(event.type);
     const importedColor = getImportedCalendarColor(event);
@@ -1644,7 +1694,10 @@ function renderDayEvents(events, startHour) {
                  ">
                 <div class="resize-handle resize-handle-top" title="Drag to change start time"></div>
                 <div class="event-content">
-                    <div class="event-title">${statusIcon}${escapeHtml(event.title)}</div>
+                    <div class="event-title-row">
+                        <div class="event-title">${statusIcon}${escapeHtml(event.title)}</div>
+                        ${renderImportedSourceBadge(event, { maxLength: 14 })}
+                    </div>
                     ${height > 40 ? `<div class="event-time">${event.startTime} - ${event.endTime}</div>` : ''}
                     ${height > 60 && event.location ? `<div class="event-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(event.location)}</div>` : ''}
                     <div class="event-task-actions">
@@ -1969,7 +2022,10 @@ function renderDayViewEvents(events) {
                     border-left: 3px solid ${eventColor};
                  ">
                 <div class="event-content">
-                    <div class="event-title">${escapeHtml(event.title)}</div>
+                    <div class="event-title-row">
+                        <div class="event-title">${escapeHtml(event.title)}</div>
+                        ${renderImportedSourceBadge(event, { maxLength: 14 })}
+                    </div>
                     ${height > 40 ? `<div class="event-time">${event.startTime} - ${event.endTime}</div>` : ''}
                     ${height > 60 && event.location ? `<div class="event-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(event.location)}</div>` : ''}
                     <div class="event-task-actions">
@@ -2032,6 +2088,7 @@ async function renderAgendaView() {
                                         </div>
                                         <div class="agenda-event-content">
                                             <div class="agenda-event-title">${escapeHtml(event.title)}</div>
+                                            ${renderImportedSourceBadge(event, { maxLength: 24 })}
                                             ${event.location ? `<div class="agenda-event-location"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(event.location)}</div>` : ''}
                                         </div>
                                         <div class="agenda-event-type" style="background: ${eventColor}20; color: ${eventColor}">
@@ -3304,6 +3361,10 @@ function viewEvent(eventId) {
 
     const modal = document.getElementById('event-details-modal') || createEventDetailsModal();
     const colors = getEventDisplayColors(event);
+    const sourceBadge = renderImportedSourceBadge(event, {
+        maxLength: 30,
+        titlePrefix: 'Imported calendar'
+    });
 
     modal.innerHTML = `
         <div class="modal-backdrop" data-action="close-event-details"></div>
@@ -3324,6 +3385,13 @@ function viewEvent(eventId) {
                     <i class="fas fa-clock"></i>
                     <span>${event.startTime} - ${event.endTime}</span>
                 </div>
+                ${sourceBadge ? `
+                    <div class="event-detail-row">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Source</span>
+                        ${sourceBadge}
+                    </div>
+                ` : ''}
                 ${event.location ? `
                     <div class="event-detail-row">
                         <i class="fas fa-map-marker-alt"></i>

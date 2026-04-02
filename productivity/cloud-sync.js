@@ -2,6 +2,7 @@
     'use strict';
 
     const CLOUD_SYNC_KEY = 'productivity_cloud_sync';
+    const CLOUD_SYNC_STATE_KEY = 'productivity_cloud_sync_state_v2';
     const GIST_FILENAME = 'productivity-hub-sync.json';
 
     function $(id) {
@@ -24,6 +25,92 @@
     function getMergeOption() {
         const mergeCheckbox = $('sync-merge-option');
         return !!(mergeCheckbox && mergeCheckbox.checked);
+    }
+
+    function stableSerialize(value) {
+        if (Array.isArray(value)) {
+            return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+        }
+
+        if (value && typeof value === 'object') {
+            const keys = Object.keys(value).sort();
+            return `{${keys.map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
+        }
+
+        return JSON.stringify(value);
+    }
+
+    function computePayloadChecksum(payload) {
+        const text = typeof payload === 'string' ? payload : '';
+        let normalized = text;
+
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const clone = { ...parsed };
+                delete clone.exportDate;
+                delete clone.source;
+                normalized = stableSerialize(clone);
+            }
+        } catch (_) {
+            normalized = text;
+        }
+
+        let hash = 2166136261;
+
+        for (let i = 0; i < normalized.length; i += 1) {
+            hash ^= normalized.charCodeAt(i);
+            hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+        }
+
+        return (hash >>> 0).toString(16).padStart(8, '0');
+    }
+
+    function getGistStateKey(gistId) {
+        return gistId || '__default__';
+    }
+
+    function hasSyncState(state) {
+        if (!state || typeof state !== 'object') return false;
+        if (typeof state.lastPayloadChecksum === 'string' && state.lastPayloadChecksum) return true;
+        if (typeof state.lastRemoteChecksum === 'string' && state.lastRemoteChecksum) return true;
+        const remoteVersion = Number(state.lastRemoteVersion || 0);
+        return Number.isFinite(remoteVersion) && remoteVersion > 0;
+    }
+
+    function getGistVersion(gistJson) {
+        const ts = Date.parse(gistJson?.updated_at || '');
+        return Number.isFinite(ts) ? ts : 0;
+    }
+
+    async function readSyncState(gistId) {
+        if (!window.ProductivityData?.DataStore?.get) return {};
+
+        const allState = await window.ProductivityData.DataStore.get(CLOUD_SYNC_STATE_KEY, {});
+        if (!allState || typeof allState !== 'object' || Array.isArray(allState)) {
+            return {};
+        }
+
+        const key = getGistStateKey(gistId);
+        const state = allState[key];
+        return state && typeof state === 'object' ? state : {};
+    }
+
+    async function writeSyncState(gistId, statePatch) {
+        if (!window.ProductivityData?.DataStore?.get || !window.ProductivityData?.DataStore?.set) return;
+
+        const key = getGistStateKey(gistId);
+        const allState = await window.ProductivityData.DataStore.get(CLOUD_SYNC_STATE_KEY, {});
+        const safeAllState = allState && typeof allState === 'object' && !Array.isArray(allState)
+            ? allState
+            : {};
+
+        safeAllState[key] = {
+            ...(safeAllState[key] && typeof safeAllState[key] === 'object' ? safeAllState[key] : {}),
+            ...statePatch
+        };
+
+        await window.ProductivityData.DataStore.set(CLOUD_SYNC_STATE_KEY, safeAllState);
     }
 
     function redactToken(token) {
@@ -168,41 +255,101 @@
         }
 
         const merge = getMergeOption();
+        const previousState = await readSyncState(gistId);
+        const hasPriorState = hasSyncState(previousState);
 
         setStatus('Syncing… downloading cloud data', 'info');
 
         // 1) Download from cloud (if exists)
         let remoteJsonString = null;
+        let remoteVersion = 0;
         if (gistId) {
             const gist = await githubGetGist(token, gistId);
             if (gist) {
                 remoteJsonString = extractSyncFileFromGist(gist);
+                remoteVersion = getGistVersion(gist);
             }
         }
 
-        if (remoteJsonString) {
-            const result = await window.ProductivityData.DataStore.importAllData(remoteJsonString, { merge });
+        const hasRemotePayload = typeof remoteJsonString === 'string' && !!remoteJsonString.trim();
+        const remoteChecksum = hasRemotePayload ? computePayloadChecksum(remoteJsonString) : '';
+
+        let localJsonString = await window.ProductivityData.DataStore.exportAllData();
+        let localChecksum = computePayloadChecksum(localJsonString);
+
+        const localChangedSinceLastSync = !hasPriorState || localChecksum !== previousState.lastPayloadChecksum;
+        const remoteChangedSinceLastSync = hasRemotePayload && (
+            !hasPriorState
+            || remoteChecksum !== previousState.lastRemoteChecksum
+            || remoteVersion > Number(previousState.lastRemoteVersion || 0)
+        );
+
+        let didImport = false;
+        let didUpload = false;
+        let latestRemoteChecksum = remoteChecksum;
+        let latestRemoteVersion = remoteVersion;
+
+        const importRemote = async (shouldMerge) => {
+            const result = await window.ProductivityData.DataStore.importAllData(remoteJsonString, { merge: shouldMerge });
             if (!result?.success) {
                 throw new Error(result?.error || 'Import failed');
             }
-        }
+            didImport = true;
+            localJsonString = await window.ProductivityData.DataStore.exportAllData();
+            localChecksum = computePayloadChecksum(localJsonString);
+        };
 
-        // 2) Upload local (post-merge)
-        setStatus('Syncing… uploading local data', 'info');
-        const localJsonString = await window.ProductivityData.DataStore.exportAllData();
+        const uploadLocal = async (statusMessage) => {
+            setStatus(statusMessage, 'info');
+            let gistJson;
+            if (!gistId) {
+                gistJson = await githubCreateGist(token, localJsonString);
+                gistId = gistJson.id;
+            } else {
+                gistJson = await githubUpdateGist(token, gistId, localJsonString);
+            }
 
-        let gistJson;
-        if (!gistId) {
-            gistJson = await githubCreateGist(token, localJsonString);
-            gistId = gistJson.id;
-        } else {
-            gistJson = await githubUpdateGist(token, gistId, localJsonString);
+            didUpload = true;
+            latestRemoteChecksum = computePayloadChecksum(localJsonString);
+            latestRemoteVersion = getGistVersion(gistJson) || Date.now();
+        };
+
+        if (hasRemotePayload && !hasPriorState) {
+            setStatus('Syncing… initializing from cloud snapshot', 'info');
+            await importRemote(merge);
+            if (localChecksum !== remoteChecksum) {
+                await uploadLocal('Syncing… uploading merged local data');
+            }
+        } else if (hasRemotePayload && remoteChangedSinceLastSync && !localChangedSinceLastSync) {
+            setStatus('Syncing… applying cloud changes', 'info');
+            await importRemote(merge);
+        } else if (hasRemotePayload && remoteChangedSinceLastSync && localChangedSinceLastSync) {
+            if (merge) {
+                setStatus('Syncing… merging local and cloud changes', 'info');
+                await importRemote(true);
+                await uploadLocal('Syncing… uploading merged local data');
+            } else {
+                await uploadLocal('Syncing… conflict detected, keeping local changes');
+            }
+        } else if (!hasRemotePayload || localChangedSinceLastSync) {
+            await uploadLocal('Syncing… uploading local data');
         }
 
         await storageSet({ token, gistId });
         if (gistInput) gistInput.value = gistId;
 
-        setStatus(`Synced successfully. Gist: ${gistId}`, 'success');
+        await writeSyncState(gistId, {
+            lastPayloadChecksum: localChecksum,
+            lastRemoteChecksum: latestRemoteChecksum || localChecksum,
+            lastRemoteVersion: latestRemoteVersion || Date.now(),
+            lastSyncAt: new Date().toISOString()
+        });
+
+        if (!didImport && !didUpload) {
+            setStatus('Already up to date.', 'success');
+        } else {
+            setStatus(`Synced successfully. Gist: ${gistId}`, 'success');
+        }
         updateUiState(true, { token, gistId });
     }
 

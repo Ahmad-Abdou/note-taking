@@ -7,9 +7,10 @@ Expo React Native mobile client for Android/iOS.
 - Email/password sign in with Firebase Auth
 - Pull data from cloud snapshot (`syncSnapshots/{uid}`)
 - Push data back to cloud snapshot
+- Today tab that combines daily tasks, schedules, and challenges in one mobile-first view
 - Create, complete, and delete tasks
 - Create and update challenge progress
-- Schedule a daily local reminder notification
+- Send a "today summary" notification and schedule a daily local reminder notification
 
 ## Install And Run On Samsung Android
 
@@ -31,6 +32,28 @@ If LAN mode cannot connect because of local network restrictions, try:
 npx expo start --tunnel
 ```
 
+## Windows OneDrive Build Lock Workaround (Recommended)
+
+If your project is inside OneDrive, Gradle may fail with "Unable to delete directory ..." during Android builds.
+
+Use the local runner command from this folder:
+
+```bash
+npm run android:dev:local
+```
+
+What this does:
+
+- Mirrors your latest project files to `C:\dev\productivity-mobile-local`
+- Runs `npm install` there
+- Runs `npm run android:dev` there
+
+Faster subsequent runs (skip install if dependencies did not change):
+
+```bash
+npm run android:dev:local:fast
+```
+
 ## Sync Workflow
 
 1. On desktop/extension: open Productivity Hub -> Settings -> Data Management -> Account Sync -> Sync Now.
@@ -42,8 +65,15 @@ npx expo start --tunnel
 ## Notifications
 
 - Open **Notifications** tab in mobile app.
+- Review the preview text (daily summary generated from your current tasks/schedule/challenges).
 - Set hour/minute.
-- Tap **Schedule Reminder**.
+- Tap **Schedule Reminder** for a daily Android reminder.
+- Tap **Send today's summary now** to test immediately.
+- In **Custom reminders by type**:
+	- Toggle **Tasks**, **Schedules**, and **Challenges** independently.
+	- Pick a lead time for each type (for example: `1h before`).
+	- Tap **Apply custom reminders**.
+	- Use **Clear** to remove all custom scheduled reminders.
 
 This is local device notification scheduling from the app.
 
