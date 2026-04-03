@@ -16,6 +16,7 @@ import {
   Alert,
   AppState,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable as RNPressable,
   ScrollView,
@@ -159,6 +160,8 @@ interface SmartReminderDraft {
   title: string;
   body: string;
   triggerAtMs: number;
+  dueAtMs: number;
+  categoryIdentifier: string;
 }
 
 interface TaskReminderDraft {
@@ -167,6 +170,8 @@ interface TaskReminderDraft {
   title: string;
   body: string;
   triggerAtMs: number;
+  dueAtMs: number;
+  categoryIdentifier: string;
 }
 
 const DEFAULT_SMART_REMINDER_SETTINGS: SmartReminderSettings = {
@@ -495,6 +500,28 @@ function todayYmd() {
 
 function generateId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatCountdown(fromMs: number, toMs: number): string {
+  const diffMs = toMs - fromMs;
+  if (diffMs <= 0) return 'now';
+  const totalMinutes = Math.round(diffMs / 60000);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hours < 24) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+}
+
+function isNewerVersion(remote: string, current: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const [rMaj, rMin, rPat] = parse(remote);
+  const [cMaj, cMin, cPat] = parse(current);
+  if (rMaj !== cMaj) return rMaj > cMaj;
+  if (rMin !== cMin) return rMin > cMin;
+  return rPat > cPat;
 }
 
 function safeArray<T>(value: unknown): T[] {
@@ -977,6 +1004,15 @@ function createEmptySnapshot(): HubSnapshot {
   };
 }
 
+function deduplicateById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!item.id || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 function normalizeSnapshot(raw: unknown): HubSnapshot {
   const base = createEmptySnapshot();
   const data = safeObj(raw);
@@ -1005,8 +1041,8 @@ function normalizeSnapshot(raw: unknown): HubSnapshot {
     achievements: safeObj(data.achievements),
     settings,
     revisions: safeArray(data.revisions),
-    scheduleSchool: safeArray(data.scheduleSchool).map((event) => normalizeScheduleEvent(event, 'school')),
-    schedulePersonal: safeArray(data.schedulePersonal).map((event) => normalizeScheduleEvent(event, 'personal')),
+    scheduleSchool: deduplicateById(safeArray(data.scheduleSchool).map((event) => normalizeScheduleEvent(event, 'school'))),
+    schedulePersonal: deduplicateById(safeArray(data.schedulePersonal).map((event) => normalizeScheduleEvent(event, 'personal'))),
     taskLists: safeArray(data.taskLists),
     blockedSites: safeArray(data.blockedSites),
     blockedAttempts: safeArray(data.blockedAttempts),
@@ -1720,6 +1756,8 @@ export default function App() {
   const firestoreUnsubRef = useRef<(() => void) | null>(null);
   const syncMutedUntilRef = useRef(0);
 
+  const [updateAvailable, setUpdateAvailable] = useState<{ version: string; url: string } | null>(null);
+
   const isExpoGoAndroid = Platform.OS === 'android'
     && (Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo');
 
@@ -2240,6 +2278,47 @@ export default function App() {
       sound: null,
       vibrationPattern: [0],
     }).catch(() => undefined);
+
+    // Register notification action categories so buttons appear on notifications.
+    // These are cross-platform (iOS shows them as swipe actions; Android shows them inline).
+    await notifications.setNotificationCategoryAsync('task-reminder', [
+      {
+        identifier: 'task-complete',
+        buttonTitle: '✓ Mark Done',
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: 'task-snooze',
+        buttonTitle: '⏰ Snooze 15 min',
+        options: { opensAppToForeground: false },
+      },
+    ]).catch(() => undefined);
+
+    await notifications.setNotificationCategoryAsync('schedule-reminder', [
+      {
+        identifier: 'schedule-start-focus',
+        buttonTitle: '▶ Start Focus',
+        options: { opensAppToForeground: true },
+      },
+      {
+        identifier: 'schedule-snooze',
+        buttonTitle: '⏰ Snooze 10 min',
+        options: { opensAppToForeground: false },
+      },
+    ]).catch(() => undefined);
+
+    await notifications.setNotificationCategoryAsync('challenge-reminder', [
+      {
+        identifier: 'challenge-log',
+        buttonTitle: '+ Log Progress',
+        options: { opensAppToForeground: true },
+      },
+      {
+        identifier: 'challenge-snooze',
+        buttonTitle: '⏰ Snooze 30 min',
+        options: { opensAppToForeground: false },
+      },
+    ]).catch(() => undefined);
   }
 
   function buildFocusStateFromRuntime(): HubFocusState | null {
@@ -2351,6 +2430,168 @@ export default function App() {
     }));
   }
 
+  // ── Update checker ────────────────────────────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    const CURRENT_VERSION: string = Constants.expoConfig?.version ?? Constants.manifest?.version ?? '1.0.0';
+    const RELEASES_URL = 'https://api.github.com/repos/Ahmad-Abdou/note-taking/releases';
+    const LAST_CHECK_KEY = 'productivity_mobile_last_update_check';
+    const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+    const checkForUpdate = async () => {
+      try {
+        const lastCheck = await AsyncStorage.getItem(LAST_CHECK_KEY);
+        const now = Date.now();
+        if (lastCheck && now - parseInt(lastCheck, 10) < CHECK_INTERVAL_MS) return;
+
+        const response = await fetch(RELEASES_URL, {
+          headers: { Accept: 'application/vnd.github+json' },
+        });
+        if (!response.ok) return;
+        await AsyncStorage.setItem(LAST_CHECK_KEY, String(now));
+
+        const releases: Array<{ tag_name: string; prerelease: boolean; draft: boolean; assets: Array<{ browser_download_url: string; name: string }> }> = await response.json();
+
+        // Only look at mobile-vX.Y.Z releases
+        const mobileRelease = releases.find(
+          (r) => !r.prerelease && !r.draft && r.tag_name.startsWith('mobile-v'),
+        );
+        if (!mobileRelease) return;
+
+        const latestVersion = mobileRelease.tag_name.replace('mobile-v', '');
+        if (!isNewerVersion(latestVersion, CURRENT_VERSION)) return;
+
+        const apkAsset = mobileRelease.assets.find((a) => a.name.endsWith('.apk'));
+        if (!apkAsset) return;
+
+        if (active) {
+          setUpdateAvailable({ version: latestVersion, url: apkAsset.browser_download_url });
+        }
+      } catch {
+        // silently ignore — network may be unavailable
+      }
+    };
+
+    void checkForUpdate();
+    return () => { active = false; };
+  }, []);
+
+  // ── Notification action button handler ────────────────────────────────────
+  useEffect(() => {
+    const notifications = getNotificationsModule();
+    if (!notifications) return;
+
+    const subscription = notifications.addNotificationResponseReceivedListener((response) => {
+      const { actionIdentifier, notification } = response;
+      const data = notification.request.content.data as Record<string, unknown>;
+      const scope = data.scope as string | undefined;
+      const taskId = data.taskId as string | undefined;
+      const dueAtMs = typeof data.dueAtMs === 'number' ? data.dueAtMs : null;
+
+      // ── Task actions ────────────────────────────────────────────────────
+      if (actionIdentifier === 'task-complete' && taskId) {
+        void advanceTask(taskId);
+        return;
+      }
+
+      if (actionIdentifier === 'task-snooze' && taskId) {
+        // Re-schedule same notification 15 minutes from now
+        void (async () => {
+          const n = getNotificationsModule();
+          if (!n) return;
+          const task = snapshot.tasks.find((t) => t.id === taskId);
+          if (!task) return;
+          const snoozeMs = Date.now() + 15 * 60 * 1000;
+          const countdown = dueAtMs ? formatCountdown(snoozeMs, dueAtMs) : '?';
+          await n.scheduleNotificationAsync({
+            content: {
+              title: `Task due in ${countdown}`,
+              body: `${task.title} (snoozed)`,
+              sound: 'default',
+              categoryIdentifier: 'task-reminder',
+              data: { scope: 'task-reminder', taskId, dueAtMs },
+            },
+            trigger: Platform.OS === 'android'
+              ? { type: n.SchedulableTriggerInputTypes.DATE, date: new Date(snoozeMs), channelId: ANDROID_NOTIFICATION_CHANNEL_ID } as import('expo-notifications').NotificationTriggerInput
+              : { type: n.SchedulableTriggerInputTypes.DATE, date: new Date(snoozeMs) } as import('expo-notifications').NotificationTriggerInput,
+          }).catch(() => undefined);
+        })();
+        return;
+      }
+
+      // ── Schedule actions ────────────────────────────────────────────────
+      if (actionIdentifier === 'schedule-start-focus') {
+        setActiveTab('focus');
+        return;
+      }
+
+      if (actionIdentifier === 'schedule-snooze') {
+        void (async () => {
+          const n = getNotificationsModule();
+          if (!n) return;
+          const title = notification.request.content.title ?? 'Event reminder';
+          const body = notification.request.content.body ?? '';
+          const snoozeMs = Date.now() + 10 * 60 * 1000;
+          await n.scheduleNotificationAsync({
+            content: {
+              title: `${title} (snoozed)`,
+              body,
+              sound: 'default',
+              categoryIdentifier: 'schedule-reminder',
+              data: { ...data, scope: 'custom-reminder' },
+            },
+            trigger: Platform.OS === 'android'
+              ? { type: n.SchedulableTriggerInputTypes.DATE, date: new Date(snoozeMs), channelId: ANDROID_NOTIFICATION_CHANNEL_ID } as import('expo-notifications').NotificationTriggerInput
+              : { type: n.SchedulableTriggerInputTypes.DATE, date: new Date(snoozeMs) } as import('expo-notifications').NotificationTriggerInput,
+          }).catch(() => undefined);
+        })();
+        return;
+      }
+
+      // ── Challenge actions ───────────────────────────────────────────────
+      if (actionIdentifier === 'challenge-log') {
+        setActiveTab('challenges');
+        return;
+      }
+
+      if (actionIdentifier === 'challenge-snooze') {
+        void (async () => {
+          const n = getNotificationsModule();
+          if (!n) return;
+          const title = notification.request.content.title ?? 'Challenge reminder';
+          const body = notification.request.content.body ?? '';
+          const snoozeMs = Date.now() + 30 * 60 * 1000;
+          const countdown = dueAtMs ? formatCountdown(snoozeMs, dueAtMs) : '?';
+          await n.scheduleNotificationAsync({
+            content: {
+              title: `Challenge ends in ${countdown}`,
+              body: `${body} (snoozed)`,
+              sound: 'default',
+              categoryIdentifier: 'challenge-reminder',
+              data: { ...data },
+            },
+            trigger: Platform.OS === 'android'
+              ? { type: n.SchedulableTriggerInputTypes.DATE, date: new Date(snoozeMs), channelId: ANDROID_NOTIFICATION_CHANNEL_ID } as import('expo-notifications').NotificationTriggerInput
+              : { type: n.SchedulableTriggerInputTypes.DATE, date: new Date(snoozeMs) } as import('expo-notifications').NotificationTriggerInput,
+          }).catch(() => undefined);
+        })();
+        return;
+      }
+
+      // Default tap (no action button) — open the relevant tab
+      if (scope === 'task-reminder' || (scope === 'custom-reminder' && data.category === 'tasks')) {
+        setActiveTab('tasks');
+      } else if (scope === 'custom-reminder' && data.category === 'schedule') {
+        setActiveTab('schedule');
+      } else if (scope === 'custom-reminder' && data.category === 'challenges') {
+        setActiveTab('challenges');
+      }
+    });
+
+    return () => subscription.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.tasks]);
+
   useEffect(() => {
     let active = true;
 
@@ -2439,7 +2680,8 @@ export default function App() {
             title: draft.title,
             body: draft.body,
             sound: 'default',
-            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey },
+            categoryIdentifier: draft.categoryIdentifier,
+            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey, dueAtMs: draft.dueAtMs },
           };
           const dateTrigger = new Date(draft.triggerAtMs);
           try {
@@ -3481,12 +3723,15 @@ export default function App() {
           const dueDateLabel = formatYmdLabel(task.dueDate);
           const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
 
+          const countdown = formatCountdown(triggerAtMs, dueTs);
           return {
             category: 'tasks' as ReminderCategory,
             itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_${settings.tasks.leadMinutes}`,
-            title: 'Task reminder',
-            body: `${task.title} is due ${dueDateLabel} at ${dueTimeLabel}.`,
+            title: `Task due in ${countdown}`,
+            body: `${task.title} · Due ${dueDateLabel} at ${dueTimeLabel}`,
             triggerAtMs,
+            dueAtMs: dueTs,
+            categoryIdentifier: 'task-reminder',
           };
         })
         .filter((entry): entry is SmartReminderDraft => Boolean(entry))
@@ -3507,12 +3752,15 @@ export default function App() {
           const triggerAtMs = eventTs - leadMs;
           if (triggerAtMs < minimumTriggerTs) return null;
 
+          const countdown = formatCountdown(triggerAtMs, eventTs);
           return {
             category: 'schedule' as ReminderCategory,
             itemKey: `event_${occurrence.key}_${settings.schedule.leadMinutes}`,
-            title: 'Schedule reminder',
-            body: `${occurrence.event.title} starts ${formatYmdLabel(occurrence.occurrenceDate)} at ${formatTimeLabel(occurrence.event.startTime)}.`,
+            title: `Starting in ${countdown}`,
+            body: `${occurrence.event.title} · ${formatYmdLabel(occurrence.occurrenceDate)} at ${formatTimeLabel(occurrence.event.startTime)}`,
             triggerAtMs,
+            dueAtMs: eventTs,
+            categoryIdentifier: 'schedule-reminder',
           };
         })
         .filter((entry): entry is SmartReminderDraft => Boolean(entry))
@@ -3537,12 +3785,16 @@ export default function App() {
           const triggerAtMs = dueTs - leadMs;
           if (triggerAtMs < minimumTriggerTs) return null;
 
+          const countdown = formatCountdown(triggerAtMs, dueTs);
+          const remaining = challenge.targetProgress - challenge.currentProgress;
           return {
             category: 'challenges' as ReminderCategory,
             itemKey: `challenge_${challenge.id}_${dueYmd}_${settings.challenges.leadMinutes}`,
-            title: 'Challenge reminder',
-            body: `${challenge.title}: ${challenge.currentProgress}/${challenge.targetProgress} done. Keep your streak alive.`,
+            title: `Challenge ends in ${countdown}`,
+            body: `${challenge.title} · ${challenge.currentProgress}/${challenge.targetProgress} done, ${remaining} left`,
             triggerAtMs,
+            dueAtMs: dueTs,
+            categoryIdentifier: 'challenge-reminder',
           };
         })
         .filter((entry): entry is SmartReminderDraft => Boolean(entry))
@@ -3576,12 +3828,15 @@ export default function App() {
         const dueDateLabel = formatYmdLabel(task.dueDate);
         const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
 
+        const countdown = formatCountdown(triggerAtMs, dueTs);
         return {
           taskId: task.id,
           itemKey: `task_direct_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_${reminderMinutes}`,
-          title: 'Task reminder',
-          body: `${task.title} is due ${dueDateLabel} at ${dueTimeLabel}.`,
+          title: `Task due in ${countdown}`,
+          body: `${task.title} · Due ${dueDateLabel} at ${dueTimeLabel}`,
           triggerAtMs,
+          dueAtMs: dueTs,
+          categoryIdentifier: 'task-reminder',
         };
       })
       .filter((entry): entry is TaskReminderDraft => Boolean(entry))
@@ -3633,10 +3888,12 @@ export default function App() {
           title: draft.title,
           body: draft.body,
           sound: 'default',
+          categoryIdentifier: draft.categoryIdentifier,
           data: {
             scope: 'task-reminder',
             taskId: draft.taskId,
             itemKey: draft.itemKey,
+            dueAtMs: draft.dueAtMs,
           },
         };
 
@@ -3752,10 +4009,12 @@ export default function App() {
         title: draft.title,
         body: draft.body,
         sound: 'default',
+        categoryIdentifier: draft.categoryIdentifier,
         data: {
           scope: 'custom-reminder',
           category: draft.category,
           itemKey: draft.itemKey,
+          dueAtMs: draft.dueAtMs,
         },
       };
 
@@ -6124,6 +6383,18 @@ export default function App() {
             </Pressable>
           </View>
 
+          {updateAvailable ? (
+            <Pressable
+              style={styles.updateBanner}
+              onPress={() => void Linking.openURL(updateAvailable.url)}
+            >
+              <Text style={styles.updateBannerText}>
+                Update available — v{updateAvailable.version}
+              </Text>
+              <Text style={styles.updateBannerAction}>Tap to download APK</Text>
+            </Pressable>
+          ) : null}
+
           <ScrollView
             horizontal
             style={styles.tabsScroll}
@@ -6230,6 +6501,28 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontWeight: '600',
   },
+  updateBanner: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  updateBannerText: {
+    color: '#6ee7b7',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  updateBannerAction: {
+    color: '#6ee7b7',
+    fontSize: 12,
+    opacity: 0.8,
+  },
   tabsScroll: {
     marginBottom: 8,
     maxHeight: 48,
@@ -6242,7 +6535,7 @@ const styles = StyleSheet.create({
   tabPill: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
     backgroundColor: COLORS.bgCard,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -6273,16 +6566,15 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.bgCard,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
     borderRadius: 16,
     padding: 14,
     gap: 10,
-    // depth
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
   heroCard: {
     backgroundColor: '#20204a',
@@ -6370,7 +6662,7 @@ const styles = StyleSheet.create({
   bestRecordProgressBlock: {
     gap: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     backgroundColor: COLORS.bgSecondary,
     padding: 10,
@@ -6382,7 +6674,7 @@ const styles = StyleSheet.create({
   goalSummaryPill: {
     flex: 1,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
     borderRadius: 999,
     backgroundColor: COLORS.bgSecondary,
     paddingHorizontal: 12,
@@ -6413,7 +6705,7 @@ const styles = StyleSheet.create({
   },
   reviewRow: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     padding: 10,
     backgroundColor: COLORS.bgSecondary,
@@ -6433,7 +6725,7 @@ const styles = StyleSheet.create({
   calendarWeekHeader: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
     borderRadius: 10,
     backgroundColor: COLORS.bgSecondary,
     paddingVertical: 8,
@@ -6456,7 +6748,7 @@ const styles = StyleSheet.create({
     width: '13.5%',
     minWidth: 38,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.15)',
     borderRadius: 10,
     backgroundColor: COLORS.bgSecondary,
     paddingVertical: 8,
@@ -6534,17 +6826,17 @@ const styles = StyleSheet.create({
   summaryCard: {
     backgroundColor: COLORS.bgSecondary,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 12,
     padding: 10,
     minWidth: '47%',
     flexGrow: 1,
     gap: 2,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.22,
-    shadowRadius: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   summaryLabel: {
     color: COLORS.textMuted,
@@ -6564,7 +6856,7 @@ const styles = StyleSheet.create({
   },
   compactRow: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     padding: 10,
     backgroundColor: COLORS.bgSecondary,
@@ -6585,7 +6877,7 @@ const styles = StyleSheet.create({
   },
   todayDigestRow: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -6625,7 +6917,9 @@ const styles = StyleSheet.create({
   },
   scheduleRow: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
     borderRadius: 10,
     padding: 10,
     backgroundColor: COLORS.bgSecondary,
@@ -6669,7 +6963,7 @@ const styles = StyleSheet.create({
   },
   progressCard: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     padding: 10,
     backgroundColor: COLORS.bgSecondary,
@@ -6696,10 +6990,10 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: COLORS.bgInput,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: 10,
+    borderColor: 'rgba(99, 102, 241, 0.25)',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     color: COLORS.textPrimary,
     fontSize: 15,
   },
@@ -6722,7 +7016,7 @@ const styles = StyleSheet.create({
   },
   chipButton: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -6742,16 +7036,16 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 12,
     backgroundColor: COLORS.bgSecondary,
     padding: 10,
     gap: 10,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   itemMain: {
     gap: 3,
@@ -6795,41 +7089,54 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 13,
     alignItems: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
   },
   primaryButtonInline: {
     flex: 1,
     backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 11,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#ffffff',
     fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
   secondaryButton: {
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    paddingVertical: 12,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+    paddingVertical: 13,
     alignItems: 'center',
   },
   secondaryButtonInline: {
     flex: 1,
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    paddingVertical: 11,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+    paddingVertical: 12,
     alignItems: 'center',
   },
   secondaryButtonText: {
     color: COLORS.textPrimary,
     fontWeight: '700',
+    fontSize: 14,
   },
   inlineButtonsRow: {
     flexDirection: 'row',
@@ -6861,8 +7168,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.18)',
     borderWidth: 1,
     borderColor: COLORS.danger,
-    borderRadius: 10,
-    paddingVertical: 11,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   smallDangerButtonText: {
@@ -6872,12 +7179,16 @@ const styles = StyleSheet.create({
   },
   focusCard: {
     alignItems: 'center',
+    borderColor: 'rgba(99, 102, 241, 0.35)',
+    backgroundColor: '#161630',
+    gap: 14,
   },
   timerValue: {
-    color: '#ffffff',
-    fontSize: 52,
+    color: '#a5b4fc',
+    fontSize: 58,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 2,
+    fontVariant: ['tabular-nums'],
   },
   sectionLabel: {
     color: COLORS.textMuted,
@@ -6928,7 +7239,7 @@ const styles = StyleSheet.create({
   },
   reminderPreviewBox: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     backgroundColor: COLORS.bgSecondary,
     padding: 10,
@@ -6946,7 +7257,7 @@ const styles = StyleSheet.create({
   },
   reminderCategoryCard: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(99, 102, 241, 0.18)',
     borderRadius: 10,
     backgroundColor: COLORS.bgSecondary,
     padding: 10,

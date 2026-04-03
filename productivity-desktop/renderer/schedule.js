@@ -4370,34 +4370,62 @@ async function processImportedData(text, format, settings = {}) {
         return;
     }
 
-    // Generate unique calendar ID
-    const calendarId = 'imported_' + Date.now();
     const calendarName = settings.calendarName || 'Imported Calendar';
     const customColor = settings.customColor || '#6366f1';
     const eventType = settings.eventType || 'class';
     const markAsImported = settings.markAsImported !== false;
+    const sourceUrl = settings.sourceUrl || null;
+
+    // Reuse existing calendarId when the same URL is re-imported so that old events
+    // are replaced rather than orphaned in Firestore (ghost events).
+    let calendarId = null;
+    const existingEntry = sourceUrl
+        ? Object.entries(ScheduleState.importedCalendarsMeta).find(([, meta]) => meta.sourceUrl === sourceUrl)
+        : null;
+    if (existingEntry) {
+        calendarId = existingEntry[0];
+        // Delete stale events for this calendar before re-importing
+        const oldEvents = ScheduleState.events.filter(e => e.importedCalendarId === calendarId);
+        for (const event of oldEvents) {
+            const scheduleType = event.scheduleType || 'school';
+            await ProductivityData.DataStore.deleteScheduleEvent(event.id, scheduleType);
+            await ProductivityData.DataStore.deleteScheduleEvent(event.id, scheduleType === 'school' ? 'personal' : 'school');
+        }
+        ScheduleState.events = ScheduleState.events.filter(e => e.importedCalendarId !== calendarId);
+    } else {
+        calendarId = 'imported_' + Date.now();
+    }
 
     // Save calendar metadata (include sourceUrl for refresh capability)
     ScheduleState.importedCalendarsMeta[calendarId] = {
         name: calendarName,
         color: customColor,
         eventType,
-        importedAt: new Date().toISOString(),
+        importedAt: existingEntry ? existingEntry[1].importedAt : new Date().toISOString(),
         lastRefreshed: new Date().toISOString(),
         eventCount: events.length,
-        sourceUrl: settings.sourceUrl || null // Store URL for future refresh
+        sourceUrl // Store URL for future refresh
     };
     ScheduleState.filters.importedCalendars[calendarId] = true;
     await chrome.storage.local.set({ importedCalendarsMeta: ScheduleState.importedCalendarsMeta });
 
-    // Save imported events
+    // Save imported events — use deterministic IDs so re-importing the same calendar
+    // updates existing events instead of creating duplicates.
     for (const eventData of events) {
-        // Ensure time format is correct
         eventData.startTime = ensureTimeFormat(eventData.startTime);
         eventData.endTime = ensureTimeFormat(eventData.endTime);
 
+        let stableId;
+        if (eventData.icsUid) {
+            stableId = `${calendarId}_${eventData.icsUid}`.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 80);
+        } else {
+            const sig = `${calendarId}|${eventData.title}|${eventData.date}|${eventData.startTime}`;
+            stableId = `${calendarId}_${sig.split('').reduce((h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0, 0).toString(36)}`;
+        }
+
         const event = new ProductivityData.ScheduleEvent({
             ...eventData,
+            id: stableId,
             type: eventType,
             color: customColor,
             scheduleType: 'school',
@@ -4406,7 +4434,12 @@ async function processImportedData(text, format, settings = {}) {
             importedAt: markAsImported ? new Date().toISOString() : null
         });
         await ProductivityData.DataStore.saveScheduleEvent(event);
-        ScheduleState.events.push(event);
+        const existing = ScheduleState.events.findIndex(e => e.id === event.id);
+        if (existing >= 0) {
+            ScheduleState.events[existing] = event;
+        } else {
+            ScheduleState.events.push(event);
+        }
     }
 
     // Refresh the filter list and calendar view
@@ -4438,13 +4471,16 @@ function parseICSFile(text) {
                     location: currentEvent.location || '',
                     description: currentEvent.description || '',
                     type: 'class',
-                    isRecurring: !!currentEvent.rrule
+                    isRecurring: !!currentEvent.rrule,
+                    icsUid: currentEvent.uid || null,
                 });
             }
             currentEvent = null;
         } else if (currentEvent) {
             if (line.startsWith('SUMMARY:')) {
                 currentEvent.title = line.substring(8);
+            } else if (line.startsWith('UID:')) {
+                currentEvent.uid = line.substring(4).trim();
             } else if (line.startsWith('DTSTART')) {
                 const dateStr = line.split(':')[1];
                 if (dateStr) {

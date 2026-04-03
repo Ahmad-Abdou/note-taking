@@ -12,6 +12,11 @@
     "android:dev:local": "powershell -ExecutionPolicy Bypass -File scripts/run-local-android-dev.ps1",
     "android:dev:local:fast": "powershell -ExecutionPolicy Bypass -File scripts/run-local-android-dev.ps1 -SkipInstall",
     "android:build": "cd android && gradlew.bat assembleDebug",
+    "android:release": "powershell -ExecutionPolicy Bypass -File scripts/build-release-apk.ps1",
+    "android:release:local": "powershell -ExecutionPolicy Bypass -File scripts/build-release-apk.ps1 -UseLocal",
+    "release": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },

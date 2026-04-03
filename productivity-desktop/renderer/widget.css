@@ -713,23 +713,23 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 6px 4px 8px;
+  gap: 10px;
+  padding: 10px 8px 12px;
   width: 100%;
   height: 100%;
 }
 
 .widget-container.is-card-focus-session {
   background: linear-gradient(
-    160deg,
+    150deg,
     var(--widget-focus-bg-start) 0%,
     var(--widget-focus-bg-end) 100%
   );
   border-color: var(--widget-focus-border);
   box-shadow:
     0 0 0 1px var(--widget-focus-border),
-    0 12px 40px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 .widget-container.is-card-focus-session .widget-titlebar {
@@ -741,23 +741,27 @@ body {
   color: var(--widget-focus-pin);
 }
 
+/* Task label */
 .widget-focus-target {
   width: 100%;
+  max-width: 200px;
   text-align: center;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 700;
   color: var(--widget-focus-target);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: 0.01em;
-  opacity: 0.9;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
 
+/* Circular timer */
 .widget-focus-timer-wrap {
   --focus-progress: 0;
-  width: 102px;
-  height: 102px;
+  width: 118px;
+  height: 118px;
   position: relative;
   display: grid;
   place-items: center;
@@ -767,17 +771,17 @@ body {
 .widget-focus-timer-wrap::before {
   content: "";
   position: absolute;
-  inset: 5px;
+  inset: 7px;
   border-radius: 50%;
   border: 1px solid var(--widget-focus-wrap-border);
   background: radial-gradient(
-    circle at 38% 32%,
+    circle at 38% 30%,
     var(--widget-focus-wrap-bg-start),
-    var(--widget-focus-wrap-bg-end) 72%
+    var(--widget-focus-wrap-bg-end) 75%
   );
   box-shadow:
-    inset 0 0 16px var(--widget-focus-wrap-shadow),
-    0 0 0 4px var(--widget-focus-shell-outer);
+    inset 0 0 20px var(--widget-focus-wrap-shadow),
+    0 0 0 5px var(--widget-focus-shell-outer);
 }
 
 .widget-focus-media-ring {
@@ -791,18 +795,18 @@ body {
   transform: rotate(-90deg);
   -webkit-mask: radial-gradient(
     farthest-side,
-    transparent calc(100% - 9px),
-    #000 calc(100% - 8px)
+    transparent calc(100% - 11px),
+    #000 calc(100% - 10px)
   );
   mask: radial-gradient(
     farthest-side,
-    transparent calc(100% - 9px),
-    #000 calc(100% - 8px)
+    transparent calc(100% - 11px),
+    #000 calc(100% - 10px)
   );
   opacity: 0;
   transition:
     opacity 0.25s ease,
-    background 0.4s ease;
+    background 0.5s ease;
 }
 
 .widget-focus-timer-wrap.has-progress .widget-focus-media-ring {
@@ -810,16 +814,16 @@ body {
 }
 
 .widget-focus-timer-wrap.is-indeterminate .widget-focus-media-ring {
-  opacity: 0.85;
+  opacity: 0.9;
   background: conic-gradient(
-    var(--widget-focus-clock) 22%,
-    var(--widget-focus-ring-track) 22% 100%
+    var(--widget-focus-clock) 25%,
+    var(--widget-focus-ring-track) 25% 100%
   );
-  animation: focusRingSpin 2s linear infinite;
+  animation: focusRingSpin 1.8s linear infinite;
 }
 
 .widget-focus-timer-wrap.is-static .widget-focus-media-ring {
-  opacity: 0.35;
+  opacity: 0.3;
   background: conic-gradient(
     var(--widget-focus-ring-idle) 100%,
     var(--widget-focus-ring-idle) 100%
@@ -827,12 +831,12 @@ body {
 }
 
 .widget-focus-clock-shell {
-  width: 68px;
-  height: 68px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   border: 1.5px solid var(--widget-focus-shell-border);
   background: radial-gradient(
-    circle at 36% 32%,
+    circle at 36% 30%,
     var(--widget-focus-shell-bg-start),
     var(--widget-focus-shell-bg-end) 70%
   );
@@ -841,40 +845,43 @@ body {
   justify-content: center;
   z-index: 2;
   pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
 .widget-focus-clock {
-  font-size: 1.08rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   color: var(--widget-focus-clock);
   line-height: 1;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
 }
 
 .widget-focus-card.paused .widget-focus-clock {
   color: var(--widget-focus-clock-paused);
   animation: focusClockPulse 2s ease-in-out infinite;
+  text-shadow: 0 0 12px rgba(199, 210, 254, 0.4);
 }
 
 @keyframes focusClockPulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.55; }
 }
 
+/* Controls row */
 .widget-focus-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-top: 2px;
+  gap: 10px;
 }
 
 .widget-focus-control-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   border: 1px solid var(--widget-focus-control-border);
   background: var(--widget-focus-control-bg-start);
   cursor: pointer;
@@ -882,9 +889,9 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--widget-focus-control-text);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   transition:
-    transform 0.14s ease,
+    transform 0.12s ease,
     background 0.14s ease,
     border-color 0.14s ease,
     box-shadow 0.14s ease;
@@ -896,8 +903,8 @@ body {
 .widget-focus-control-btn::after {
   content: '';
   position: absolute;
-  inset: -4px;
-  border-radius: 14px;
+  inset: -5px;
+  border-radius: 50%;
 }
 
 .widget-focus-control-btn i {
@@ -905,24 +912,42 @@ body {
   pointer-events: none;
 }
 
+/* Play / Pause — primary action */
 .widget-focus-control-btn.is-primary {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   background: linear-gradient(
     145deg,
-    rgba(99, 102, 241, 0.35),
-    rgba(79, 70, 229, 0.25)
+    rgba(99, 102, 241, 0.5),
+    rgba(79, 70, 229, 0.35)
   );
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.15),
+    0 4px 14px rgba(99, 102, 241, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .widget-focus-control-btn.is-primary .fa-play {
   transform: translateX(1.5px);
 }
 
+.widget-focus-control-btn.is-primary:hover {
+  background: linear-gradient(
+    145deg,
+    rgba(99, 102, 241, 0.7),
+    rgba(79, 70, 229, 0.55)
+  );
+  border-color: rgba(99, 102, 241, 0.85);
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.2),
+    0 6px 18px rgba(99, 102, 241, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: scale(1.06);
+}
+
+/* Stop button */
 .widget-focus-control-btn.is-stop {
   color: var(--widget-focus-control-stop);
   border-color: var(--widget-focus-control-stop-border);
@@ -930,35 +955,39 @@ body {
 }
 
 .widget-focus-control-btn.is-stop:hover {
-  background: rgba(248, 113, 113, 0.18);
-  border-color: rgba(248, 113, 113, 0.7);
-  box-shadow: 0 0 10px rgba(248, 113, 113, 0.2);
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.75);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.25);
+  transform: scale(1.06);
 }
 
-.widget-focus-control-btn:hover {
-  transform: translateY(-1px) scale(1.04);
+/* Open button */
+.widget-focus-control-btn:not(.is-primary):not(.is-stop):hover {
   background: var(--widget-focus-control-hover-start);
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+  transform: scale(1.06);
 }
 
 .widget-focus-control-btn:active {
-  transform: translateY(0) scale(0.97);
-  box-shadow: none;
+  transform: scale(0.94) !important;
+  box-shadow: none !important;
 }
 
+/* Status label */
 .widget-focus-status {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   color: var(--widget-focus-status);
   text-align: center;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.8;
+  font-weight: 700;
+  opacity: 0.65;
 }
 
 .widget-focus-card.paused .widget-focus-status {
   color: var(--widget-focus-clock-paused);
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .widget-focus-progress-track {

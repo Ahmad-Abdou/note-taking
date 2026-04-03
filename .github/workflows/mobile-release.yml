@@ -1,0 +1,77 @@
+name: Mobile Release (Android APK)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'mobile-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: productivity-mobile/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install deps (mobile)
+        working-directory: productivity-mobile
+        run: npm ci
+
+      - name: Make gradlew executable
+        working-directory: productivity-mobile/android
+        run: chmod +x gradlew
+
+      - name: Build release APK
+        working-directory: productivity-mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m"
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#mobile-}" >> $GITHUB_OUTPUT
+
+      - name: Rename APK
+        run: |
+          cp productivity-mobile/android/app/build/outputs/apk/release/app-release.apk \
+             productivity-hub-mobile-${{ steps.version.outputs.version }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Mobile ${{ steps.version.outputs.version }}"
+          body: |
+            ## Productivity Hub Mobile ${{ steps.version.outputs.version }}
+
+            ### Install
+            1. Download `productivity-hub-mobile-${{ steps.version.outputs.version }}.apk` below
+            2. On your phone: Settings → Install unknown apps → allow your file manager
+            3. Open the APK to install (or update over the existing app)
+
+            The app will notify you when a newer version is available.
+          files: productivity-hub-mobile-${{ steps.version.outputs.version }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
