@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: productivity-mobile/package-lock.json
 
@@ -37,9 +37,25 @@ jobs:
         working-directory: productivity-mobile
         run: npm ci
 
+      # expo prebuild generates the android/ directory from app.json + plugins.
+      # The android/ folder is gitignored (Expo convention) so we always generate
+      # it fresh here. --no-install skips running npm/yarn again.
+      - name: Generate Android native project (expo prebuild)
+        working-directory: productivity-mobile
+        run: npx expo prebuild --platform android --no-install
+
+      # Restore the keystore that was used to sign previous releases so that
+      # Android allows "update over existing install" instead of blocking it.
+      # The secret ANDROID_DEBUG_KEYSTORE_BASE64 holds the base64-encoded
+      # contents of your local android/app/debug.keystore file.
+      - name: Restore signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}" \
+            | base64 --decode \
+            > productivity-mobile/android/app/debug.keystore
+
       - name: Make gradlew executable
-        working-directory: productivity-mobile/android
-        run: chmod +x gradlew
+        run: chmod +x productivity-mobile/android/gradlew
 
       - name: Build release APK
         working-directory: productivity-mobile/android
@@ -54,7 +70,7 @@ jobs:
       - name: Rename APK
         run: |
           cp productivity-mobile/android/app/build/outputs/apk/release/app-release.apk \
-             productivity-hub-mobile-${{ steps.version.outputs.version }}.apk
+             "productivity-hub-mobile-${{ steps.version.outputs.version }}.apk"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -64,13 +80,13 @@ jobs:
           body: |
             ## Productivity Hub Mobile ${{ steps.version.outputs.version }}
 
-            ### Install
+            ### Install / Update
             1. Download `productivity-hub-mobile-${{ steps.version.outputs.version }}.apk` below
             2. On your phone: Settings → Install unknown apps → allow your file manager
-            3. Open the APK to install (or update over the existing app)
+            3. Open the APK — Android will install it over the existing app (no data loss)
 
-            The app will notify you when a newer version is available.
-          files: productivity-hub-mobile-${{ steps.version.outputs.version }}.apk
+            The app shows a green banner when a newer version is available.
+          files: "productivity-hub-mobile-${{ steps.version.outputs.version }}.apk"
           draft: false
           prerelease: false
         env:

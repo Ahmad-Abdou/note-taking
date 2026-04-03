@@ -1,6 +1,6 @@
 {
   "name": "productivity-mobile",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -14,6 +14,7 @@
     "android:build": "cd android && gradlew.bat assembleDebug",
     "android:release": "powershell -ExecutionPolicy Bypass -File scripts/build-release-apk.ps1",
     "android:release:local": "powershell -ExecutionPolicy Bypass -File scripts/build-release-apk.ps1 -UseLocal",
+    "ci:setup-keystore": "powershell -ExecutionPolicy Bypass -File scripts/setup-ci-keystore.ps1",
     "release": "node scripts/release.js patch",
     "release:minor": "node scripts/release.js minor",
     "release:major": "node scripts/release.js major",
