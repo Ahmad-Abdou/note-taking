@@ -12,7 +12,9 @@
       "Bash(copy:*)",
       "Bash(dir:*)",
       "Bash(ls:*)",
-      "Read(//c/Users/ahmad/OneDrive/Desktop/note taking/**)"
+      "Read(//c/Users/ahmad/OneDrive/Desktop/note taking/**)",
+      "Bash(cmd /c \"\\\\\"C:\\\\Users\\\\ahmad\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\\\\\" devices\")",
+      "Bash(cmd /c \"dir \\\\\"C:\\\\Users\\\\ahmad\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\\\\\" 2>&1 && \\\\\"C:\\\\Users\\\\ahmad\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\\\\\" devices 2>&1\")"
     ]
   }
 }

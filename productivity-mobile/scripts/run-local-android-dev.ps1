@@ -15,12 +15,12 @@ New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 
 $excludePaths = @(
     (Join-Path $source 'node_modules'),
-    (Join-Path $source '.expo'),
     (Join-Path $source 'dist'),
     (Join-Path $source 'test-results'),
     (Join-Path $source 'android\.gradle'),
     (Join-Path $source 'android\build'),
-    (Join-Path $source 'android\app\build')
+    (Join-Path $source 'android\app\build'),
+    (Join-Path $source 'android\app\.cxx')
 )
 
 $robocopyArgs = @(
@@ -37,7 +37,8 @@ $robocopyArgs = @(
     '/XD'
 ) + $excludePaths
 
-& robocopy @robocopyArgs
+# Run robocopy and filter out the *EXTRA file/dir lines that flood the output
+& robocopy @robocopyArgs | Where-Object { $_ -notmatch '^\s+\*EXTRA' }
 $robocopyExit = $LASTEXITCODE
 
 if ($robocopyExit -ge 8) {
