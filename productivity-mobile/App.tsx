@@ -8,7 +8,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -1664,12 +1664,14 @@ export default function App() {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskDueTime, setTaskDueTime] = useState('');
+  const [taskReminderMinutes, setTaskReminderMinutes] = useState('');
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
   const [dashboardTaskInput, setDashboardTaskInput] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskTitle, setEditingTaskTitle] = useState('');
   const [editingTaskDueDate, setEditingTaskDueDate] = useState('');
   const [editingTaskDueTime, setEditingTaskDueTime] = useState('');
+  const [editingTaskReminderMinutes, setEditingTaskReminderMinutes] = useState('');
   const [editingTaskPriority, setEditingTaskPriority] = useState<TaskPriority>('medium');
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'all' | TaskStatus>('all');
@@ -2421,15 +2423,26 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
 
-    const intervalMs = focusRunning ? 45000 : 8000;
     void pullFromCloud(currentUser, true);
 
-    const timer = setInterval(() => {
-      void pullFromCloud(currentUser, true);
-    }, intervalMs);
+    const docRef = doc(db, SYNC_COLLECTION, currentUser.uid);
+    const unsubscribe = onSnapshot(docRef, async (snap) => {
+      if (!snap.exists()) return;
+      const cloudData = (snap.data() || {}) as Record<string, unknown>;
+      const payload = cloudData.payload;
+      if (typeof payload !== 'string' || !payload.trim()) return;
 
-    return () => clearInterval(timer);
-  }, [currentUser, focusRunning]);
+      const remoteChecksum = computePayloadChecksum(payload);
+      const previousState = await readSyncState(currentUser.uid);
+      
+      // If we pushed this payload, ignore the read back
+      if (remoteChecksum === previousState.lastPayloadChecksum) return;
+
+      void pullFromCloud(currentUser, true);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -2443,6 +2456,19 @@ export default function App() {
       sound: null,
       vibrationPattern: [0],
     }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const initNotifications = async () => {
+      const notifications = getNotificationsModule();
+      if (!notifications) return;
+
+      const settings = await notifications.getPermissionsAsync();
+      if (!settings.granted) {
+        await notifications.requestPermissionsAsync();
+      }
+    };
+    void initNotifications();
   }, []);
 
   useEffect(() => {
@@ -2528,6 +2554,33 @@ export default function App() {
     }
   }
 
+  function mergeSnapshots(localSnap: HubSnapshot, remoteSnap: HubSnapshot): HubSnapshot {
+    function mergeArrays<T extends { id: string; updatedAt?: string; }>(l: T[], r: T[]): T[] {
+      const map = new Map<string, T>();
+      for (const item of r) map.set(item.id, item);
+      for (const item of l) {
+        const ext = map.get(item.id);
+        if (!ext || (item.updatedAt || '') >= (ext.updatedAt || '')) {
+          map.set(item.id, item);
+        }
+      }
+      return Array.from(map.values());
+    }
+
+    return normalizeSnapshot({
+      ...remoteSnap,
+      tasks: mergeArrays(localSnap.tasks, remoteSnap.tasks),
+      goals: mergeArrays(localSnap.goals, remoteSnap.goals),
+      challenges: mergeArrays(localSnap.challenges, remoteSnap.challenges),
+      focusSessions: mergeArrays(localSnap.focusSessions, remoteSnap.focusSessions),
+      revisions: mergeArrays(localSnap.revisions, remoteSnap.revisions),
+      achievements: { ...remoteSnap.achievements, ...localSnap.achievements },
+      dailyStats: { ...remoteSnap.dailyStats, ...localSnap.dailyStats },
+      settings: { ...remoteSnap.settings, ...localSnap.settings },
+      focusState: localSnap.focusState || remoteSnap.focusState,
+    });
+  }
+
   async function pushToCloud(
     snapshotOverride?: HubSnapshot,
     options: { allowConflictUpload?: boolean; silent?: boolean } = {},
@@ -2594,10 +2647,52 @@ export default function App() {
         return;
       }
 
-      if (remoteChangedSinceLastSync && localChangedSinceLastSync && !allowConflictUpload) {
+      if (remoteChangedSinceLastSync && localChangedSinceLastSync) {
         if (!silent) {
-          setSyncStatus('Sync blocked: cloud changed on another device. Pull latest first to avoid resurrecting deleted tasks.');
+          setSyncStatus('Conflict detected. Merging data before upload...');
         }
+        
+        const remoteParsed = JSON.parse(remotePayload);
+        const remoteNormalized = normalizeSnapshot(remoteParsed);
+        const mergedSnap = mergeSnapshots(finalized, remoteNormalized);
+        
+        // Re-calculate the payload based on the newly merged snapshot
+        const mergedFinalized = finalizeSnapshot(mergedSnap);
+        setSnapshot(mergedFinalized);
+        await AsyncStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(mergedFinalized));
+        
+        const nextPayload = JSON.stringify(
+          {
+            ...mergedFinalized,
+            exportDate: nowIso(),
+            source: 'mobile-app',
+          },
+          null,
+          2,
+        );
+        const nextChecksum = computePayloadChecksum(nextPayload);
+        
+        const updatedAtMs = Date.now();
+        await setDoc(
+          docRef,
+          {
+            payload: nextPayload,
+            payloadChecksum: nextChecksum,
+            schemaVersion: 2,
+            updatedAt: serverTimestamp(),
+            updatedAtMs,
+            updatedBy: 'mobile-app',
+          },
+          { merge: true },
+        );
+        await writeSyncState(currentUser.uid, {
+          lastPayloadChecksum: nextChecksum,
+          lastRemoteChecksum: nextChecksum,
+          lastRemoteVersion: updatedAtMs,
+          lastSyncAt: nowIso(),
+        });
+        setLastSyncAt(nowIso());
+        if (!silent) setSyncStatus('Cloud sync successful (merged conflicts).');
         return;
       }
 
@@ -2784,9 +2879,11 @@ export default function App() {
   function clearTaskDueTime(editing = false) {
     if (editing) {
       setEditingTaskDueTime('');
+      setEditingTaskReminderMinutes('');
       return;
     }
     setTaskDueTime('');
+    setTaskReminderMinutes('');
   }
 
   async function handleAddTask() {
@@ -2815,7 +2912,7 @@ export default function App() {
       linkUrl: null,
       dueDate: due,
       dueTime,
-      reminderMinutes: null,
+      reminderMinutes: taskReminderMinutes ? parseInt(taskReminderMinutes, 10) : null,
       priority: taskPriority,
       status: 'not-started',
       category: 'homework',
@@ -2837,6 +2934,7 @@ export default function App() {
     setTaskTitle('');
     setTaskDueDate('');
     setTaskDueTime('');
+    setTaskReminderMinutes('');
     await sendInteractionNotification('Task added', `${title} was added to your tasks.`);
   }
 
@@ -2930,6 +3028,7 @@ export default function App() {
     setEditingTaskTitle(task.title);
     setEditingTaskDueDate(task.dueDate || '');
     setEditingTaskDueTime(task.dueTime || '');
+    setEditingTaskReminderMinutes(task.reminderMinutes != null ? String(task.reminderMinutes) : '');
     setEditingTaskPriority(task.priority);
     setActiveTab('tasks');
   }
@@ -2939,6 +3038,7 @@ export default function App() {
     setEditingTaskTitle('');
     setEditingTaskDueDate('');
     setEditingTaskDueTime('');
+    setEditingTaskReminderMinutes('');
     setEditingTaskPriority('medium');
   }
 
@@ -2970,6 +3070,7 @@ export default function App() {
         title,
         dueDate: due,
         dueTime,
+        reminderMinutes: editingTaskReminderMinutes ? parseInt(editingTaskReminderMinutes, 10) : null,
         priority: editingTaskPriority,
         updatedAt: nowIso(),
       };
@@ -5094,6 +5195,23 @@ export default function App() {
               </Pressable>
             </View>
 
+            <Text style={styles.summaryMeta}>
+              Reminder: {editingTaskReminderMinutes ? `${editingTaskReminderMinutes}m` : 'Off'}
+            </Text>
+            <View style={styles.chipRow}>
+              {['', '0', '15', '30', '60'].map((val) => (
+                <Pressable
+                  key={val}
+                  style={[styles.chipButton, editingTaskReminderMinutes === val ? styles.chipButtonActive : undefined]}
+                  onPress={() => setEditingTaskReminderMinutes(val)}
+                >
+                  <Text style={[styles.chipText, editingTaskReminderMinutes === val ? styles.chipTextActive : undefined]}>
+                    {val === '' ? 'Off' : (val === '0' ? 'At time' : `${val}m`)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
             <View style={styles.chipRow}>
               {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((priority) => (
                 <Pressable
@@ -5154,6 +5272,23 @@ export default function App() {
             <Pressable style={styles.secondaryButtonInline} onPress={() => clearTaskDueTime(false)}>
               <Text style={styles.secondaryButtonText}>Clear time</Text>
             </Pressable>
+          </View>
+
+          <Text style={styles.summaryMeta}>
+            Reminder: {taskReminderMinutes ? `${taskReminderMinutes}m` : 'Off'}
+          </Text>
+          <View style={styles.chipRow}>
+            {['', '0', '15', '30', '60'].map((val) => (
+              <Pressable
+                key={val}
+                style={[styles.chipButton, taskReminderMinutes === val ? styles.chipButtonActive : undefined]}
+                onPress={() => setTaskReminderMinutes(val)}
+              >
+                <Text style={[styles.chipText, taskReminderMinutes === val ? styles.chipTextActive : undefined]}>
+                  {val === '' ? 'Off' : (val === '0' ? 'At time' : `${val}m`)}
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
           <View style={styles.chipRow}>
