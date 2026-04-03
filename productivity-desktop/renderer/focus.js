@@ -103,8 +103,8 @@ async function pinDesktopFocusWidget(options = {}) {
         await widgetsApi.pin(DESKTOP_FOCUS_WIDGET_CARD_ID, {
             expanded: false,
             width: 320,
-            collapsedHeight: 220,
-            expandedHeight: 280
+            collapsedHeight: 252,
+            expandedHeight: 300
         });
         desktopFocusWidgetAutoPinned = true;
 

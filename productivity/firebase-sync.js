@@ -395,8 +395,8 @@
             throw new Error('DataStore not available.');
         }
 
-        // Merge mode preserves existing local data during sync while pulling in new remote data.
-        const merge = true;
+        // Strict replace mode prevents deleted items from being resurrected by merge semantics.
+        const merge = false;
         const docRef = db.collection('syncSnapshots').doc(user.uid);
         const previousState = await readSyncState(user.uid);
         const hasPriorState = hasSyncState(previousState);
@@ -459,8 +459,7 @@
             if (!silent) setStatus('Syncing… applying cloud changes', 'info');
             await importRemote();
         } else if (hasRemotePayload && remoteChangedSinceLastSync && localChangedSinceLastSync) {
-            if (!silent) setStatus('Syncing… conflict detected, merging changes', 'info');
-            await importRemote();
+            if (!silent) setStatus('Syncing… conflict detected, keeping local changes', 'info');
             const uploadMeta = await uploadPayload(docRef, localPayload, 'client');
             latestRemoteChecksum = uploadMeta.payloadChecksum;
             latestRemoteVersion = uploadMeta.updatedAtMs;

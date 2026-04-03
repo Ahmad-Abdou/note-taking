@@ -78,8 +78,8 @@
             title: 'Focus Session',
             collapsedCount: 1,
             expandedCount: 1,
-            collapsedHeight: 220,
-            expandedHeight: 280
+            collapsedHeight: 252,
+            expandedHeight: 300
         }
     };
 
@@ -575,15 +575,72 @@
         `).join('');
     }
 
+    function buildFocusSessionHTML(focusTarget, clock, timerWrapStateClass, progressPct, isPaused, isOpenEnded, status) {
+        const timerProgressStyle = timerWrapStateClass === 'has-progress'
+            ? `style="--focus-progress:${progressPct.toFixed(1)}"`
+            : '';
+        return `
+            <div class="widget-focus-card${isPaused ? ' paused' : ''}">
+                <div class="widget-focus-target" title="${esc(focusTarget)}">${esc(focusTarget)}</div>
+                <div class="widget-focus-timer-wrap ${timerWrapStateClass}" ${timerProgressStyle}>
+                    <div class="widget-focus-media-ring" aria-hidden="true"></div>
+                    <div class="widget-focus-clock-shell">
+                        <div class="widget-focus-clock">${clock}</div>
+                    </div>
+                </div>
+                <div class="widget-focus-controls" role="group" aria-label="Focus controls">
+                    <button
+                        class="widget-focus-control-btn is-stop"
+                        data-action="focus-stop"
+                        title="Stop Session"
+                        aria-label="Stop session"
+                    ><i class="fas fa-stop"></i></button>
+                    <button
+                        class="widget-focus-control-btn is-primary"
+                        data-action="focus-toggle"
+                        title="${isPaused ? 'Resume' : 'Pause'}"
+                        aria-label="${isPaused ? 'Resume session' : 'Pause session'}"
+                    ><i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i></button>
+                    <button
+                        class="widget-focus-control-btn"
+                        data-action="focus-open"
+                        title="Open Focus"
+                        aria-label="Open focus view"
+                    ><i class="fas fa-expand-alt"></i></button>
+                </div>
+                <div class="widget-focus-status">${esc(status)}${isOpenEnded ? '\u00a0\u00b7 Free focus' : ''}</div>
+            </div>
+        `;
+    }
+
     async function renderFocusSession() {
         const content = document.getElementById('widget-content');
         if (!content) return;
 
-        const stored = await chrome.storage.local.get(['focusState']);
-        const state = stored?.focusState;
+        let state = null;
+        try {
+            const store = DS();
+            if (store?.get) {
+                state = await store.get('focusState', null);
+            }
+            if (!state) {
+                const stored = await chrome.storage.local.get(['focusState']);
+                state = stored?.focusState || null;
+            }
+        } catch (_) {
+            try {
+                const stored = await chrome.storage.local.get(['focusState']);
+                state = stored?.focusState || null;
+            } catch (_2) { /* ignore */ }
+        }
 
         if (!state?.isActive) {
-            content.innerHTML = emptyState('No active focus session');
+            const existingCard = content.querySelector('.widget-focus-card');
+            if (existingCard) {
+                content.innerHTML = emptyState('No active focus session');
+            } else if (!content.querySelector('.widget-empty')) {
+                content.innerHTML = emptyState('No active focus session');
+            }
             return;
         }
 
@@ -615,7 +672,7 @@
 
         const focusTargetRaw = String(state.taskTitle || state.subject || '').trim();
         const focusTarget = focusTargetRaw
-            || (state.isBreak ? 'Break Session' : (isOpenEnded ? 'Free Focus' : (isExtraTime ? 'Extra Time' : 'No linked task')));
+            || (state.isBreak ? 'Break Session' : (isOpenEnded ? 'Free Focus' : (isExtraTime ? 'Extra Time' : 'Focus')));
         const status = isPaused
             ? 'Paused'
             : (isExtraTime ? 'Extra time' : (isOpenEnded ? 'Running' : 'In progress'));
@@ -625,49 +682,58 @@
         });
 
         let timerWrapStateClass = 'is-static';
-        let timerProgressStyle = '';
+        let progressPct = 0;
         if (!isOpenEnded && !isExtraTime) {
             const totalSeconds = Math.max(1, (Number(state.selectedMinutes) || 25) * 60);
             const remainingSeconds = Math.max(0, shownSeconds);
-            const progressPct = Math.min(100, Math.max(0, ((totalSeconds - remainingSeconds) / totalSeconds) * 100));
+            progressPct = Math.min(100, Math.max(0, ((totalSeconds - remainingSeconds) / totalSeconds) * 100));
             timerWrapStateClass = 'has-progress';
-            timerProgressStyle = `style="--focus-progress:${progressPct.toFixed(1)}"`;
         } else if (isOpenEnded || isExtraTime) {
             timerWrapStateClass = 'is-indeterminate';
         }
 
-        content.innerHTML = `
-            <div class="widget-focus-card ${isPaused ? 'paused' : ''}">
-                <div class="widget-focus-target" title="${esc(focusTarget)}">${esc(focusTarget)}</div>
-                <div class="widget-focus-timer-wrap ${timerWrapStateClass}" ${timerProgressStyle}>
-                    <div class="widget-focus-media-ring" aria-hidden="true"></div>
-                    <div class="widget-focus-clock-shell">
-                        <div class="widget-focus-clock">${clock}</div>
-                    </div>
-                </div>
-                <div class="widget-focus-controls" role="group" aria-label="Focus controls">
-                    <button
-                        class="widget-focus-control-btn is-primary"
-                        data-action="focus-toggle"
-                        title="${isPaused ? 'Resume' : 'Pause'}"
-                        aria-label="${isPaused ? 'Resume session' : 'Pause session'}"
-                    >
-                        <i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i>
-                    </button>
-                    <button
-                        class="widget-focus-control-btn is-stop"
-                        data-action="focus-stop"
-                        title="Stop Session"
-                        aria-label="Stop session"
-                    >
-                        <i class="fas fa-stop"></i>
-                    </button>
-                </div>
-                <div class="widget-focus-status">${esc(status)}${isOpenEnded ? ' - Free focus' : ''}</div>
-            </div>
-        `;
+        // Incremental update: only rebuild DOM on first render or when session state changes
+        const existingCard = content.querySelector('.widget-focus-card');
+        if (!existingCard) {
+            content.innerHTML = buildFocusSessionHTML(focusTarget, clock, timerWrapStateClass, progressPct, isPaused, isOpenEnded, status);
+            bindFocusSessionActions(content);
+            return;
+        }
 
-        bindFocusSessionActions(content);
+        // Update only the parts that change each second — keep buttons stable so clicks are never lost
+        const clockEl = existingCard.querySelector('.widget-focus-clock');
+        if (clockEl && clockEl.textContent !== clock) clockEl.textContent = clock;
+
+        const statusEl = existingCard.querySelector('.widget-focus-status');
+        const statusText = status + (isOpenEnded ? '\u00a0\u00b7 Free focus' : '');
+        if (statusEl && statusEl.textContent !== statusText) statusEl.textContent = statusText;
+
+        const timerWrap = existingCard.querySelector('.widget-focus-timer-wrap');
+        if (timerWrap) {
+            if (timerWrap.className !== `widget-focus-timer-wrap ${timerWrapStateClass}`) {
+                timerWrap.className = `widget-focus-timer-wrap ${timerWrapStateClass}`;
+            }
+            if (timerWrapStateClass === 'has-progress') {
+                timerWrap.style.setProperty('--focus-progress', progressPct.toFixed(1));
+            }
+        }
+
+        const wasPaused = existingCard.classList.contains('paused');
+        if (wasPaused !== isPaused) {
+            existingCard.classList.toggle('paused', isPaused);
+        }
+
+        const toggleBtn = existingCard.querySelector('[data-action="focus-toggle"]');
+        if (toggleBtn) {
+            const icon = toggleBtn.querySelector('i');
+            const newIconClass = `fas ${isPaused ? 'fa-play' : 'fa-pause'}`;
+            if (icon && icon.className !== newIconClass) icon.className = newIconClass;
+            const newTitle = isPaused ? 'Resume' : 'Pause';
+            if (toggleBtn.title !== newTitle) {
+                toggleBtn.title = newTitle;
+                toggleBtn.setAttribute('aria-label', isPaused ? 'Resume session' : 'Pause session');
+            }
+        }
     }
 
     // ===== Shared HTML builders =====

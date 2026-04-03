@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable as RNPressable,
@@ -1664,14 +1665,12 @@ export default function App() {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskDueTime, setTaskDueTime] = useState('');
-  const [taskReminderMinutes, setTaskReminderMinutes] = useState('');
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
   const [dashboardTaskInput, setDashboardTaskInput] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskTitle, setEditingTaskTitle] = useState('');
   const [editingTaskDueDate, setEditingTaskDueDate] = useState('');
   const [editingTaskDueTime, setEditingTaskDueTime] = useState('');
-  const [editingTaskReminderMinutes, setEditingTaskReminderMinutes] = useState('');
   const [editingTaskPriority, setEditingTaskPriority] = useState<TaskPriority>('medium');
   const [taskSearch, setTaskSearch] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState<'all' | TaskStatus>('all');
@@ -1718,6 +1717,8 @@ export default function App() {
   const taskReminderSyncBusyRef = useRef(false);
   const focusRunningRef = useRef(false);
   const focusDndEnabledRef = useRef(false);
+  const firestoreUnsubRef = useRef<(() => void) | null>(null);
+  const syncMutedUntilRef = useRef(0);
 
   const isExpoGoAndroid = Platform.OS === 'android'
     && (Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo');
@@ -2406,6 +2407,62 @@ export default function App() {
     void syncTaskRemindersForSnapshot(snapshot);
   }, [snapshot.tasks]);
 
+  // Auto-refresh smart reminders whenever tasks or schedule events change
+  useEffect(() => {
+    const notifications = getNotificationsModule();
+    if (!notifications) return;
+
+    notifications.getPermissionsAsync().then((permission) => {
+      if (!permission.granted) return;
+
+      AsyncStorage.getItem(SMART_REMINDER_SETTINGS_KEY).then((raw) => {
+        if (!raw) return;
+        try {
+          const savedSettings = normalizeSmartReminderSettings(JSON.parse(raw));
+          const anyEnabled = savedSettings.tasks.enabled
+            || savedSettings.schedule.enabled
+            || savedSettings.challenges.enabled;
+          if (!anyEnabled) return;
+
+          // Re-build and reschedule smart reminders silently
+          clearSmartReminders({ showAlert: false }).then(() => {
+            const drafts = buildSmartReminderDrafts(savedSettings);
+            if (!drafts.length) return;
+
+            const scheduledIds: string[] = [];
+            const schedule = async () => {
+              for (const draft of drafts) {
+                const content: import('expo-notifications').NotificationContentInput = {
+                  title: draft.title,
+                  body: draft.body,
+                  sound: 'default',
+                  data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey },
+                };
+                const dateTrigger = new Date(draft.triggerAtMs);
+                try {
+                  const preferredTrigger = (
+                    Platform.OS === 'android'
+                      ? {
+                          type: notifications.SchedulableTriggerInputTypes.DATE,
+                          date: dateTrigger,
+                          channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+                        }
+                      : { type: notifications.SchedulableTriggerInputTypes.DATE, date: dateTrigger }
+                  ) as import('expo-notifications').NotificationTriggerInput;
+                  const id = await notifications.scheduleNotificationAsync({ content, trigger: preferredTrigger });
+                  if (id) scheduledIds.push(id);
+                } catch { /* best-effort */ }
+              }
+              await AsyncStorage.setItem(SMART_REMINDER_NOTIFICATION_IDS_KEY, JSON.stringify(scheduledIds));
+              setSmartReminderStatus(`${scheduledIds.length} reminder${scheduledIds.length === 1 ? '' : 's'} scheduled.`);
+            };
+            void schedule();
+          });
+        } catch { /* ignore parse errors */ }
+      });
+    });
+  }, [snapshot.tasks, snapshot.scheduleSchool, snapshot.schedulePersonal, snapshot.challenges]);
+
   useEffect(() => {
     if (!focusRunning) {
       lastFocusStateSyncedSecondRef.current = null;
@@ -2421,28 +2478,42 @@ export default function App() {
   }, [focusRunning, focusPaused, focusRemainingSeconds]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      // Tear down any live Firestore listener when signed out
+      if (firestoreUnsubRef.current) {
+        firestoreUnsubRef.current();
+        firestoreUnsubRef.current = null;
+      }
+      return;
+    }
 
+    // Initial pull on sign-in / focus-mode change
     void pullFromCloud(currentUser, true);
 
+    // Real-time Firestore listener for instant cross-device sync
     const docRef = doc(db, SYNC_COLLECTION, currentUser.uid);
-    const unsubscribe = onSnapshot(docRef, async (snap) => {
-      if (!snap.exists()) return;
-      const cloudData = (snap.data() || {}) as Record<string, unknown>;
-      const payload = cloudData.payload;
-      if (typeof payload !== 'string' || !payload.trim()) return;
+    const unsubFirestore = onSnapshot(
+      docRef,
+      () => {
+        // Fired whenever the cloud document is written from any device
+        void pullFromCloud(currentUser, true);
+      },
+      () => { /* listener errors are best-effort */ },
+    );
+    firestoreUnsubRef.current = unsubFirestore;
 
-      const remoteChecksum = computePayloadChecksum(payload);
-      const previousState = await readSyncState(currentUser.uid);
-      
-      // If we pushed this payload, ignore the read back
-      if (remoteChecksum === previousState.lastPayloadChecksum) return;
-
+    // Fallback polling — much less aggressive now that we have a live listener
+    const intervalMs = focusRunning ? 60000 : 30000;
+    const timer = setInterval(() => {
       void pullFromCloud(currentUser, true);
-    });
+    }, intervalMs);
 
-    return () => unsubscribe();
-  }, [currentUser]);
+    return () => {
+      unsubFirestore();
+      firestoreUnsubRef.current = null;
+      clearInterval(timer);
+    };
+  }, [currentUser, focusRunning]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -2456,19 +2527,6 @@ export default function App() {
       sound: null,
       vibrationPattern: [0],
     }).catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const initNotifications = async () => {
-      const notifications = getNotificationsModule();
-      if (!notifications) return;
-
-      const settings = await notifications.getPermissionsAsync();
-      if (!settings.granted) {
-        await notifications.requestPermissionsAsync();
-      }
-    };
-    void initNotifications();
   }, []);
 
   useEffect(() => {
@@ -2511,6 +2569,9 @@ export default function App() {
     const user = userOverride || currentUser;
     if (!user) return;
 
+    // Respect post-push mute window to avoid re-importing what we just pushed
+    if (Date.now() < syncMutedUntilRef.current) return;
+
     setSyncBusy(true);
     if (!silent) setSyncStatus('Syncing from cloud...');
 
@@ -2532,6 +2593,26 @@ export default function App() {
 
       const remoteChecksum = computePayloadChecksum(payload);
       const remoteVersion = getRemoteVersionFromSnapshotData(cloudData);
+      const previousState = await readSyncState(user.uid);
+
+      // If we've already applied this exact remote version, skip to avoid overwriting local work
+      if (previousState && previousState.lastRemoteChecksum === remoteChecksum) {
+        if (!silent) setSyncStatus('Already up to date.');
+        return;
+      }
+
+      // Check if local has unsaved changes (push may have failed or is in-flight)
+      const localCache = await AsyncStorage.getItem(LOCAL_CACHE_KEY);
+      if (localCache && previousState?.lastPayloadChecksum) {
+        const localChecksum = computePayloadChecksum(localCache);
+        if (localChecksum !== previousState.lastPayloadChecksum) {
+          // Local has changes that differ from what we last synced — push first, then pull
+          if (!silent) setSyncStatus('Uploading local changes before pulling...');
+          const localParsed = JSON.parse(localCache) as HubSnapshot;
+          await pushToCloud(normalizeSnapshot(localParsed), { silent: true, allowConflictUpload: true });
+          return;
+        }
+      }
 
       const parsed = JSON.parse(payload);
       const normalized = normalizeSnapshot(parsed);
@@ -2545,40 +2626,13 @@ export default function App() {
         lastSyncAt: nowIso(),
       });
       setLastSyncAt(nowIso());
-      if (!silent) setSyncStatus('Pulled latest data from cloud.');
+      if (!silent) setSyncStatus('Synced — pulled latest data.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown sync error';
       if (!silent) setSyncStatus(`Pull failed: ${message}`);
     } finally {
       setSyncBusy(false);
     }
-  }
-
-  function mergeSnapshots(localSnap: HubSnapshot, remoteSnap: HubSnapshot): HubSnapshot {
-    function mergeArrays<T extends { id: string; updatedAt?: string; }>(l: T[], r: T[]): T[] {
-      const map = new Map<string, T>();
-      for (const item of r) map.set(item.id, item);
-      for (const item of l) {
-        const ext = map.get(item.id);
-        if (!ext || (item.updatedAt || '') >= (ext.updatedAt || '')) {
-          map.set(item.id, item);
-        }
-      }
-      return Array.from(map.values());
-    }
-
-    return normalizeSnapshot({
-      ...remoteSnap,
-      tasks: mergeArrays(localSnap.tasks, remoteSnap.tasks),
-      goals: mergeArrays(localSnap.goals, remoteSnap.goals),
-      challenges: mergeArrays(localSnap.challenges, remoteSnap.challenges),
-      focusSessions: mergeArrays(localSnap.focusSessions, remoteSnap.focusSessions),
-      revisions: mergeArrays(localSnap.revisions, remoteSnap.revisions),
-      achievements: { ...remoteSnap.achievements, ...localSnap.achievements },
-      dailyStats: { ...remoteSnap.dailyStats, ...localSnap.dailyStats },
-      settings: { ...remoteSnap.settings, ...localSnap.settings },
-      focusState: localSnap.focusState || remoteSnap.focusState,
-    });
   }
 
   async function pushToCloud(
@@ -2647,52 +2701,10 @@ export default function App() {
         return;
       }
 
-      if (remoteChangedSinceLastSync && localChangedSinceLastSync) {
+      if (remoteChangedSinceLastSync && localChangedSinceLastSync && !allowConflictUpload) {
         if (!silent) {
-          setSyncStatus('Conflict detected. Merging data before upload...');
+          setSyncStatus('Sync blocked: cloud changed on another device. Pull latest first to avoid resurrecting deleted tasks.');
         }
-        
-        const remoteParsed = JSON.parse(remotePayload);
-        const remoteNormalized = normalizeSnapshot(remoteParsed);
-        const mergedSnap = mergeSnapshots(finalized, remoteNormalized);
-        
-        // Re-calculate the payload based on the newly merged snapshot
-        const mergedFinalized = finalizeSnapshot(mergedSnap);
-        setSnapshot(mergedFinalized);
-        await AsyncStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(mergedFinalized));
-        
-        const nextPayload = JSON.stringify(
-          {
-            ...mergedFinalized,
-            exportDate: nowIso(),
-            source: 'mobile-app',
-          },
-          null,
-          2,
-        );
-        const nextChecksum = computePayloadChecksum(nextPayload);
-        
-        const updatedAtMs = Date.now();
-        await setDoc(
-          docRef,
-          {
-            payload: nextPayload,
-            payloadChecksum: nextChecksum,
-            schemaVersion: 2,
-            updatedAt: serverTimestamp(),
-            updatedAtMs,
-            updatedBy: 'mobile-app',
-          },
-          { merge: true },
-        );
-        await writeSyncState(currentUser.uid, {
-          lastPayloadChecksum: nextChecksum,
-          lastRemoteChecksum: nextChecksum,
-          lastRemoteVersion: updatedAtMs,
-          lastSyncAt: nowIso(),
-        });
-        setLastSyncAt(nowIso());
-        if (!silent) setSyncStatus('Cloud sync successful (merged conflicts).');
         return;
       }
 
@@ -2715,6 +2727,8 @@ export default function App() {
         lastRemoteVersion: updatedAtMs,
         lastSyncAt: nowIso(),
       });
+      // Mute pull for 4 s so we don't immediately re-import what we just pushed
+      syncMutedUntilRef.current = Date.now() + 4000;
       setLastSyncAt(nowIso());
       if (!silent) setSyncStatus('Cloud sync successful.');
     } catch (error) {
@@ -2731,6 +2745,20 @@ export default function App() {
       await pushToCloud(saved, { silent: true, allowConflictUpload: true });
     }
   }
+
+  // Re-sync and re-schedule reminders when the app returns to the foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        if (currentUser) {
+          void pullFromCloud(currentUser, true);
+        }
+        // Re-schedule smart reminders so they stay current after the app was backgrounded
+        void syncTaskRemindersForSnapshot(snapshot);
+      }
+    });
+    return () => subscription.remove();
+  }, [currentUser, snapshot]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -2879,11 +2907,9 @@ export default function App() {
   function clearTaskDueTime(editing = false) {
     if (editing) {
       setEditingTaskDueTime('');
-      setEditingTaskReminderMinutes('');
       return;
     }
     setTaskDueTime('');
-    setTaskReminderMinutes('');
   }
 
   async function handleAddTask() {
@@ -2912,7 +2938,7 @@ export default function App() {
       linkUrl: null,
       dueDate: due,
       dueTime,
-      reminderMinutes: taskReminderMinutes ? parseInt(taskReminderMinutes, 10) : null,
+      reminderMinutes: null,
       priority: taskPriority,
       status: 'not-started',
       category: 'homework',
@@ -2934,7 +2960,6 @@ export default function App() {
     setTaskTitle('');
     setTaskDueDate('');
     setTaskDueTime('');
-    setTaskReminderMinutes('');
     await sendInteractionNotification('Task added', `${title} was added to your tasks.`);
   }
 
@@ -3028,7 +3053,6 @@ export default function App() {
     setEditingTaskTitle(task.title);
     setEditingTaskDueDate(task.dueDate || '');
     setEditingTaskDueTime(task.dueTime || '');
-    setEditingTaskReminderMinutes(task.reminderMinutes != null ? String(task.reminderMinutes) : '');
     setEditingTaskPriority(task.priority);
     setActiveTab('tasks');
   }
@@ -3038,7 +3062,6 @@ export default function App() {
     setEditingTaskTitle('');
     setEditingTaskDueDate('');
     setEditingTaskDueTime('');
-    setEditingTaskReminderMinutes('');
     setEditingTaskPriority('medium');
   }
 
@@ -3070,7 +3093,6 @@ export default function App() {
         title,
         dueDate: due,
         dueTime,
-        reminderMinutes: editingTaskReminderMinutes ? parseInt(editingTaskReminderMinutes, 10) : null,
         priority: editingTaskPriority,
         updatedAt: nowIso(),
       };
@@ -3833,14 +3855,30 @@ export default function App() {
       if (!granted) return;
 
       lastInteractionNotificationAtRef.current = now;
+
+      const channelId = getNotificationChannelId(ANDROID_INTERACTION_CHANNEL_ID);
+      const silent = isFocusDndActive();
+
+      // For Android, channelId must be in the trigger (for scheduled) or top-level content.
+      // Immediate notifications use trigger:null — pass channelId via the DATE trigger with 1s delay.
+      const trigger = (
+        Platform.OS === 'android'
+          ? {
+              type: notifications.SchedulableTriggerInputTypes.DATE,
+              date: new Date(Date.now() + 500),
+              channelId,
+            }
+          : null
+      ) as import('expo-notifications').NotificationTriggerInput | null;
+
       await notifications.scheduleNotificationAsync({
         content: {
           title,
           body,
-          sound: isFocusDndActive() ? false : 'default',
-          data: { channelId: getNotificationChannelId(ANDROID_INTERACTION_CHANNEL_ID) },
+          sound: silent ? false : 'default',
+          data: { scope: 'interaction' },
         },
-        trigger: null,
+        trigger,
       });
     } catch {
       // Keep interaction feedback best-effort and non-blocking.
@@ -3862,19 +3900,28 @@ export default function App() {
     const notifications = getNotificationsModule();
     if (!notifications) return;
 
+    const summaryChannelId = getNotificationChannelId(ANDROID_NOTIFICATION_CHANNEL_ID);
+    const summarySilent = isFocusDndActive();
+
     try {
+      const summaryTrigger = (
+        Platform.OS === 'android'
+          ? {
+              type: notifications.SchedulableTriggerInputTypes.DATE,
+              date: new Date(Date.now() + 500),
+              channelId: summaryChannelId,
+            }
+          : null
+      ) as import('expo-notifications').NotificationTriggerInput | null;
+
       await notifications.scheduleNotificationAsync({
         content: {
           title: todayDigest.title,
           body: todayDigest.body,
-          sound: isFocusDndActive() ? false : 'default',
-          data: {
-            channelId: getNotificationChannelId(ANDROID_NOTIFICATION_CHANNEL_ID),
-            scope: 'today-summary',
-            date: todayYmd(),
-          },
+          sound: summarySilent ? false : 'default',
+          data: { scope: 'today-summary', date: todayYmd() },
         },
-        trigger: null,
+        trigger: summaryTrigger,
       });
 
       Alert.alert('Summary sent', 'Today\'s summary was sent to your notifications.');
@@ -5195,23 +5242,6 @@ export default function App() {
               </Pressable>
             </View>
 
-            <Text style={styles.summaryMeta}>
-              Reminder: {editingTaskReminderMinutes ? `${editingTaskReminderMinutes}m` : 'Off'}
-            </Text>
-            <View style={styles.chipRow}>
-              {['', '0', '15', '30', '60'].map((val) => (
-                <Pressable
-                  key={val}
-                  style={[styles.chipButton, editingTaskReminderMinutes === val ? styles.chipButtonActive : undefined]}
-                  onPress={() => setEditingTaskReminderMinutes(val)}
-                >
-                  <Text style={[styles.chipText, editingTaskReminderMinutes === val ? styles.chipTextActive : undefined]}>
-                    {val === '' ? 'Off' : (val === '0' ? 'At time' : `${val}m`)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
             <View style={styles.chipRow}>
               {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((priority) => (
                 <Pressable
@@ -5272,23 +5302,6 @@ export default function App() {
             <Pressable style={styles.secondaryButtonInline} onPress={() => clearTaskDueTime(false)}>
               <Text style={styles.secondaryButtonText}>Clear time</Text>
             </Pressable>
-          </View>
-
-          <Text style={styles.summaryMeta}>
-            Reminder: {taskReminderMinutes ? `${taskReminderMinutes}m` : 'Off'}
-          </Text>
-          <View style={styles.chipRow}>
-            {['', '0', '15', '30', '60'].map((val) => (
-              <Pressable
-                key={val}
-                style={[styles.chipButton, taskReminderMinutes === val ? styles.chipButtonActive : undefined]}
-                onPress={() => setTaskReminderMinutes(val)}
-              >
-                <Text style={[styles.chipText, taskReminderMinutes === val ? styles.chipTextActive : undefined]}>
-                  {val === '' ? 'Off' : (val === '0' ? 'At time' : `${val}m`)}
-                </Text>
-              </Pressable>
-            ))}
           </View>
 
           <View style={styles.chipRow}>

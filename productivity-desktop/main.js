@@ -1015,6 +1015,7 @@ function createWidgetWindow(cardId, opts = {}) {
         transparent: true,
         backgroundColor: '#00000000',
         hasShadow: true,
+        focusable: false,
         icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
             nodeIntegration: false,

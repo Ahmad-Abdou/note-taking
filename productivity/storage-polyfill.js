@@ -75,18 +75,10 @@ if (!chrome.storage.local) {
         
         set: function(items, callback) {
             try {
-                const changes = {};
                 Object.entries(items).forEach(([key, value]) => {
-                    const oldValueStr = localStorage.getItem(key);
-                    const oldValue = oldValueStr !== null ? JSON.parse(oldValueStr) : undefined;
                     localStorage.setItem(key, JSON.stringify(value));
-                    changes[key] = { oldValue, newValue: value };
                 });
-                
                 const promise = Promise.resolve();
-                if (Object.keys(changes).length > 0 && chrome.storage.onChanged && chrome.storage.onChanged._trigger) {
-                    chrome.storage.onChanged._trigger(changes);
-                }
                 if (callback) {
                     callback();
                 }
@@ -104,20 +96,10 @@ if (!chrome.storage.local) {
         remove: function(keys, callback) {
             try {
                 const keysArray = Array.isArray(keys) ? keys : [keys];
-                const changes = {};
                 keysArray.forEach(key => {
-                    const oldValueStr = localStorage.getItem(key);
-                    const oldValue = oldValueStr !== null ? JSON.parse(oldValueStr) : undefined;
-                    if (oldValue !== undefined) {
-                        changes[key] = { oldValue, newValue: undefined };
-                    }
                     localStorage.removeItem(key);
                 });
-                
                 const promise = Promise.resolve();
-                if (Object.keys(changes).length > 0 && chrome.storage.onChanged && chrome.storage.onChanged._trigger) {
-                    chrome.storage.onChanged._trigger(changes);
-                }
                 if (callback) {
                     callback();
                 }
@@ -136,10 +118,6 @@ if (!chrome.storage.local) {
             try {
                 localStorage.clear();
                 const promise = Promise.resolve();
-                if (chrome.storage.onChanged && chrome.storage.onChanged._trigger) {
-                    // Difficult to know what was cleared, stub triggering if needed
-                    // Event does not contain individual keys
-                }
                 if (callback) {
                     callback();
                 }
@@ -158,38 +136,19 @@ if (!chrome.storage.local) {
 
 // Polyfill chrome.storage.onChanged if needed
 if (!chrome.storage.onChanged) {
-    const _storageListeners = new Set();
+    let _warnedOnChanged = false;
     chrome.storage.onChanged = {
         addListener: function(callback) {
-            _storageListeners.add(callback);
+            // Stub for compatibility - not fully implemented
+            if (!_warnedOnChanged) {
+                console.warn('chrome.storage.onChanged.addListener is not fully supported in polyfill');
+                _warnedOnChanged = true;
+            }
         },
         removeListener: function(callback) {
-            _storageListeners.delete(callback);
-        },
-        _trigger: function(changes, areaName = 'local') {
-            _storageListeners.forEach(cb => {
-                try { cb(changes, areaName); } catch (e) { console.error('Error in storage listener:', e); }
-            });
+            // Stub for compatibility
         }
     };
-
-    // Listen to localStorage changes from other tabs
-    window.addEventListener('storage', (e) => {
-        if (e.storageArea !== localStorage) return;
-        if (!e.key) {
-            // clear() was called
-            return;
-        }
-        try {
-            const oldValue = e.oldValue ? JSON.parse(e.oldValue) : undefined;
-            const newValue = e.newValue ? JSON.parse(e.newValue) : undefined;
-            chrome.storage.onChanged._trigger({
-                [e.key]: { oldValue, newValue }
-            });
-        } catch (err) {
-            console.error('Error parsing storage event:', err);
-        }
-    });
 }
 
 // Polyfill chrome.runtime if it doesn't exist
