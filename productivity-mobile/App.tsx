@@ -52,11 +52,10 @@ function getNotificationsModule(): NotificationsModule | null {
     handleNotification: async () => {
       const dndActive = focusNotificationRuntime.dndEnabled && focusNotificationRuntime.focusRunning;
       return {
-      shouldShowAlert: !dndActive,
-      shouldPlaySound: !dndActive,
-      shouldSetBadge: false,
       shouldShowBanner: !dndActive,
       shouldShowList: !dndActive,
+      shouldPlaySound: !dndActive,
+      shouldSetBadge: false,
       };
     },
   });
@@ -72,8 +71,8 @@ const DAILY_NOTIFICATION_ID_KEY = 'productivity_mobile_daily_notification_id';
 const SMART_REMINDER_SETTINGS_KEY = 'productivity_mobile_smart_reminder_settings_v1';
 const SMART_REMINDER_NOTIFICATION_IDS_KEY = 'productivity_mobile_smart_reminder_notification_ids_v1';
 const TASK_REMINDER_NOTIFICATION_IDS_KEY = 'productivity_mobile_task_reminder_notification_ids_v1';
-const ANDROID_NOTIFICATION_CHANNEL_ID = 'daily-reminders';
-const ANDROID_INTERACTION_CHANNEL_ID = 'interaction-feedback';
+const ANDROID_NOTIFICATION_CHANNEL_ID = 'daily-reminders-v2';
+const ANDROID_INTERACTION_CHANNEL_ID = 'interaction-feedback-v2';
 const ANDROID_FOCUS_SILENT_CHANNEL_ID = 'focus-session-silent';
 const INTERACTION_NOTIFICATION_COOLDOWN_MS = 2500;
 const CLICK_VIBRATION_MS = 8;
@@ -1715,6 +1714,7 @@ export default function App() {
   const lastFocusStateSyncAtRef = useRef(0);
   const lastFocusStateSyncedSecondRef = useRef<number | null>(null);
   const taskReminderSyncBusyRef = useRef(false);
+  const smartReminderSyncBusyRef = useRef(false);
   const focusRunningRef = useRef(false);
   const focusDndEnabledRef = useRef(false);
   const firestoreUnsubRef = useRef<(() => void) | null>(null);
@@ -2215,25 +2215,23 @@ export default function App() {
     const notifications = getNotificationsModule();
     if (!notifications) return;
 
-    const dailyImportance = silent
-      ? notifications.AndroidImportance.LOW
-      : notifications.AndroidImportance.DEFAULT;
-    const interactionImportance = silent
-      ? notifications.AndroidImportance.MIN
-      : notifications.AndroidImportance.HIGH;
-
+    // daily-reminders and interaction-feedback are always configured at full importance.
+    // When a focus/DND session is active, getNotificationChannelId() routes reminders to the
+    // silent channel instead — so these channels only fire when the user is not in DND.
     await notifications.setNotificationChannelAsync(ANDROID_NOTIFICATION_CHANNEL_ID, {
       name: 'Daily reminders',
-      importance: dailyImportance,
-      sound: silent ? null : 'default',
-      vibrationPattern: silent ? [0] : [0, 250, 250, 250],
+      importance: notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+      enableVibrate: true,
     }).catch(() => undefined);
 
     await notifications.setNotificationChannelAsync(ANDROID_INTERACTION_CHANNEL_ID, {
       name: 'Interaction feedback',
-      importance: interactionImportance,
-      sound: silent ? null : 'default',
-      vibrationPattern: silent ? [0] : [0, 120],
+      importance: notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 120],
+      enableVibrate: true,
     }).catch(() => undefined);
 
     await notifications.setNotificationChannelAsync(ANDROID_FOCUS_SILENT_CHANNEL_ID, {
@@ -2409,58 +2407,64 @@ export default function App() {
 
   // Auto-refresh smart reminders whenever tasks or schedule events change
   useEffect(() => {
+    if (smartReminderSyncBusyRef.current) return;
+
     const notifications = getNotificationsModule();
     if (!notifications) return;
 
-    notifications.getPermissionsAsync().then((permission) => {
-      if (!permission.granted) return;
+    smartReminderSyncBusyRef.current = true;
 
-      AsyncStorage.getItem(SMART_REMINDER_SETTINGS_KEY).then((raw) => {
+    const run = async () => {
+      try {
+        const permission = await notifications.getPermissionsAsync();
+        if (!permission.granted) return;
+
+        const raw = await AsyncStorage.getItem(SMART_REMINDER_SETTINGS_KEY);
         if (!raw) return;
-        try {
-          const savedSettings = normalizeSmartReminderSettings(JSON.parse(raw));
-          const anyEnabled = savedSettings.tasks.enabled
-            || savedSettings.schedule.enabled
-            || savedSettings.challenges.enabled;
-          if (!anyEnabled) return;
 
-          // Re-build and reschedule smart reminders silently
-          clearSmartReminders({ showAlert: false }).then(() => {
-            const drafts = buildSmartReminderDrafts(savedSettings);
-            if (!drafts.length) return;
+        const savedSettings = normalizeSmartReminderSettings(JSON.parse(raw));
+        const anyEnabled = savedSettings.tasks.enabled
+          || savedSettings.schedule.enabled
+          || savedSettings.challenges.enabled;
+        if (!anyEnabled) return;
 
-            const scheduledIds: string[] = [];
-            const schedule = async () => {
-              for (const draft of drafts) {
-                const content: import('expo-notifications').NotificationContentInput = {
-                  title: draft.title,
-                  body: draft.body,
-                  sound: 'default',
-                  data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey },
-                };
-                const dateTrigger = new Date(draft.triggerAtMs);
-                try {
-                  const preferredTrigger = (
-                    Platform.OS === 'android'
-                      ? {
-                          type: notifications.SchedulableTriggerInputTypes.DATE,
-                          date: dateTrigger,
-                          channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
-                        }
-                      : { type: notifications.SchedulableTriggerInputTypes.DATE, date: dateTrigger }
-                  ) as import('expo-notifications').NotificationTriggerInput;
-                  const id = await notifications.scheduleNotificationAsync({ content, trigger: preferredTrigger });
-                  if (id) scheduledIds.push(id);
-                } catch { /* best-effort */ }
-              }
-              await AsyncStorage.setItem(SMART_REMINDER_NOTIFICATION_IDS_KEY, JSON.stringify(scheduledIds));
-              setSmartReminderStatus(`${scheduledIds.length} reminder${scheduledIds.length === 1 ? '' : 's'} scheduled.`);
-            };
-            void schedule();
-          });
-        } catch { /* ignore parse errors */ }
-      });
-    });
+        await clearSmartReminders({ showAlert: false });
+
+        const drafts = buildSmartReminderDrafts(savedSettings);
+        if (!drafts.length) return;
+
+        const scheduledIds: string[] = [];
+        for (const draft of drafts) {
+          const content: import('expo-notifications').NotificationContentInput = {
+            title: draft.title,
+            body: draft.body,
+            sound: 'default',
+            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey },
+          };
+          const dateTrigger = new Date(draft.triggerAtMs);
+          try {
+            const preferredTrigger = (
+              Platform.OS === 'android'
+                ? {
+                    type: notifications.SchedulableTriggerInputTypes.DATE,
+                    date: dateTrigger,
+                    channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+                  }
+                : { type: notifications.SchedulableTriggerInputTypes.DATE, date: dateTrigger }
+            ) as import('expo-notifications').NotificationTriggerInput;
+            const id = await notifications.scheduleNotificationAsync({ content, trigger: preferredTrigger });
+            if (id) scheduledIds.push(id);
+          } catch { /* best-effort */ }
+        }
+        await AsyncStorage.setItem(SMART_REMINDER_NOTIFICATION_IDS_KEY, JSON.stringify(scheduledIds));
+        setSmartReminderStatus(`${scheduledIds.length} reminder${scheduledIds.length === 1 ? '' : 's'} scheduled.`);
+      } catch { /* ignore parse errors */ }
+      finally {
+        smartReminderSyncBusyRef.current = false;
+      }
+    };
+
+    void run();
   }, [snapshot.tasks, snapshot.scheduleSchool, snapshot.schedulePersonal, snapshot.challenges]);
 
   useEffect(() => {
@@ -2791,6 +2795,7 @@ export default function App() {
       }
 
       await pullFromCloud(user, true);
+      void requestNotificationPermission();
       setSyncStatus('Signed in and ready.');
     });
 
@@ -3859,26 +3864,15 @@ export default function App() {
       const channelId = getNotificationChannelId(ANDROID_INTERACTION_CHANNEL_ID);
       const silent = isFocusDndActive();
 
-      // For Android, channelId must be in the trigger (for scheduled) or top-level content.
-      // Immediate notifications use trigger:null — pass channelId via the DATE trigger with 1s delay.
-      const trigger = (
-        Platform.OS === 'android'
-          ? {
-              type: notifications.SchedulableTriggerInputTypes.DATE,
-              date: new Date(Date.now() + 500),
-              channelId,
-            }
-          : null
-      ) as import('expo-notifications').NotificationTriggerInput | null;
-
       await notifications.scheduleNotificationAsync({
         content: {
           title,
           body,
           sound: silent ? false : 'default',
           data: { scope: 'interaction' },
+          ...(Platform.OS === 'android' && { channelId }),
         },
-        trigger,
+        trigger: null,
       });
     } catch {
       // Keep interaction feedback best-effort and non-blocking.
@@ -3904,24 +3898,15 @@ export default function App() {
     const summarySilent = isFocusDndActive();
 
     try {
-      const summaryTrigger = (
-        Platform.OS === 'android'
-          ? {
-              type: notifications.SchedulableTriggerInputTypes.DATE,
-              date: new Date(Date.now() + 500),
-              channelId: summaryChannelId,
-            }
-          : null
-      ) as import('expo-notifications').NotificationTriggerInput | null;
-
       await notifications.scheduleNotificationAsync({
         content: {
           title: todayDigest.title,
           body: todayDigest.body,
           sound: summarySilent ? false : 'default',
           data: { scope: 'today-summary', date: todayYmd() },
+          ...(Platform.OS === 'android' && { channelId: summaryChannelId }),
         },
-        trigger: summaryTrigger,
+        trigger: null,
       });
 
       Alert.alert('Summary sent', 'Today\'s summary was sent to your notifications.');
