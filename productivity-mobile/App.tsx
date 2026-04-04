@@ -1755,8 +1755,12 @@ export default function App() {
   const focusDndEnabledRef = useRef(false);
   const firestoreUnsubRef = useRef<(() => void) | null>(null);
   const syncMutedUntilRef = useRef(0);
+  const reminderHydratedRef = useRef(false);
 
+  const CURRENT_VERSION = Constants.expoConfig?.version ?? (Constants.manifest as Record<string, unknown>)?.version as string ?? '1.0.0';
   const [updateAvailable, setUpdateAvailable] = useState<{ version: string; url: string } | null>(null);
+  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
+  const [updateCheckMessage, setUpdateCheckMessage] = useState('');
 
   const isExpoGoAndroid = Platform.OS === 'android'
     && (Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo');
@@ -2431,49 +2435,49 @@ export default function App() {
   }
 
   // ── Update checker ────────────────────────────────────────────────────────
-  useEffect(() => {
-    let active = true;
-    const CURRENT_VERSION: string = Constants.expoConfig?.version ?? Constants.manifest?.version ?? '1.0.0';
-    const RELEASES_URL = 'https://api.github.com/repos/Ahmad-Abdou/note-taking/releases';
-    const LAST_CHECK_KEY = 'productivity_mobile_last_update_check';
-    const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+  const UPDATE_RELEASES_URL = 'https://api.github.com/repos/Ahmad-Abdou/note-taking/releases';
+  const UPDATE_LAST_CHECK_KEY = 'productivity_mobile_last_update_check';
+  const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-    const checkForUpdate = async () => {
-      try {
-        const lastCheck = await AsyncStorage.getItem(LAST_CHECK_KEY);
-        const now = Date.now();
-        if (lastCheck && now - parseInt(lastCheck, 10) < CHECK_INTERVAL_MS) return;
-
-        const response = await fetch(RELEASES_URL, {
-          headers: { Accept: 'application/vnd.github+json' },
-        });
-        if (!response.ok) return;
-        await AsyncStorage.setItem(LAST_CHECK_KEY, String(now));
-
-        const releases: Array<{ tag_name: string; prerelease: boolean; draft: boolean; assets: Array<{ browser_download_url: string; name: string }> }> = await response.json();
-
-        // Only look at mobile-vX.Y.Z releases
-        const mobileRelease = releases.find(
-          (r) => !r.prerelease && !r.draft && r.tag_name.startsWith('mobile-v'),
-        );
-        if (!mobileRelease) return;
-
-        const latestVersion = mobileRelease.tag_name.replace('mobile-v', '');
-        if (!isNewerVersion(latestVersion, CURRENT_VERSION)) return;
-
-        const apkAsset = mobileRelease.assets.find((a) => a.name.endsWith('.apk'));
-        if (!apkAsset) return;
-
-        if (active) {
-          setUpdateAvailable({ version: latestVersion, url: apkAsset.browser_download_url });
+  async function checkForUpdateNow(bypassThrottle = false) {
+    setUpdateCheckBusy(true);
+    setUpdateCheckMessage('');
+    try {
+      if (!bypassThrottle) {
+        const lastCheck = await AsyncStorage.getItem(UPDATE_LAST_CHECK_KEY);
+        if (lastCheck && Date.now() - parseInt(lastCheck, 10) < UPDATE_CHECK_INTERVAL_MS) {
+          setUpdateCheckMessage('Already checked recently.');
+          return;
         }
-      } catch {
-        // silently ignore — network may be unavailable
       }
-    };
 
-    void checkForUpdate();
-    return () => { active = false; };
+      type Release = { tag_name: string; prerelease: boolean; draft: boolean; assets: Array<{ browser_download_url: string; name: string }> };
+      const response = await fetch(UPDATE_RELEASES_URL, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!response.ok) { setUpdateCheckMessage('Could not reach update server.'); return; }
+      await AsyncStorage.setItem(UPDATE_LAST_CHECK_KEY, String(Date.now()));
+
+      const releases: Release[] = await response.json();
+      const mobileRelease = releases.find((r) => !r.prerelease && !r.draft && r.tag_name.startsWith('mobile-v'));
+      if (!mobileRelease) { setUpdateCheckMessage(`You're up to date (v${CURRENT_VERSION}).`); return; }
+
+      const latestVersion = mobileRelease.tag_name.replace('mobile-v', '');
+      if (!isNewerVersion(latestVersion, CURRENT_VERSION)) {
+        setUpdateCheckMessage(`You're up to date (v${CURRENT_VERSION}).`);
+        return;
+      }
+
+      const apkAsset = mobileRelease.assets.find((a) => a.name.endsWith('.apk'));
+      if (!apkAsset) return;
+      setUpdateAvailable({ version: latestVersion, url: apkAsset.browser_download_url });
+    } catch {
+      setUpdateCheckMessage('Check failed. Verify your connection.');
+    } finally {
+      setUpdateCheckBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    void checkForUpdateNow(); // throttled auto-check on startup
   }, []);
 
   // ── Notification action button handler ────────────────────────────────────
@@ -2604,6 +2608,7 @@ export default function App() {
       } catch {
         // Keep defaults on parse/storage failure.
       }
+      reminderHydratedRef.current = true;
 
       try {
         const storedIds = await AsyncStorage.getItem(SMART_REMINDER_NOTIFICATION_IDS_KEY);
@@ -2626,6 +2631,13 @@ export default function App() {
       active = false;
     };
   }, []);
+
+  // Auto-persist reminder settings whenever a toggle or chip changes, so the
+  // user never has to tap "Apply" just to save their category preferences.
+  useEffect(() => {
+    if (!reminderHydratedRef.current) return;
+    void AsyncStorage.setItem(SMART_REMINDER_SETTINGS_KEY, JSON.stringify(smartReminderSettings));
+  }, [smartReminderSettings]);
 
   useEffect(() => {
     focusRunningRef.current = focusRunning;
@@ -6148,6 +6160,29 @@ export default function App() {
           <Text style={styles.statusText}>{syncStatus || 'Idle'}</Text>
           <Text style={styles.mutedText}>Last sync: {lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'never'}</Text>
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>App version</Text>
+          <Text style={styles.mutedText}>Current version: v{CURRENT_VERSION}</Text>
+
+          {updateAvailable ? (
+            <Pressable
+              style={[styles.primaryButtonInline, { marginTop: 10 }]}
+              onPress={() => void Linking.openURL(updateAvailable.url)}
+            >
+              <Text style={styles.primaryButtonText}>Download v{updateAvailable.version}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[styles.secondaryButtonInline, { marginTop: 10 }, updateCheckBusy ? styles.buttonDisabled : undefined]}
+              onPress={() => void checkForUpdateNow(true)}
+              disabled={updateCheckBusy}
+            >
+              <Text style={styles.secondaryButtonText}>{updateCheckBusy ? 'Checking...' : 'Check for updates'}</Text>
+            </Pressable>
+          )}
+          {updateCheckMessage ? <Text style={styles.statusText}>{updateCheckMessage}</Text> : null}
+        </View>
       </ScrollView>
     );
   }
@@ -6187,9 +6222,6 @@ export default function App() {
               {focusDndEnabled
                 ? (focusRunning ? 'Focus DND is active now.' : 'Focus DND will activate when you start a focus session.')
                 : 'Focus DND is currently disabled.'}
-            </Text>
-            <Text style={styles.warningText}>
-              OS limitation: this app cannot force-silence phone calls. This mode only silences app notifications and vibration while focusing.
             </Text>
           </View>
 
@@ -6328,13 +6360,13 @@ export default function App() {
             );
           })}
 
-          <View style={styles.inlineButtonsRow}>
+          <View style={[styles.inlineButtonsRow, { marginTop: 12 }]}>
             <Pressable
               style={[styles.primaryButtonInline, isExpoGoAndroid ? styles.buttonDisabled : undefined]}
               onPress={() => void applySmartReminders()}
               disabled={isExpoGoAndroid}
             >
-              <Text style={styles.primaryButtonText}>Apply custom reminders</Text>
+              <Text style={styles.primaryButtonText}>Schedule reminders</Text>
             </Pressable>
 
             <Pressable
@@ -6342,7 +6374,7 @@ export default function App() {
               onPress={() => void clearSmartReminders()}
               disabled={isExpoGoAndroid}
             >
-              <Text style={styles.secondaryButtonText}>Clear</Text>
+              <Text style={styles.secondaryButtonText}>Clear all</Text>
             </Pressable>
           </View>
 
@@ -6382,18 +6414,6 @@ export default function App() {
               <Text style={styles.signOutButtonText}>Sign Out</Text>
             </Pressable>
           </View>
-
-          {updateAvailable ? (
-            <Pressable
-              style={styles.updateBanner}
-              onPress={() => void Linking.openURL(updateAvailable.url)}
-            >
-              <Text style={styles.updateBannerText}>
-                Update available — v{updateAvailable.version}
-              </Text>
-              <Text style={styles.updateBannerAction}>Tap to download APK</Text>
-            </Pressable>
-          ) : null}
 
           <ScrollView
             horizontal

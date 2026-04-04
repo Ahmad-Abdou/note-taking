@@ -203,27 +203,29 @@ async function reconcileImportedCalendarsMetaWithEvents(options = {}) {
     const knownMeta = ScheduleState.importedCalendarsMeta || {};
     let changed = false;
 
-    // Ensure every imported calendar that has events has metadata.
-    Object.entries(stats).forEach(([calId, info]) => {
+    // Delete orphaned events — events whose importedCalendarId no longer has
+    // a matching metadata entry (the calendar was deleted). Creating phantom
+    // metadata for them would cause ghost events to appear on the calendar.
+    for (const [calId] of Object.entries(stats)) {
         if (!knownMeta[calId]) {
-            knownMeta[calId] = {
-                name: 'Imported Calendar',
-                color: info.sample?.color || '#6366f1',
-                eventType: info.sample?.type || 'class',
-                importedAt: info.sample?.importedAt || new Date().toISOString(),
-                eventCount: info.count,
-                sourceUrl: null
-            };
+            const orphans = ScheduleState.events.filter(e => e.importedCalendarId === calId);
+            for (const event of orphans) {
+                const scheduleType = event.scheduleType || 'school';
+                await ProductivityData.DataStore.deleteScheduleEvent(event.id, scheduleType);
+                await ProductivityData.DataStore.deleteScheduleEvent(event.id, scheduleType === 'school' ? 'personal' : 'school');
+            }
+            ScheduleState.events = ScheduleState.events.filter(e => e.importedCalendarId !== calId);
             changed = true;
-        } else if (knownMeta[calId].eventCount !== info.count) {
-            knownMeta[calId].eventCount = info.count;
-            changed = true;
+        } else {
+            if (knownMeta[calId].eventCount !== stats[calId].count) {
+                knownMeta[calId].eventCount = stats[calId].count;
+                changed = true;
+            }
+            if (ScheduleState.filters.importedCalendars[calId] === undefined) {
+                ScheduleState.filters.importedCalendars[calId] = true;
+            }
         }
-
-        if (ScheduleState.filters.importedCalendars[calId] === undefined) {
-            ScheduleState.filters.importedCalendars[calId] = true;
-        }
-    });
+    }
 
     // Remove stale metadata with no events and no subscription source.
     Object.keys(knownMeta).forEach((calId) => {
