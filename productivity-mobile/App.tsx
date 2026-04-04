@@ -163,6 +163,7 @@ interface SmartReminderDraft {
   triggerAtMs: number;
   dueAtMs: number;
   categoryIdentifier: string;
+  taskId?: string;       // set for task drafts so Mark Done button works
   challengeId?: string; // set for challenge drafts so action buttons can log progress
 }
 
@@ -179,7 +180,7 @@ interface TaskReminderDraft {
 const DEFAULT_SMART_REMINDER_SETTINGS: SmartReminderSettings = {
   tasks: { enabled: true, leadMinutes: 60, onTime: false },
   schedule: { enabled: true, leadMinutes: 30, onTime: true },
-  challenges: { enabled: false, leadMinutes: 120, onTime: false },
+  challenges: { enabled: true, leadMinutes: 60, onTime: true },
 };
 
 type AppTab =
@@ -2715,7 +2716,7 @@ export default function App() {
             body: draft.body,
             sound: 'default',
             categoryIdentifier: draft.categoryIdentifier,
-            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey, dueAtMs: draft.dueAtMs, challengeId: draft.challengeId ?? null },
+            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey, dueAtMs: draft.dueAtMs, taskId: draft.taskId ?? null, challengeId: draft.challengeId ?? null },
           };
           const dateTrigger = new Date(draft.triggerAtMs);
           try {
@@ -3858,6 +3859,7 @@ export default function App() {
           const countdown = formatCountdown(triggerAtMs, dueTs);
           return {
             category: 'tasks' as ReminderCategory,
+            taskId: task.id,
             itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_lead_${settings.tasks.leadMinutes}`,
             title: `Task due in ${countdown}`,
             body: `${task.title} · Due ${dueDateLabel} at ${dueTimeLabel}`,
@@ -3879,6 +3881,7 @@ export default function App() {
             const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
             return {
               category: 'tasks' as ReminderCategory,
+              taskId: task.id,
               itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_ontime`,
               title: `Task due now: ${task.title}`,
               body: `Due ${dueDateLabel} at ${dueTimeLabel}`,
@@ -4211,6 +4214,8 @@ export default function App() {
           category: draft.category,
           itemKey: draft.itemKey,
           dueAtMs: draft.dueAtMs,
+          taskId: draft.taskId ?? null,
+          challengeId: draft.challengeId ?? null,
         },
       };
 
