@@ -2,7 +2,7 @@
   "expo": {
     "name": "Productivity Hub Mobile",
     "slug": "productivity-hub-mobile",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "productivityhubmobile",
@@ -33,7 +33,7 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE"
       ],
-      "versionCode": 10005
+      "versionCode": 10006
     },
     "plugins": [
       [
