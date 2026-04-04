@@ -146,6 +146,7 @@ type ScheduleCalendarMode = 'month' | 'week';
 interface ReminderCategorySetting {
   enabled: boolean;
   leadMinutes: number;
+  onTime: boolean; // also fire a notification exactly at the start/due time
 }
 
 interface SmartReminderSettings {
@@ -175,9 +176,9 @@ interface TaskReminderDraft {
 }
 
 const DEFAULT_SMART_REMINDER_SETTINGS: SmartReminderSettings = {
-  tasks: { enabled: true, leadMinutes: 60 },
-  schedule: { enabled: true, leadMinutes: 30 },
-  challenges: { enabled: false, leadMinutes: 120 },
+  tasks: { enabled: true, leadMinutes: 60, onTime: false },
+  schedule: { enabled: true, leadMinutes: 30, onTime: true },
+  challenges: { enabled: false, leadMinutes: 120, onTime: false },
 };
 
 type AppTab =
@@ -1110,6 +1111,7 @@ function normalizeSmartReminderSettings(raw: unknown): SmartReminderSettings {
     return {
       enabled: typeof current.enabled === 'boolean' ? current.enabled : defaultSetting.enabled,
       leadMinutes: lead,
+      onTime: typeof current.onTime === 'boolean' ? current.onTime : defaultSetting.onTime,
     };
   };
 
@@ -3723,63 +3725,98 @@ export default function App() {
     if (settings.tasks.enabled) {
       const leadMs = settings.tasks.leadMinutes * 60 * 1000;
 
-      const taskDrafts = snapshot.tasks
-        .filter((task) => task.status !== 'completed' && Boolean(toYmd(task.dueDate)))
+      const eligibleTasks = snapshot.tasks.filter(
+        (task) => task.status !== 'completed' && Boolean(toYmd(task.dueDate)),
+      );
+
+      const leadDrafts = eligibleTasks
         .map((task) => {
           const dueTs = getTimestampForYmdTime(task.dueDate, task.dueTime, '21:00');
           if (dueTs == null || dueTs <= now) return null;
-
           const triggerAtMs = dueTs - leadMs;
           if (triggerAtMs < minimumTriggerTs) return null;
-
           const dueDateLabel = formatYmdLabel(task.dueDate);
           const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
-
           const countdown = formatCountdown(triggerAtMs, dueTs);
           return {
             category: 'tasks' as ReminderCategory,
-            itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_${settings.tasks.leadMinutes}`,
+            itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_lead_${settings.tasks.leadMinutes}`,
             title: `Task due in ${countdown}`,
             body: `${task.title} · Due ${dueDateLabel} at ${dueTimeLabel}`,
-            triggerAtMs,
-            dueAtMs: dueTs,
-            categoryIdentifier: 'task-reminder',
+            triggerAtMs, dueAtMs: dueTs, categoryIdentifier: 'task-reminder',
           };
         })
-        .filter((entry): entry is SmartReminderDraft => Boolean(entry))
+        .filter((e): e is SmartReminderDraft => Boolean(e))
         .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
         .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
 
-      drafts.push(...taskDrafts);
+      drafts.push(...leadDrafts);
+
+      if (settings.tasks.onTime) {
+        const onTimeDrafts = eligibleTasks
+          .map((task) => {
+            const dueTs = getTimestampForYmdTime(task.dueDate, task.dueTime, '21:00');
+            if (dueTs == null || dueTs < minimumTriggerTs) return null;
+            const dueDateLabel = formatYmdLabel(task.dueDate);
+            const dueTimeLabel = task.dueTime ? formatTimeLabel(task.dueTime) : '9:00 PM';
+            return {
+              category: 'tasks' as ReminderCategory,
+              itemKey: `task_${task.id}_${task.dueDate || 'none'}_${task.dueTime || 'none'}_ontime`,
+              title: `Task due now: ${task.title}`,
+              body: `Due ${dueDateLabel} at ${dueTimeLabel}`,
+              triggerAtMs: dueTs, dueAtMs: dueTs, categoryIdentifier: 'task-reminder',
+            };
+          })
+          .filter((e): e is SmartReminderDraft => Boolean(e))
+          .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+          .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
+        drafts.push(...onTimeDrafts);
+      }
     }
 
     if (settings.schedule.enabled) {
       const leadMs = settings.schedule.leadMinutes * 60 * 1000;
+      const occurrences = buildScheduleOccurrences(allScheduleEvents, todayYmd(), SMART_REMINDER_LOOKAHEAD_DAYS);
 
-      const scheduleDrafts = buildScheduleOccurrences(allScheduleEvents, todayYmd(), SMART_REMINDER_LOOKAHEAD_DAYS)
+      const leadDrafts = occurrences
         .map((occurrence) => {
           const eventTs = getTimestampForYmdTime(occurrence.occurrenceDate, occurrence.event.startTime, '09:00');
           if (eventTs == null || eventTs <= now) return null;
-
           const triggerAtMs = eventTs - leadMs;
           if (triggerAtMs < minimumTriggerTs) return null;
-
           const countdown = formatCountdown(triggerAtMs, eventTs);
           return {
             category: 'schedule' as ReminderCategory,
-            itemKey: `event_${occurrence.key}_${settings.schedule.leadMinutes}`,
+            itemKey: `event_${occurrence.key}_lead_${settings.schedule.leadMinutes}`,
             title: `Starting in ${countdown}`,
             body: `${occurrence.event.title} · ${formatYmdLabel(occurrence.occurrenceDate)} at ${formatTimeLabel(occurrence.event.startTime)}`,
-            triggerAtMs,
-            dueAtMs: eventTs,
-            categoryIdentifier: 'schedule-reminder',
+            triggerAtMs, dueAtMs: eventTs, categoryIdentifier: 'schedule-reminder',
           };
         })
-        .filter((entry): entry is SmartReminderDraft => Boolean(entry))
+        .filter((e): e is SmartReminderDraft => Boolean(e))
         .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
         .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
 
-      drafts.push(...scheduleDrafts);
+      drafts.push(...leadDrafts);
+
+      if (settings.schedule.onTime) {
+        const onTimeDrafts = occurrences
+          .map((occurrence) => {
+            const eventTs = getTimestampForYmdTime(occurrence.occurrenceDate, occurrence.event.startTime, '09:00');
+            if (eventTs == null || eventTs < minimumTriggerTs) return null;
+            return {
+              category: 'schedule' as ReminderCategory,
+              itemKey: `event_${occurrence.key}_ontime`,
+              title: `Starting now: ${occurrence.event.title}`,
+              body: `${formatYmdLabel(occurrence.occurrenceDate)} at ${formatTimeLabel(occurrence.event.startTime)}`,
+              triggerAtMs: eventTs, dueAtMs: eventTs, categoryIdentifier: 'schedule-reminder',
+            };
+          })
+          .filter((e): e is SmartReminderDraft => Boolean(e))
+          .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+          .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
+        drafts.push(...onTimeDrafts);
+      }
     }
 
     if (settings.challenges.enabled) {
@@ -3787,33 +3824,53 @@ export default function App() {
       const today = todayYmd();
       const weekEnd = getWeekEndYmd(today);
 
-      const challengeDrafts = snapshot.challenges
-        .filter((challenge) => challenge.status === 'active' && challenge.currentProgress < challenge.targetProgress)
+      const eligibleChallenges = snapshot.challenges.filter(
+        (c) => c.status === 'active' && c.currentProgress < c.targetProgress,
+      );
+
+      const leadDrafts = eligibleChallenges
         .map((challenge) => {
           const dueYmd = challenge.type === 'weekly' ? weekEnd : today;
           const dueTs = getTimestampForYmdTime(dueYmd, '21:00', '21:00');
           if (dueTs == null || dueTs <= now) return null;
-
           const triggerAtMs = dueTs - leadMs;
           if (triggerAtMs < minimumTriggerTs) return null;
-
           const countdown = formatCountdown(triggerAtMs, dueTs);
           const remaining = challenge.targetProgress - challenge.currentProgress;
           return {
             category: 'challenges' as ReminderCategory,
-            itemKey: `challenge_${challenge.id}_${dueYmd}_${settings.challenges.leadMinutes}`,
+            itemKey: `challenge_${challenge.id}_${dueYmd}_lead_${settings.challenges.leadMinutes}`,
             title: `Challenge ends in ${countdown}`,
             body: `${challenge.title} · ${challenge.currentProgress}/${challenge.targetProgress} done, ${remaining} left`,
-            triggerAtMs,
-            dueAtMs: dueTs,
-            categoryIdentifier: 'challenge-reminder',
+            triggerAtMs, dueAtMs: dueTs, categoryIdentifier: 'challenge-reminder',
           };
         })
-        .filter((entry): entry is SmartReminderDraft => Boolean(entry))
+        .filter((e): e is SmartReminderDraft => Boolean(e))
         .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
         .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
 
-      drafts.push(...challengeDrafts);
+      drafts.push(...leadDrafts);
+
+      if (settings.challenges.onTime) {
+        const onTimeDrafts = eligibleChallenges
+          .map((challenge) => {
+            const dueYmd = challenge.type === 'weekly' ? weekEnd : today;
+            const dueTs = getTimestampForYmdTime(dueYmd, '21:00', '21:00');
+            if (dueTs == null || dueTs < minimumTriggerTs) return null;
+            const remaining = challenge.targetProgress - challenge.currentProgress;
+            return {
+              category: 'challenges' as ReminderCategory,
+              itemKey: `challenge_${challenge.id}_${dueYmd}_ontime`,
+              title: `Challenge deadline now: ${challenge.title}`,
+              body: `${challenge.currentProgress}/${challenge.targetProgress} done, ${remaining} remaining`,
+              triggerAtMs: dueTs, dueAtMs: dueTs, categoryIdentifier: 'challenge-reminder',
+            };
+          })
+          .filter((e): e is SmartReminderDraft => Boolean(e))
+          .sort((a, b) => a.triggerAtMs - b.triggerAtMs)
+          .slice(0, SMART_REMINDER_MAX_PER_CATEGORY);
+        drafts.push(...onTimeDrafts);
+      }
     }
 
     return drafts.sort((a, b) => a.triggerAtMs - b.triggerAtMs);
@@ -6356,6 +6413,24 @@ export default function App() {
                     })}
                   </View>
                 </ScrollView>
+
+                <View style={styles.cardHeadingRow}>
+                  <Text style={styles.summaryMeta}>Also notify at start time</Text>
+                  <Pressable
+                    style={[
+                      styles.reminderToggleButton,
+                      config.onTime ? styles.reminderToggleButtonOn : styles.reminderToggleButtonOff,
+                    ]}
+                    onPress={() => {
+                      setSmartReminderSettings((prev) => ({
+                        ...prev,
+                        [category.key]: { ...prev[category.key], onTime: !prev[category.key].onTime },
+                      }));
+                    }}
+                  >
+                    <Text style={styles.reminderToggleButtonText}>{config.onTime ? 'On' : 'Off'}</Text>
+                  </Pressable>
+                </View>
               </View>
             );
           })}
