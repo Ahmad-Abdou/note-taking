@@ -3371,6 +3371,17 @@ function loadSettingsPage() {
     const notifDesktop = document.getElementById('settings-notif-desktop');
     if (notifDesktop) notifDesktop.checked = notifPrefs.desktop !== false;
 
+    const notifChallenges = document.getElementById('settings-notif-challenges');
+    if (notifChallenges) {
+        notifChallenges.checked = notifPrefs.challengeReminders !== false;
+        notifChallenges.addEventListener('change', async () => {
+            if (!App.settings.notificationPreferences) App.settings.notificationPreferences = {};
+            App.settings.notificationPreferences.challengeReminders = notifChallenges.checked;
+            if (window.NotificationState) NotificationState.preferences.challengeReminders = notifChallenges.checked;
+            await saveSettings();
+        });
+    }
+
     // Auto start
     const autoStartToggle = document.getElementById('settings-auto-start');
     if (autoStartToggle && window.electronAPI?.autoStart) {

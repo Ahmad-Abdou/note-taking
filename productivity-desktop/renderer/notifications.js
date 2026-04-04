@@ -35,7 +35,8 @@ const NotificationState = {
         streakReminders: true,
         breakReminders: true,
         achievements: true,
-        dailySummary: true
+        dailySummary: true,
+        challengeReminders: true
     },
     dndEnabled: false,
     dndEndTime: null,
@@ -771,6 +772,71 @@ function notifyTaskComplete(task) {
         message: task.title,
         duration: 3000,
         soundType: 'success'
+    });
+}
+
+/**
+ * Challenge notifications
+ */
+function notifyChallengeWindow(challenge, minutesUntilDeadline, isWindowOpen = false) {
+    if (!NotificationState.preferences.challengeReminders) return;
+
+    const remaining = challenge.targetProgress - challenge.currentProgress;
+    const percent = Math.round((challenge.currentProgress / challenge.targetProgress) * 100);
+
+    let title, message, type;
+
+    if (isWindowOpen) {
+        type = 'info';
+        title = '🎯 Challenge Window Open';
+        message = `${challenge.title} · ${challenge.currentProgress}/${challenge.targetProgress} done${challenge.timeWindowEnd ? ` · Due by ${challenge.timeWindowEnd}` : ''}`;
+    } else if (minutesUntilDeadline <= 0) {
+        type = 'error';
+        title = '🚨 Challenge Deadline NOW!';
+        message = `${challenge.title} · ${remaining} left to reach goal`;
+    } else if (minutesUntilDeadline <= 30) {
+        type = 'warning';
+        title = `⏰ Challenge ends in ${minutesUntilDeadline}m`;
+        message = `${challenge.title} · ${percent}% done, ${remaining} remaining`;
+    } else {
+        const hoursLeft = Math.round(minutesUntilDeadline / 60);
+        type = 'reminder';
+        title = `🎯 Challenge · ${hoursLeft}h left`;
+        message = `${challenge.title} · ${percent}% done, ${remaining} remaining`;
+    }
+
+    showSlidingNotification({
+        type,
+        title,
+        message,
+        duration: minutesUntilDeadline <= 0 ? 15000 : 8000,
+        soundType: minutesUntilDeadline <= 0 ? 'warning' : 'reminder',
+        navigateTo: 'challenges',
+        actions: [
+            {
+                label: '+1 Progress',
+                primary: true,
+                icon: 'fa-plus',
+                callback: () => {
+                    if (typeof logChallengeProgress === 'function') logChallengeProgress(challenge.id);
+                }
+            },
+            {
+                label: 'View',
+                icon: 'fa-eye',
+                callback: () => {
+                    if (typeof navigateTo === 'function') navigateTo('challenges');
+                }
+            }
+        ]
+    });
+
+    showDesktopNotification(title, {
+        body: message,
+        id: `challenge-${challenge.id}-${minutesUntilDeadline}`,
+        dedupeKey: `challenge_reminder_${challenge.id}_${new Date().toISOString().slice(0, 13)}`,
+        requireInteraction: minutesUntilDeadline <= 0,
+        soundType: minutesUntilDeadline <= 0 ? 'warning' : 'reminder'
     });
 }
 
@@ -1563,6 +1629,52 @@ async function checkReminders() {
                 }
             }
         });
+    }
+
+    // Check challenge reminders
+    if (NotificationState.preferences.challengeReminders) {
+        const challenges = await ProductivityData.DataStore.getChallenges?.() ?? [];
+        const activeChallenges = challenges.filter(c => c.status === 'active' && c.currentProgress < c.targetProgress);
+
+        for (const challenge of activeChallenges) {
+            // Determine the deadline time for today
+            const endTimeStr = challenge.timeWindowEnd || '21:00';
+            const deadlineDate = new Date(`${today}T${endTimeStr}`);
+            const minutesUntilDeadline = Math.round((deadlineDate - now) / (1000 * 60));
+
+            // Notify at window open (timeWindowStart)
+            if (challenge.timeWindowStart) {
+                const startDate = new Date(`${today}T${challenge.timeWindowStart}`);
+                const minutesSinceStart = Math.round((now - startDate) / (1000 * 60));
+                if (minutesSinceStart >= 0 && minutesSinceStart < 2) {
+                    const windowOpenKey = `challenge_window_open_${challenge.id}_${today}`;
+                    if (!sessionStorage.getItem(windowOpenKey)) {
+                        sessionStorage.setItem(windowOpenKey, 'true');
+                        notifyChallengeWindow(challenge, minutesUntilDeadline, true);
+                    }
+                }
+            }
+
+            // Notify at lead times: 120, 60, 30 minutes before deadline
+            for (const leadMin of [120, 60, 30]) {
+                if (minutesUntilDeadline <= leadMin + 1 && minutesUntilDeadline > leadMin - 1) {
+                    const reminderKey = `challenge_reminder_${challenge.id}_${leadMin}_${today}`;
+                    if (!sessionStorage.getItem(reminderKey)) {
+                        sessionStorage.setItem(reminderKey, 'true');
+                        notifyChallengeWindow(challenge, minutesUntilDeadline);
+                    }
+                }
+            }
+
+            // Notify at deadline (0 minutes)
+            if (minutesUntilDeadline <= 1 && minutesUntilDeadline > -1) {
+                const overdueKey = `challenge_deadline_${challenge.id}_${today}`;
+                if (!sessionStorage.getItem(overdueKey)) {
+                    sessionStorage.setItem(overdueKey, 'true');
+                    notifyChallengeWindow(challenge, 0);
+                }
+            }
+        }
     }
 }
 
