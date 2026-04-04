@@ -35,7 +35,9 @@ const NotificationState = {
         streakReminders: true,
         breakReminders: true,
         achievements: true,
-        dailySummary: true
+        dailySummary: true,
+        challengeReminders: true,
+        scheduleReminders: true
     },
     dndEnabled: false,
     dndEndTime: null,
@@ -736,31 +738,167 @@ function notifyTaskDue(task, minutesUntilDue, meta = {}) {
         soundType: minutesUntilDue === 0 ? 'warning' : 'reminder',
         actions: [
             {
-                label: 'View Task',
+                label: '✓ Mark Done',
                 primary: true,
+                icon: 'fa-check',
+                callback: () => {
+                    if (typeof completeTaskOnly === 'function') completeTaskOnly(task.id);
+                }
+            },
+            {
+                label: 'View',
                 icon: 'fa-eye',
                 callback: () => {
                     if (typeof viewTask === 'function') viewTask(task.id);
                 }
             },
             {
-                label: 'Snooze',
+                label: '⏰ Snooze',
                 icon: 'fa-clock',
-                callback: () => {
-                    if (typeof snoozeTaskReminder === 'function') snoozeTaskReminder(task.id);
-                }
+                callback: () => snoozeTaskReminder(task.id),
             }
         ]
     });
 
-    // Also show desktop notification for other tabs
-    // Also show a single desktop notification (de-duped globally via background)
     showDesktopNotification(minutesUntilDue === 0 ? '🚨 Task Due NOW!' : '⏰ Task Due Soon', {
         body: toastMessage,
         id: meta.notificationId || `task-due-${task.id}`,
         dedupeKey: meta.dedupeKey || null,
         requireInteraction: true,
         soundType: minutesUntilDue === 0 ? 'warning' : 'reminder'
+    });
+}
+
+function snoozeTaskReminder(taskId) {
+    showSlidingNotification({ type: 'info', title: '⏰ Snoozed 15 min', message: 'Reminder rescheduled', duration: 3000 });
+    setTimeout(async () => {
+        try {
+            const tasks = await ProductivityData.DataStore.getTasks();
+            const task = tasks.find(t => t.id === taskId);
+            if (!task || task.status === 'completed') return;
+            const dueDateTime = task.dueTime
+                ? new Date(`${task.dueDate}T${task.dueTime}`)
+                : new Date(`${task.dueDate}T23:59`);
+            const minutesUntilDue = Math.round((dueDateTime - new Date()) / (1000 * 60));
+            notifyTaskDue(task, minutesUntilDue);
+        } catch { /* ignore */ }
+    }, 15 * 60 * 1000);
+}
+
+function logChallengeProgress(challengeId) {
+    if (typeof checkChallengeForToday === 'function') {
+        void checkChallengeForToday(challengeId);
+    }
+}
+
+/**
+ * Challenge notifications
+ */
+function notifyChallengeWindow(challenge, minutesUntilDeadline, isWindowOpen = false) {
+    if (!NotificationState.preferences.challengeReminders) return;
+
+    const remaining = challenge.targetProgress - challenge.currentProgress;
+    const percent = Math.round((challenge.currentProgress / challenge.targetProgress) * 100);
+
+    let title, message, type;
+
+    if (isWindowOpen) {
+        type = 'info';
+        title = '🎯 Challenge Window Open';
+        message = `${challenge.title} · ${challenge.currentProgress}/${challenge.targetProgress} done${challenge.timeWindowEnd ? ` · Due by ${challenge.timeWindowEnd}` : ''}`;
+    } else if (minutesUntilDeadline <= 0) {
+        type = 'error';
+        title = '🚨 Challenge Deadline NOW!';
+        message = `${challenge.title} · ${remaining} left to reach goal`;
+    } else if (minutesUntilDeadline <= 30) {
+        type = 'warning';
+        title = `⏰ Challenge ends in ${minutesUntilDeadline}m`;
+        message = `${challenge.title} · ${percent}% done, ${remaining} remaining`;
+    } else {
+        const hoursLeft = Math.round(minutesUntilDeadline / 60);
+        type = 'reminder';
+        title = `🎯 Challenge · ${hoursLeft}h left`;
+        message = `${challenge.title} · ${percent}% done, ${remaining} remaining`;
+    }
+
+    showSlidingNotification({
+        type: type === 'reminder' ? 'info' : type,
+        title,
+        message,
+        duration: minutesUntilDeadline <= 0 ? 15000 : 8000,
+        soundType: minutesUntilDeadline <= 0 ? 'warning' : 'reminder',
+        navigateTo: 'challenges',
+        actions: [
+            {
+                label: '+ Log Progress',
+                primary: true,
+                icon: 'fa-plus',
+                callback: () => logChallengeProgress(challenge.id)
+            },
+            {
+                label: 'View',
+                icon: 'fa-eye',
+                callback: () => {
+                    if (typeof navigateTo === 'function') navigateTo('challenges');
+                }
+            }
+        ]
+    });
+
+    showDesktopNotification(title, {
+        body: message,
+        id: `challenge-${challenge.id}-${minutesUntilDeadline}`,
+        dedupeKey: `challenge_reminder_${challenge.id}_${new Date().toISOString().slice(0, 13)}`,
+        requireInteraction: minutesUntilDeadline <= 0,
+        soundType: minutesUntilDeadline <= 0 ? 'warning' : 'reminder'
+    });
+}
+
+/**
+ * Schedule event notifications
+ */
+function notifyScheduleEvent(event, minutesUntilStart) {
+    if (!NotificationState.preferences.scheduleReminders) return;
+
+    const timeText = minutesUntilStart === 0 ? 'NOW' : `in ${minutesUntilStart} min`;
+    const title = minutesUntilStart === 0 ? '🔔 Event Starting Now' : '📅 Event Starting Soon';
+    const message = minutesUntilStart === 0
+        ? `"${event.title}" is starting now!`
+        : `"${event.title}" starts ${timeText}`;
+
+    showSlidingNotification({
+        type: minutesUntilStart === 0 ? 'warning' : 'info',
+        title,
+        message,
+        duration: minutesUntilStart === 0 ? 12000 : 8000,
+        soundType: 'reminder',
+        navigateTo: 'schedule',
+        actions: [
+            {
+                label: '▶ Start Focus',
+                primary: true,
+                icon: 'fa-play',
+                callback: () => {
+                    const navItem = document.querySelector('.nav-item[data-page="focus"]');
+                    if (navItem) navItem.click();
+                }
+            },
+            {
+                label: 'View Schedule',
+                icon: 'fa-calendar',
+                callback: () => {
+                    const navItem = document.querySelector('.nav-item[data-page="schedule"]');
+                    if (navItem) navItem.click();
+                }
+            }
+        ]
+    });
+
+    showDesktopNotification(title, {
+        body: message,
+        id: `schedule-${event.id}-${minutesUntilStart}`,
+        dedupeKey: `schedule_event_${event.id}_${minutesUntilStart}_${new Date().toISOString().slice(0, 13)}`,
+        soundType: 'reminder'
     });
 }
 
@@ -1566,6 +1704,101 @@ async function checkReminders() {
             }
         });
     }
+
+    // Check challenge reminders
+    if (NotificationState.preferences.challengeReminders) {
+        const challenges = await ProductivityData.DataStore.getChallenges?.() ?? [];
+        const activeChallenges = challenges.filter(c => c.status === 'active' && c.currentProgress < c.targetProgress);
+
+        for (const challenge of activeChallenges) {
+            const endTimeStr = challenge.timeWindowEnd || '21:00';
+            const deadlineDate = new Date(`${today}T${endTimeStr}`);
+            const minutesUntilDeadline = Math.round((deadlineDate - now) / (1000 * 60));
+
+            // Notify at window open (timeWindowStart)
+            if (challenge.timeWindowStart) {
+                const startDate = new Date(`${today}T${challenge.timeWindowStart}`);
+                const minutesSinceStart = Math.round((now - startDate) / (1000 * 60));
+                if (minutesSinceStart >= 0 && minutesSinceStart < 2) {
+                    const windowOpenKey = `challenge_window_open_${challenge.id}_${today}`;
+                    if (!sessionStorage.getItem(windowOpenKey)) {
+                        sessionStorage.setItem(windowOpenKey, 'true');
+                        notifyChallengeWindow(challenge, minutesUntilDeadline, true);
+                    }
+                }
+            }
+
+            // Notify at lead times: 120, 60, 30 minutes before deadline
+            for (const leadMin of [120, 60, 30]) {
+                if (minutesUntilDeadline <= leadMin + 1 && minutesUntilDeadline > leadMin - 1) {
+                    const reminderKey = `challenge_reminder_${challenge.id}_${leadMin}_${today}`;
+                    if (!sessionStorage.getItem(reminderKey)) {
+                        sessionStorage.setItem(reminderKey, 'true');
+                        notifyChallengeWindow(challenge, minutesUntilDeadline);
+                    }
+                }
+            }
+
+            // Notify at deadline (0 minutes)
+            if (minutesUntilDeadline <= 1 && minutesUntilDeadline > -1) {
+                const overdueKey = `challenge_deadline_${challenge.id}_${today}`;
+                if (!sessionStorage.getItem(overdueKey)) {
+                    sessionStorage.setItem(overdueKey, 'true');
+                    notifyChallengeWindow(challenge, 0);
+                }
+            }
+        }
+    }
+
+    // Check schedule event reminders
+    if (NotificationState.preferences.scheduleReminders) {
+        const events = window.ScheduleState?.events ?? [];
+        const todayDow = now.getDay();
+
+        for (const event of events) {
+            if (!event.startTime || !event.title) continue;
+
+            let occursToday = false;
+            if (!event.recurring) {
+                occursToday = event.date === today;
+            } else {
+                const eventStart = new Date(event.date + 'T00:00:00');
+                const eventDow = eventStart.getDay();
+                const pastStart = event.date <= today;
+                const beforeEnd = !event.repeatUntil || event.repeatUntil >= today;
+                if (!pastStart || !beforeEnd) continue;
+                if (event.repeatType === 'daily') occursToday = true;
+                else if (event.repeatType === 'weekly') occursToday = eventDow === todayDow;
+                else if (event.repeatType === 'biweekly') {
+                    const diffMs = new Date(today) - eventStart;
+                    const diffWeeks = Math.round(diffMs / (7 * 24 * 3600 * 1000));
+                    occursToday = eventDow === todayDow && diffWeeks % 2 === 0;
+                } else {
+                    occursToday = event.date === today;
+                }
+            }
+            if (!occursToday) continue;
+
+            const eventDateTime = new Date(`${today}T${event.startTime}`);
+            const minutesUntilStart = Math.round((eventDateTime - now) / (1000 * 60));
+
+            if (minutesUntilStart <= 31 && minutesUntilStart > 29) {
+                const key = `schedule_lead_${event.id}_30_${today}`;
+                if (!sessionStorage.getItem(key)) {
+                    sessionStorage.setItem(key, 'true');
+                    notifyScheduleEvent(event, 30);
+                }
+            }
+
+            if (minutesUntilStart <= 1 && minutesUntilStart > -1) {
+                const key = `schedule_ontime_${event.id}_${today}`;
+                if (!sessionStorage.getItem(key)) {
+                    sessionStorage.setItem(key, 'true');
+                    notifyScheduleEvent(event, 0);
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -1756,9 +1989,35 @@ function renderNotificationSettings() {
                     <span class="setting-desc">Keep your streak alive</span>
                 </div>
                 <label class="toggle-switch">
-                    <input type="checkbox" 
+                    <input type="checkbox"
                            ${NotificationState.preferences.streakReminders ? 'checked' : ''}
                            data-pref="streakReminders">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label>Challenge Reminders</label>
+                    <span class="setting-desc">Notify when challenge window opens and before deadline</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox"
+                           ${NotificationState.preferences.challengeReminders ? 'checked' : ''}
+                           data-pref="challengeReminders">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-info">
+                    <label>Schedule Reminders</label>
+                    <span class="setting-desc">Notify 30 min before and at start of scheduled events</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox"
+                           ${NotificationState.preferences.scheduleReminders ? 'checked' : ''}
+                           data-pref="scheduleReminders">
                     <span class="toggle-slider"></span>
                 </label>
             </div>

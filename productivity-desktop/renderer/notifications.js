@@ -36,7 +36,8 @@ const NotificationState = {
         breakReminders: true,
         achievements: true,
         dailySummary: true,
-        challengeReminders: true
+        challengeReminders: true,
+        scheduleReminders: true
     },
     dndEnabled: false,
     dndEndTime: null,
@@ -737,31 +738,104 @@ function notifyTaskDue(task, minutesUntilDue, meta = {}) {
         soundType: minutesUntilDue === 0 ? 'warning' : 'reminder',
         actions: [
             {
-                label: 'View Task',
+                label: '✓ Mark Done',
                 primary: true,
+                icon: 'fa-check',
+                callback: () => {
+                    if (typeof completeTaskOnly === 'function') completeTaskOnly(task.id);
+                }
+            },
+            {
+                label: 'View',
                 icon: 'fa-eye',
                 callback: () => {
                     if (typeof viewTask === 'function') viewTask(task.id);
                 }
             },
             {
-                label: 'Snooze',
+                label: '⏰ Snooze',
                 icon: 'fa-clock',
-                callback: () => {
-                    if (typeof snoozeTaskReminder === 'function') snoozeTaskReminder(task.id);
-                }
+                callback: () => snoozeTaskReminder(task.id),
             }
         ]
     });
 
-    // Also show desktop notification for other tabs
-    // Also show a single desktop notification (de-duped globally via background)
     showDesktopNotification(minutesUntilDue === 0 ? '🚨 Task Due NOW!' : '⏰ Task Due Soon', {
         body: toastMessage,
         id: meta.notificationId || `task-due-${task.id}`,
         dedupeKey: meta.dedupeKey || null,
         requireInteraction: true,
         soundType: minutesUntilDue === 0 ? 'warning' : 'reminder'
+    });
+}
+
+function snoozeTaskReminder(taskId) {
+    showSlidingNotification({ type: 'info', title: '⏰ Snoozed 15 min', message: 'Reminder rescheduled', duration: 3000 });
+    setTimeout(async () => {
+        try {
+            const tasks = await ProductivityData.DataStore.getTasks();
+            const task = tasks.find(t => t.id === taskId);
+            if (!task || task.status === 'completed') return;
+            const dueDateTime = task.dueTime
+                ? new Date(`${task.dueDate}T${task.dueTime}`)
+                : new Date(`${task.dueDate}T23:59`);
+            const minutesUntilDue = Math.round((dueDateTime - new Date()) / (1000 * 60));
+            notifyTaskDue(task, minutesUntilDue);
+        } catch { /* ignore */ }
+    }, 15 * 60 * 1000);
+}
+
+function logChallengeProgress(challengeId) {
+    if (typeof checkChallengeForToday === 'function') {
+        void checkChallengeForToday(challengeId);
+    }
+}
+
+/**
+ * Schedule event notifications
+ */
+function notifyScheduleEvent(event, minutesUntilStart) {
+    if (!NotificationState.preferences.scheduleReminders) return;
+
+    const timeText = minutesUntilStart === 0 ? 'NOW' : `in ${minutesUntilStart} min`;
+    const title = minutesUntilStart === 0 ? '🔔 Event Starting Now' : '📅 Event Starting Soon';
+    const message = minutesUntilStart === 0
+        ? `"${event.title}" is starting now!`
+        : `"${event.title}" starts ${timeText}`;
+
+    showSlidingNotification({
+        type: minutesUntilStart === 0 ? 'warning' : 'info',
+        title,
+        message,
+        duration: minutesUntilStart === 0 ? 12000 : 8000,
+        soundType: 'reminder',
+        navigateTo: 'schedule',
+        actions: [
+            {
+                label: '▶ Start Focus',
+                primary: true,
+                icon: 'fa-play',
+                callback: () => {
+                    const navItem = document.querySelector('.nav-item[data-page="focus"]');
+                    if (navItem) navItem.click();
+                }
+            },
+            {
+                label: 'View Schedule',
+                icon: 'fa-calendar',
+                callback: () => {
+                    const navItem = document.querySelector('.nav-item[data-page="schedule"]');
+                    if (navItem) navItem.click();
+                }
+            }
+        ]
+    });
+
+    showDesktopNotification(title, {
+        body: message,
+        id: `schedule-${event.id}-${minutesUntilStart}`,
+        dedupeKey: `schedule_event_${event.id}_${minutesUntilStart}_${new Date().toISOString().slice(0, 13)}`,
+        soundType: 'reminder'
     });
 }
 
@@ -1672,6 +1746,59 @@ async function checkReminders() {
                 if (!sessionStorage.getItem(overdueKey)) {
                     sessionStorage.setItem(overdueKey, 'true');
                     notifyChallengeWindow(challenge, 0);
+                }
+            }
+        }
+    }
+
+    // Check schedule event reminders
+    if (NotificationState.preferences.scheduleReminders) {
+        const events = window.ScheduleState?.events ?? [];
+        const todayDow = now.getDay(); // 0=Sun..6=Sat
+
+        for (const event of events) {
+            if (!event.startTime || !event.title) continue;
+
+            // Determine if this event occurs today
+            let occursToday = false;
+            if (!event.recurring) {
+                occursToday = event.date === today;
+            } else {
+                const eventStart = new Date(event.date + 'T00:00:00');
+                const eventDow = eventStart.getDay();
+                const pastStart = event.date <= today;
+                const beforeEnd = !event.repeatUntil || event.repeatUntil >= today;
+                if (!pastStart || !beforeEnd) continue;
+                if (event.repeatType === 'daily') occursToday = true;
+                else if (event.repeatType === 'weekly') occursToday = eventDow === todayDow;
+                else if (event.repeatType === 'biweekly') {
+                    const diffMs = new Date(today) - eventStart;
+                    const diffWeeks = Math.round(diffMs / (7 * 24 * 3600 * 1000));
+                    occursToday = eventDow === todayDow && diffWeeks % 2 === 0;
+                } else {
+                    occursToday = event.date === today;
+                }
+            }
+            if (!occursToday) continue;
+
+            const eventDateTime = new Date(`${today}T${event.startTime}`);
+            const minutesUntilStart = Math.round((eventDateTime - now) / (1000 * 60));
+
+            // Lead-time: 30 min before
+            if (minutesUntilStart <= 31 && minutesUntilStart > 29) {
+                const key = `schedule_lead_${event.id}_30_${today}`;
+                if (!sessionStorage.getItem(key)) {
+                    sessionStorage.setItem(key, 'true');
+                    notifyScheduleEvent(event, 30);
+                }
+            }
+
+            // On-time: at start
+            if (minutesUntilStart <= 1 && minutesUntilStart > -1) {
+                const key = `schedule_ontime_${event.id}_${today}`;
+                if (!sessionStorage.getItem(key)) {
+                    sessionStorage.setItem(key, 'true');
+                    notifyScheduleEvent(event, 0);
                 }
             }
         }

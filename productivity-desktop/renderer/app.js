@@ -3382,6 +3382,17 @@ function loadSettingsPage() {
         });
     }
 
+    const notifSchedule = document.getElementById('settings-notif-schedule');
+    if (notifSchedule) {
+        notifSchedule.checked = notifPrefs.scheduleReminders !== false;
+        notifSchedule.addEventListener('change', async () => {
+            if (!App.settings.notificationPreferences) App.settings.notificationPreferences = {};
+            App.settings.notificationPreferences.scheduleReminders = notifSchedule.checked;
+            if (window.NotificationState) NotificationState.preferences.scheduleReminders = notifSchedule.checked;
+            await saveSettings();
+        });
+    }
+
     // Auto start
     const autoStartToggle = document.getElementById('settings-auto-start');
     if (autoStartToggle && window.electronAPI?.autoStart) {
