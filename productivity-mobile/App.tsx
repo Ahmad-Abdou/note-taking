@@ -163,6 +163,7 @@ interface SmartReminderDraft {
   triggerAtMs: number;
   dueAtMs: number;
   categoryIdentifier: string;
+  challengeId?: string; // set for challenge drafts so action buttons can log progress
 }
 
 interface TaskReminderDraft {
@@ -230,6 +231,8 @@ interface HubChallenge {
   createdAt: string;
   lastProgressDate: string | null;
   completedAt: string | null;
+  timeWindowStart: string | null; // HH:MM — when the daily activity window opens
+  timeWindowEnd: string | null;   // HH:MM — deadline for daily challenges
 }
 
 interface HubMilestone {
@@ -1728,7 +1731,19 @@ export default function App() {
   const [challengeType, setChallengeType] = useState<ChallengeType>('daily');
   const [challengeMetric, setChallengeMetric] = useState<'tasks' | 'focus_sessions' | 'focus_time' | 'reviews'>('tasks');
   const [challengeMinMinutes, setChallengeMinMinutes] = useState('25');
+  const [challengeTimeWindowStart, setChallengeTimeWindowStart] = useState('');
+  const [challengeTimeWindowEnd, setChallengeTimeWindowEnd] = useState('');
   const [challengeFilter, setChallengeFilter] = useState<'all' | 'active' | 'completed' | 'daily' | 'weekly'>('all');
+
+  // Edit-challenge form state
+  const [editingChallengeId, setEditingChallengeId] = useState<string | null>(null);
+  const [editChallengeTitle, setEditChallengeTitle] = useState('');
+  const [editChallengeTarget, setEditChallengeTarget] = useState('');
+  const [editChallengeType, setEditChallengeType] = useState<ChallengeType>('daily');
+  const [editChallengeMetric, setEditChallengeMetric] = useState<'tasks' | 'focus_sessions' | 'focus_time' | 'reviews'>('tasks');
+  const [editChallengeMinMinutes, setEditChallengeMinMinutes] = useState('25');
+  const [editChallengeWindowStart, setEditChallengeWindowStart] = useState('');
+  const [editChallengeWindowEnd, setEditChallengeWindowEnd] = useState('');
 
   const [focusPresetMinutes, setFocusPresetMinutes] = useState<number>(25);
   const [focusCustomMinutes, setFocusCustomMinutes] = useState('45');
@@ -2492,6 +2507,7 @@ export default function App() {
       const data = notification.request.content.data as Record<string, unknown>;
       const scope = data.scope as string | undefined;
       const taskId = data.taskId as string | undefined;
+      const challengeId = data.challengeId as string | undefined;
       const dueAtMs = typeof data.dueAtMs === 'number' ? data.dueAtMs : null;
 
       // ── Task actions ────────────────────────────────────────────────────
@@ -2556,7 +2572,11 @@ export default function App() {
 
       // ── Challenge actions ───────────────────────────────────────────────
       if (actionIdentifier === 'challenge-log') {
-        setActiveTab('challenges');
+        if (challengeId) {
+          void incrementChallenge(challengeId);
+        } else {
+          setActiveTab('challenges');
+        }
         return;
       }
 
@@ -2695,7 +2715,7 @@ export default function App() {
             body: draft.body,
             sound: 'default',
             categoryIdentifier: draft.categoryIdentifier,
-            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey, dueAtMs: draft.dueAtMs },
+            data: { scope: 'custom-reminder', category: draft.category, itemKey: draft.itemKey, dueAtMs: draft.dueAtMs, challengeId: draft.challengeId ?? null },
           };
           const dateTrigger = new Date(draft.triggerAtMs);
           try {
@@ -3157,6 +3177,47 @@ export default function App() {
     });
   }
 
+  function openChallengeWindowPicker(
+    field: 'createStart' | 'createEnd' | 'editStart' | 'editEnd',
+  ) {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Time picker', 'Time picker is available on Android in this build.');
+      return;
+    }
+    const currentMap = {
+      createStart: challengeTimeWindowStart,
+      createEnd: challengeTimeWindowEnd,
+      editStart: editChallengeWindowStart,
+      editEnd: editChallengeWindowEnd,
+    };
+    const setMap = {
+      createStart: setChallengeTimeWindowStart,
+      createEnd: setChallengeTimeWindowEnd,
+      editStart: setEditChallengeWindowStart,
+      editEnd: setEditChallengeWindowEnd,
+    };
+    const raw = currentMap[field];
+    const normalized = /^\d{1,2}:\d{2}$/.test(raw.trim()) ? raw.trim() : '09:00';
+    const [hours, minutes] = normalized.split(':').map(Number);
+    // Snap seed to nearest 5 min so the picker starts at a valid slot
+    const snappedMinutes = Math.round(minutes / 5) * 5 % 60;
+    const seedDate = new Date();
+    seedDate.setHours(hours, snappedMinutes, 0, 0);
+
+    DateTimePickerAndroid.open({
+      mode: 'time',
+      value: seedDate,
+      is24Hour: true,
+      minuteInterval: 5,
+      onChange: (event, selectedDate) => {
+        if (event.type !== 'set' || !selectedDate) return;
+        const hh = String(selectedDate.getHours()).padStart(2, '0');
+        const mm = String(selectedDate.getMinutes()).padStart(2, '0');
+        setMap[field](`${hh}:${mm}`);
+      },
+    });
+  }
+
   function clearTaskDueDate(editing = false) {
     if (editing) {
       setEditingTaskDueDate('');
@@ -3557,6 +3618,11 @@ export default function App() {
     const target = Math.max(1, Math.round(toFinite(challengeTarget, 5)));
     const minMinutes = Math.max(0, Math.round(toFinite(challengeMinMinutes, 25)));
 
+    const parseWindow = (raw: string) => {
+      const trimmed = raw.trim();
+      return /^\d{1,2}:\d{2}$/.test(trimmed) ? trimmed.padStart(5, '0') : null;
+    };
+
     const challenge: HubChallenge = {
       id: generateId('challenge'),
       metric: challengeMetric,
@@ -3573,6 +3639,8 @@ export default function App() {
       createdAt: nowIso(),
       lastProgressDate: null,
       completedAt: null,
+      timeWindowStart: parseWindow(challengeTimeWindowStart),
+      timeWindowEnd: parseWindow(challengeTimeWindowEnd),
     };
 
     await applyLocalChanges(normalizeSnapshot({
@@ -3587,6 +3655,8 @@ export default function App() {
     setChallengeType('daily');
     setChallengeMetric('tasks');
     setChallengeMinMinutes('25');
+    setChallengeTimeWindowStart('');
+    setChallengeTimeWindowEnd('');
   }
 
   async function incrementChallenge(challengeId: string) {
@@ -3634,6 +3704,54 @@ export default function App() {
   async function deleteChallenge(challengeId: string) {
     const nextChallenges = snapshot.challenges.filter((challenge) => challenge.id !== challengeId);
     await applyLocalChanges(normalizeSnapshot({ ...snapshot, challenges: nextChallenges }));
+  }
+
+  function startEditChallenge(challenge: HubChallenge) {
+    setEditingChallengeId(challenge.id);
+    setEditChallengeTitle(challenge.title);
+    setEditChallengeTarget(String(challenge.targetProgress));
+    setEditChallengeType(challenge.type);
+    setEditChallengeMetric(challenge.metric as 'tasks' | 'focus_sessions' | 'focus_time' | 'reviews');
+    setEditChallengeMinMinutes(String((challenge.options as Record<string, number>).minMinutes ?? 25));
+    setEditChallengeWindowStart(challenge.timeWindowStart ?? '');
+    setEditChallengeWindowEnd(challenge.timeWindowEnd ?? '');
+  }
+
+  function cancelEditChallenge() {
+    setEditingChallengeId(null);
+  }
+
+  async function saveEditChallenge() {
+    if (!editingChallengeId) return;
+    const title = editChallengeTitle.trim();
+    if (!title) { Alert.alert('Title required', 'Enter a challenge title.'); return; }
+
+    const target = Math.max(1, Math.round(toFinite(editChallengeTarget, 5)));
+    const minMinutes = Math.max(0, Math.round(toFinite(editChallengeMinMinutes, 25)));
+    const parseWindow = (raw: string) => {
+      const trimmed = raw.trim();
+      return /^\d{1,2}:\d{2}$/.test(trimmed) ? trimmed.padStart(5, '0') : null;
+    };
+
+    const nextChallenges = snapshot.challenges.map((c) => {
+      if (c.id !== editingChallengeId) return c;
+      return {
+        ...c,
+        title,
+        customTitle: true,
+        type: editChallengeType,
+        metric: editChallengeMetric,
+        options: editChallengeMetric === 'focus_sessions' ? { minMinutes } : {},
+        description: challengeMetricDescription(editChallengeMetric, target, minMinutes),
+        targetProgress: target,
+        timeWindowStart: parseWindow(editChallengeWindowStart),
+        timeWindowEnd: parseWindow(editChallengeWindowEnd),
+      };
+    });
+
+    await applyLocalChanges(normalizeSnapshot({ ...snapshot, challenges: nextChallenges }));
+    setEditingChallengeId(null);
+    await sendInteractionNotification('Challenge updated', `${title} was saved.`);
   }
 
   function getSelectedFocusMinutes() {
@@ -3831,7 +3949,9 @@ export default function App() {
       const leadDrafts = eligibleChallenges
         .map((challenge) => {
           const dueYmd = challenge.type === 'weekly' ? weekEnd : today;
-          const dueTs = getTimestampForYmdTime(dueYmd, '21:00', '21:00');
+          // Use the challenge's own end-of-window time if set, otherwise 21:00
+          const endTime = challenge.timeWindowEnd ?? '21:00';
+          const dueTs = getTimestampForYmdTime(dueYmd, endTime, '21:00');
           if (dueTs == null || dueTs <= now) return null;
           const triggerAtMs = dueTs - leadMs;
           if (triggerAtMs < minimumTriggerTs) return null;
@@ -3839,6 +3959,7 @@ export default function App() {
           const remaining = challenge.targetProgress - challenge.currentProgress;
           return {
             category: 'challenges' as ReminderCategory,
+            challengeId: challenge.id,
             itemKey: `challenge_${challenge.id}_${dueYmd}_lead_${settings.challenges.leadMinutes}`,
             title: `Challenge ends in ${countdown}`,
             body: `${challenge.title} · ${challenge.currentProgress}/${challenge.targetProgress} done, ${remaining} left`,
@@ -3852,18 +3973,24 @@ export default function App() {
       drafts.push(...leadDrafts);
 
       if (settings.challenges.onTime) {
+        // "On time" for challenges = notify at timeWindowStart (when the window opens)
         const onTimeDrafts = eligibleChallenges
           .map((challenge) => {
             const dueYmd = challenge.type === 'weekly' ? weekEnd : today;
-            const dueTs = getTimestampForYmdTime(dueYmd, '21:00', '21:00');
-            if (dueTs == null || dueTs < minimumTriggerTs) return null;
+            // Use timeWindowStart if set for the "starting" notification
+            const startTime = challenge.timeWindowStart ?? challenge.timeWindowEnd ?? '09:00';
+            const startTs = getTimestampForYmdTime(dueYmd, startTime, '09:00');
+            if (startTs == null || startTs < minimumTriggerTs) return null;
+            const endTime = challenge.timeWindowEnd ?? '21:00';
+            const dueTs = getTimestampForYmdTime(dueYmd, endTime, '21:00') ?? startTs;
             const remaining = challenge.targetProgress - challenge.currentProgress;
             return {
               category: 'challenges' as ReminderCategory,
+              challengeId: challenge.id,
               itemKey: `challenge_${challenge.id}_${dueYmd}_ontime`,
-              title: `Challenge deadline now: ${challenge.title}`,
-              body: `${challenge.currentProgress}/${challenge.targetProgress} done, ${remaining} remaining`,
-              triggerAtMs: dueTs, dueAtMs: dueTs, categoryIdentifier: 'challenge-reminder',
+              title: `Challenge window open: ${challenge.title}`,
+              body: `${challenge.currentProgress}/${challenge.targetProgress} done, ${remaining} left${challenge.timeWindowEnd ? ` · Due by ${challenge.timeWindowEnd}` : ''}`,
+              triggerAtMs: startTs, dueAtMs: dueTs, categoryIdentifier: 'challenge-reminder',
             };
           })
           .filter((e): e is SmartReminderDraft => Boolean(e))
@@ -5957,6 +6084,21 @@ export default function App() {
             />
           ) : null}
 
+          <Text style={[styles.summaryMeta, { marginTop: 8 }]}>Time window — optional</Text>
+          <View style={styles.inlineButtonsRow}>
+            <Pressable style={[styles.secondaryButtonInline, { flex: 1 }]} onPress={() => openChallengeWindowPicker('createStart')}>
+              <Text style={styles.secondaryButtonText}>{challengeTimeWindowStart || 'Start time'}</Text>
+            </Pressable>
+            <Pressable style={[styles.secondaryButtonInline, { flex: 1 }]} onPress={() => openChallengeWindowPicker('createEnd')}>
+              <Text style={styles.secondaryButtonText}>{challengeTimeWindowEnd || 'End time'}</Text>
+            </Pressable>
+            {(challengeTimeWindowStart || challengeTimeWindowEnd) ? (
+              <Pressable style={styles.smallDangerButton} onPress={() => { setChallengeTimeWindowStart(''); setChallengeTimeWindowEnd(''); }}>
+                <Text style={styles.smallDangerButtonText}>✕</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
           <Pressable style={styles.primaryButton} onPress={() => void handleAddChallenge()}>
             <Text style={styles.primaryButtonText}>Add challenge</Text>
           </Pressable>
@@ -5989,37 +6131,86 @@ export default function App() {
           ) : (
             filteredChallenges.map((challenge) => {
               const percent = Math.min(100, Math.round((challenge.currentProgress / challenge.targetProgress) * 100));
+              const isEditing = editingChallengeId === challenge.id;
+
               return (
                 <View key={challenge.id} style={styles.itemCard}>
-                  <View style={styles.itemMain}>
-                    <Text style={styles.itemTitle}>{challenge.title}</Text>
-                    <Text style={styles.itemMeta}>{challenge.type} | {challenge.metric} | streak {challenge.currentStreak}</Text>
-
-                    <View style={styles.progressTrack}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          challenge.status === 'completed' ? styles.progressFillDone : undefined,
-                          { width: `${percent}%` },
-                        ]}
-                      />
+                  {isEditing ? (
+                    // ── Inline edit form ────────────────────────────────────
+                    <View>
+                      <Text style={styles.compactTitle}>Edit challenge</Text>
+                      <TextInput value={editChallengeTitle} onChangeText={setEditChallengeTitle} placeholder="Title" placeholderTextColor={COLORS.textMuted} style={styles.input} />
+                      <TextInput value={editChallengeTarget} onChangeText={setEditChallengeTarget} placeholder="Target count" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" style={styles.input} />
+                      <View style={styles.chipRow}>
+                        {(['daily', 'weekly', 'custom'] as ChallengeType[]).map((t) => (
+                          <Pressable key={t} style={[styles.chipButton, editChallengeType === t ? styles.chipButtonActive : undefined]} onPress={() => setEditChallengeType(t)}>
+                            <Text style={[styles.chipText, editChallengeType === t ? styles.chipTextActive : undefined]}>{t}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <View style={styles.chipRow}>
+                        {(['tasks', 'focus_sessions', 'focus_time', 'reviews'] as const).map((m) => (
+                          <Pressable key={m} style={[styles.chipButton, editChallengeMetric === m ? styles.chipButtonActive : undefined]} onPress={() => setEditChallengeMetric(m)}>
+                            <Text style={[styles.chipText, editChallengeMetric === m ? styles.chipTextActive : undefined]}>{m}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      {editChallengeMetric === 'focus_sessions' ? (
+                        <TextInput value={editChallengeMinMinutes} onChangeText={setEditChallengeMinMinutes} placeholder="Min minutes/session" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" style={styles.input} />
+                      ) : null}
+                      <Text style={[styles.summaryMeta, { marginTop: 8 }]}>Time window — optional</Text>
+                      <View style={styles.inlineButtonsRow}>
+                        <Pressable style={[styles.secondaryButtonInline, { flex: 1 }]} onPress={() => openChallengeWindowPicker('editStart')}>
+                          <Text style={styles.secondaryButtonText}>{editChallengeWindowStart || 'Start time'}</Text>
+                        </Pressable>
+                        <Pressable style={[styles.secondaryButtonInline, { flex: 1 }]} onPress={() => openChallengeWindowPicker('editEnd')}>
+                          <Text style={styles.secondaryButtonText}>{editChallengeWindowEnd || 'End time'}</Text>
+                        </Pressable>
+                        {(editChallengeWindowStart || editChallengeWindowEnd) ? (
+                          <Pressable style={styles.smallDangerButton} onPress={() => { setEditChallengeWindowStart(''); setEditChallengeWindowEnd(''); }}>
+                            <Text style={styles.smallDangerButtonText}>✕</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                      <View style={styles.inlineButtonsRow}>
+                        <Pressable style={styles.primaryButtonInline} onPress={() => void saveEditChallenge()}>
+                          <Text style={styles.primaryButtonText}>Save</Text>
+                        </Pressable>
+                        <Pressable style={styles.secondaryButtonInline} onPress={cancelEditChallenge}>
+                          <Text style={styles.secondaryButtonText}>Cancel</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                    <Text style={styles.progressMeta}>
-                      {challenge.currentProgress}/{challenge.targetProgress} ({percent}%)
-                    </Text>
-                  </View>
-
-                  <View style={styles.itemButtonsRow}>
-                    <Pressable style={styles.smallButton} onPress={() => void incrementChallenge(challenge.id)}>
-                      <Text style={styles.smallButtonText}>+1</Text>
-                    </Pressable>
-                    <Pressable style={styles.smallButton} onPress={() => void resetChallenge(challenge.id)}>
-                      <Text style={styles.smallButtonText}>Reset</Text>
-                    </Pressable>
-                    <Pressable style={styles.smallDangerButton} onPress={() => void deleteChallenge(challenge.id)}>
-                      <Text style={styles.smallDangerButtonText}>Delete</Text>
-                    </Pressable>
-                  </View>
+                  ) : (
+                    // ── Normal card view ────────────────────────────────────
+                    <>
+                      <View style={styles.itemMain}>
+                        <Text style={styles.itemTitle}>{challenge.title}</Text>
+                        <Text style={styles.itemMeta}>
+                          {challenge.type} · {challenge.metric} · streak {challenge.currentStreak}
+                          {challenge.timeWindowStart ? ` · ${challenge.timeWindowStart}${challenge.timeWindowEnd ? `–${challenge.timeWindowEnd}` : ''}` : ''}
+                        </Text>
+                        <View style={styles.progressTrack}>
+                          <View style={[styles.progressFill, challenge.status === 'completed' ? styles.progressFillDone : undefined, { width: `${percent}%` }]} />
+                        </View>
+                        <Text style={styles.progressMeta}>{challenge.currentProgress}/{challenge.targetProgress} ({percent}%)</Text>
+                      </View>
+                      <View style={styles.itemButtonsRow}>
+                        <Pressable style={styles.smallButton} onPress={() => void incrementChallenge(challenge.id)}>
+                          <Text style={styles.smallButtonText}>+1</Text>
+                        </Pressable>
+                        <Pressable style={styles.smallButton} onPress={() => startEditChallenge(challenge)}>
+                          <Text style={styles.smallButtonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable style={styles.smallButton} onPress={() => void resetChallenge(challenge.id)}>
+                          <Text style={styles.smallButtonText}>Reset</Text>
+                        </Pressable>
+                        <Pressable style={styles.smallDangerButton} onPress={() => void deleteChallenge(challenge.id)}>
+                          <Text style={styles.smallDangerButtonText}>Del</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  )}
                 </View>
               );
             })
