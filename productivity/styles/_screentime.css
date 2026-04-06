@@ -174,10 +174,11 @@
 
 .st-input {
     width: 100%;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: #1e1e3f !important;
+    border: 1px solid rgba(99,102,241,0.3) !important;
     border-radius: 8px;
-    color: #e5e7eb;
+    color: #e5e7eb !important;
+    -webkit-text-fill-color: #e5e7eb !important;
     font-size: 13px;
     padding: 8px 10px;
     box-sizing: border-box;
@@ -185,8 +186,8 @@
     outline: none;
     transition: border-color 0.15s;
 }
-.st-input:focus { border-color: #6366f1; }
-.st-input::placeholder { color: #6b7280; }
+.st-input:focus { border-color: #6366f1 !important; }
+.st-input::placeholder { color: #6b7280; opacity: 1; }
 
 .st-limit-presets {
     display: flex;
