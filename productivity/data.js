@@ -39,6 +39,7 @@ const STORAGE_KEYS = {
     REVISIONS: 'productivity_revisions',
     WEBSITE_TIME_LIMITS: 'productivity_website_time_limits',
     WEBSITE_DAILY_USAGE: 'productivity_website_daily_usage',
+    WEBSITE_USAGE_HISTORY: 'productivity_website_usage_history',
     DAY_REVIEW: 'productivity_day_review',
     DAY_REVIEW_CLOCK_FORMAT: 'productivity_day_review_clock_format',
     CHALLENGES: 'productivity_challenges',
@@ -1360,6 +1361,22 @@ const DataStore = {
             } else {
                 localStorage.removeItem(key);
                 resolve();
+            }
+        });
+    },
+
+    // Batch get — returns { [key]: value } map
+    async getMultiple(keys) {
+        return new Promise((resolve) => {
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.get(keys, (result) => resolve(result));
+            } else {
+                const out = {};
+                for (const k of keys) {
+                    const s = localStorage.getItem(k);
+                    out[k] = s ? JSON.parse(s) : null;
+                }
+                resolve(out);
             }
         });
     },

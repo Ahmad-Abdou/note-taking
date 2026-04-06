@@ -346,6 +346,9 @@ function navigateTo(page) {
         case 'blocker':
             if (typeof loadBlocker === 'function') loadBlocker();
             break;
+        case 'screentime':
+            if (typeof loadScreentime === 'function') loadScreentime();
+            break;
         case 'idle':
             if (typeof loadIdlePage === 'function') loadIdlePage();
             break;

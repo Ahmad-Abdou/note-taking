@@ -327,7 +327,10 @@ async function loadDailyUsage() {
         if (stored && stored.date === today) {
             timeTrackingState.dailyUsage = stored;
         } else {
-            // New day - reset usage
+            // New day — archive yesterday before resetting
+            if (stored && stored.date && Object.keys(stored.sites || {}).length > 0) {
+                await archiveDailyUsage(stored);
+            }
             timeTrackingState.dailyUsage = {
                 date: today,
                 sites: {},
@@ -338,6 +341,22 @@ async function loadDailyUsage() {
         console.log('[TimeTracker] Loaded daily usage for', today);
     } catch (e) {
         console.error('[TimeTracker] Error loading daily usage:', e);
+    }
+}
+
+// Archive a completed day's usage into history (keep last 30 days)
+async function archiveDailyUsage(dayUsage) {
+    try {
+        const result = await chrome.storage.local.get(['productivity_website_usage_history']);
+        const history = result.productivity_website_usage_history || [];
+        // Remove any existing entry for this date, then prepend
+        const filtered = history.filter(h => h.date !== dayUsage.date);
+        filtered.unshift({ date: dayUsage.date, sites: dayUsage.sites || {} });
+        // Keep last 30 days
+        const trimmed = filtered.slice(0, 30);
+        await chrome.storage.local.set({ productivity_website_usage_history: trimmed });
+    } catch (e) {
+        console.error('[TimeTracker] Error archiving daily usage:', e);
     }
 }
 
@@ -394,39 +413,35 @@ async function addTimeToCurrentDomain(minutes) {
     if (!timeTrackingState.currentDomain) return;
 
     const domain = normalizeDomain(timeTrackingState.currentDomain);
-    const limit = getTimeLimitForDomain(domain);
-
-    if (!limit) return; // Only track domains with limits
+    if (!domain) return;
 
     // Initialize if needed
     if (!timeTrackingState.dailyUsage.sites) {
         timeTrackingState.dailyUsage.sites = {};
     }
 
-    // Add time
+    // Track time for ALL domains
     const currentTime = timeTrackingState.dailyUsage.sites[domain] || 0;
     const newTime = currentTime + minutes;
     timeTrackingState.dailyUsage.sites[domain] = newTime;
 
-    console.log(`[TimeTracker] ${domain}: ${newTime}/${limit.dailyLimitMinutes} minutes`);
-
-    // Check if limit exceeded
-    if (newTime >= limit.dailyLimitMinutes && !isDomainBlockedForToday(domain)) {
-        console.log(`[TimeTracker] Time limit exceeded for ${domain}!`);
-
-        // Add to blocked list
-        if (!timeTrackingState.dailyUsage.blockedUntilNextDay) {
-            timeTrackingState.dailyUsage.blockedUntilNextDay = [];
+    // Enforce limit only for domains that have one
+    const limit = getTimeLimitForDomain(domain);
+    if (limit) {
+        console.log(`[TimeTracker] ${domain}: ${newTime.toFixed(1)}/${limit.dailyLimitMinutes} min`);
+        if (newTime >= limit.dailyLimitMinutes && !isDomainBlockedForToday(domain)) {
+            console.log(`[TimeTracker] Time limit exceeded for ${domain}!`);
+            if (!timeTrackingState.dailyUsage.blockedUntilNextDay) {
+                timeTrackingState.dailyUsage.blockedUntilNextDay = [];
+            }
+            if (!timeTrackingState.dailyUsage.blockedUntilNextDay.includes(domain)) {
+                timeTrackingState.dailyUsage.blockedUntilNextDay.push(domain);
+            }
+            await applyTimeLimitBlockRule(domain, newTime, limit.dailyLimitMinutes);
         }
-        if (!timeTrackingState.dailyUsage.blockedUntilNextDay.includes(domain)) {
-            timeTrackingState.dailyUsage.blockedUntilNextDay.push(domain);
-        }
-
-        // Apply block rule for this domain
-        await applyTimeLimitBlockRule(domain, newTime, limit.dailyLimitMinutes);
     }
 
-    // Save to storage
+    // Save to storage every interval (called every 30s anyway)
     await saveDailyUsage();
 }
 
@@ -514,19 +529,12 @@ async function trackCurrentTab() {
         const domain = normalizeDomain(tab.url);
         if (!domain || domain.startsWith('chrome') || domain.startsWith('edge')) return;
 
-        // Check if this domain has a time limit
-        const limit = getTimeLimitForDomain(domain);
-        if (!limit) {
-            timeTrackingState.currentDomain = null;
-            return;
-        }
-
-        // Check if already blocked
+        // Check if already blocked (skip tracking if blocked)
         if (isDomainBlockedForToday(domain)) {
             return;
         }
 
-        // Track time - add 0.5 minutes (30 seconds)
+        // Track time for ALL domains (0.5 minutes = 30 seconds)
         timeTrackingState.currentDomain = domain;
         await addTimeToCurrentDomain(0.5);
 
@@ -598,6 +606,20 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     if (changes.productivity_website_time_limits) {
         timeTrackingState.timeLimits = changes.productivity_website_time_limits.newValue || [];
         console.log('[TimeTracker] Time limits updated:', timeTrackingState.timeLimits.length);
+        // Re-apply any active block rules based on new limits + current usage
+        if (timeTrackingState.dailyUsage) {
+            for (const limit of timeTrackingState.timeLimits) {
+                const domain = normalizeDomain(limit.domain);
+                const spent = timeTrackingState.dailyUsage.sites?.[domain] || 0;
+                if (limit.isEnabled !== false && spent >= limit.dailyLimitMinutes && !isDomainBlockedForToday(domain)) {
+                    if (!timeTrackingState.dailyUsage.blockedUntilNextDay) timeTrackingState.dailyUsage.blockedUntilNextDay = [];
+                    if (!timeTrackingState.dailyUsage.blockedUntilNextDay.includes(domain)) {
+                        timeTrackingState.dailyUsage.blockedUntilNextDay.push(domain);
+                    }
+                    applyTimeLimitBlockRule(domain, spent, limit.dailyLimitMinutes);
+                }
+            }
+        }
     }
 
     if (changes.productivity_website_daily_usage) {
