@@ -14,6 +14,7 @@ let screentimeState = {
     todayUsage: null,   // { date, sites: {domain: minutes}, blockedUntilNextDay: [] }
     limits: [],         // [{ id, domain, dailyLimitMinutes, isEnabled }]
     history: [],        // [{ date, sites: {domain: minutes} }, …] last 30 days
+    pausedDomains: [],  // domains where the limit timer is paused
     view: 'today',      // 'today' | 'history'
     refreshInterval: null,
 };
@@ -26,6 +27,7 @@ async function screentimeLoad() {
         STORAGE_KEYS.WEBSITE_DAILY_USAGE,
         STORAGE_KEYS.WEBSITE_TIME_LIMITS,
         STORAGE_KEYS.WEBSITE_USAGE_HISTORY,
+        'productivity_screentime_paused',
     ];
     const result = await DataStore.getMultiple(keys);
     const today = getTodayYMD();
@@ -39,10 +41,30 @@ async function screentimeLoad() {
 
     screentimeState.limits = result[STORAGE_KEYS.WEBSITE_TIME_LIMITS] || [];
     screentimeState.history = result[STORAGE_KEYS.WEBSITE_USAGE_HISTORY] || [];
+    screentimeState.pausedDomains = result['productivity_screentime_paused'] || [];
 }
 
 async function screentimeSaveLimits() {
     await DataStore.set(STORAGE_KEYS.WEBSITE_TIME_LIMITS, screentimeState.limits);
+}
+
+async function screentimeSavePaused() {
+    await DataStore.set('productivity_screentime_paused', screentimeState.pausedDomains);
+}
+
+function isPaused(domain) {
+    return screentimeState.pausedDomains.includes(stNormalizeDomain(domain));
+}
+
+async function screentimeTogglePause(domain) {
+    domain = stNormalizeDomain(domain);
+    const idx = screentimeState.pausedDomains.indexOf(domain);
+    if (idx >= 0) {
+        screentimeState.pausedDomains.splice(idx, 1);
+    } else {
+        screentimeState.pausedDomains.push(domain);
+    }
+    await screentimeSavePaused();
 }
 
 function getTodayYMD() {
@@ -138,20 +160,28 @@ async function screentimeToggleLimit(id, enabled) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Render helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function makeBar(pct, color = '#6366f1') {
+function makeBar(pct, cssVar) {
     const clamped = Math.min(100, Math.max(0, pct));
-    return `<div class="st-bar-track"><div class="st-bar-fill" style="width:${clamped}%;background:${color}"></div></div>`;
+    return `<div class="st-bar-track"><div class="st-bar-fill" style="width:${clamped}%;background:var(${cssVar})"></div></div>`;
 }
 
 function domainFavicon(domain) {
     return `<img class="st-favicon" src="https://www.google.com/s2/favicons?sz=16&domain=${encodeURIComponent(domain)}" onerror="this.style.display='none'" alt="">`;
 }
 
-function barColor(pct, blocked) {
-    if (blocked) return '#ef4444';
-    if (pct >= 90) return '#f97316';
-    if (pct >= 70) return '#eab308';
-    return '#6366f1';
+// Returns { cssVar, badgeClass }
+function barMeta(pct, blocked, paused) {
+    if (blocked) return { cssVar: '--danger',  badgeClass: 'st-blocked' };
+    if (paused)  return { cssVar: '--warning', badgeClass: 'st-paused'  };
+    if (pct >= 90) return { cssVar: '--danger',  badgeClass: 'st-danger'  };
+    if (pct >= 70) return { cssVar: '--warning', badgeClass: 'st-warning' };
+    return { cssVar: '--primary', badgeClass: 'st-normal' };
+}
+
+function remainingChipClass(remainMin) {
+    if (remainMin <= 10) return 'crit';
+    if (remainMin <= 30) return 'low';
+    return '';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -178,12 +208,24 @@ function renderTodaySection() {
     const rows = entries.slice(0, 50).map(({ domain, min }) => {
         const limit = getLimitForDomain(domain);
         const blocked = isBlockedToday(domain);
+        const paused = isPaused(domain);
         const limitMin = limit ? limit.dailyLimitMinutes : null;
         const pct = limitMin ? (min / limitMin) * 100 : (min / totalMin) * 100;
-        const color = barColor(pct, blocked);
-        const limitLabel = limitMin
-            ? `<span class="st-limit-badge ${blocked ? 'st-blocked' : ''}">${blocked ? '🚫 Blocked' : fmtMinutes(min) + ' / ' + fmtMinutes(limitMin)}</span>`
-            : '';
+        const { cssVar, badgeClass } = barMeta(pct, blocked, paused);
+
+        let limitLabel = '';
+        if (limitMin) {
+            const remainMin = Math.max(0, limitMin - min);
+            if (blocked) {
+                limitLabel = `<span class="st-limit-badge st-blocked">🚫 Blocked for today</span>`;
+            } else if (paused) {
+                limitLabel = `<span class="st-limit-badge st-paused">⏸ Paused · ${fmtMinutes(remainMin)} left</span>`;
+            } else {
+                const chipClass = remainingChipClass(remainMin);
+                limitLabel = `<span class="st-limit-badge ${badgeClass}">${fmtMinutes(min)} / ${fmtMinutes(limitMin)}</span>
+                              <span class="st-remaining-chip ${chipClass}">${fmtMinutes(remainMin)} left</span>`;
+            }
+        }
 
         return `
             <div class="st-site-row">
@@ -193,11 +235,11 @@ function renderTodaySection() {
                     ${limitLabel}
                 </div>
                 <span class="st-site-time">${fmtMinutes(min)}</span>
-                <button class="st-icon-btn st-add-limit-btn" data-domain="${domain}" data-spent="${Math.round(min)}" title="Set time limit">
+                <button class="st-icon-btn st-add-limit-btn" data-domain="${domain}" title="Set time limit">
                     <i class="fas fa-stopwatch"></i>
                 </button>
             </div>
-            ${makeBar(pct, color)}`;
+            ${makeBar(pct, cssVar)}`;
     }).join('');
 
     return `
@@ -219,11 +261,26 @@ function renderLimitsSection() {
         : limits.map(limit => {
             const spent = getMinutesSpent(limit.domain);
             const blocked = isBlockedToday(limit.domain);
+            const paused = isPaused(limit.domain);
+            const remainMin = Math.max(0, limit.dailyLimitMinutes - spent);
             const pct = Math.min(100, (spent / limit.dailyLimitMinutes) * 100);
-            const color = barColor(pct, blocked);
-            const statusLabel = blocked
-                ? `<span class="st-limit-badge st-blocked">🚫 Blocked for today</span>`
-                : `<span class="st-limit-badge">${fmtMinutes(spent)} / ${fmtMinutes(limit.dailyLimitMinutes)}</span>`;
+            const { cssVar, badgeClass } = barMeta(pct, blocked, paused);
+
+            let statusLabel;
+            if (blocked) {
+                statusLabel = `<span class="st-limit-badge st-blocked">🚫 Blocked for today</span>`;
+            } else if (paused) {
+                statusLabel = `<span class="st-limit-badge st-paused">⏸ Paused</span>
+                               <span class="st-remaining-chip">${fmtMinutes(remainMin)} left</span>`;
+            } else {
+                const chipClass = remainingChipClass(remainMin);
+                statusLabel = `<span class="st-limit-badge ${badgeClass}">${fmtMinutes(spent)} / ${fmtMinutes(limit.dailyLimitMinutes)}</span>
+                               <span class="st-remaining-chip ${chipClass}">${fmtMinutes(remainMin)} left</span>`;
+            }
+
+            const pauseTitle = paused ? 'Resume limit' : 'Pause limit';
+            const pauseIcon = paused ? 'fa-play' : 'fa-pause';
+            const pauseClass = paused ? 'st-pause-active' : '';
 
             return `
                 <div class="st-limit-row">
@@ -233,6 +290,10 @@ function renderLimitsSection() {
                         ${statusLabel}
                     </div>
                     <div class="st-limit-actions">
+                        ${!blocked ? `
+                        <button class="st-icon-btn st-pause-limit-btn ${pauseClass}" data-domain="${limit.domain}" title="${pauseTitle}">
+                            <i class="fas ${pauseIcon}"></i>
+                        </button>` : ''}
                         <button class="st-icon-btn st-edit-limit-btn" data-id="${limit.id}" data-domain="${limit.domain}" data-minutes="${limit.dailyLimitMinutes}" title="Edit limit">
                             <i class="fas fa-edit"></i>
                         </button>
@@ -241,7 +302,7 @@ function renderLimitsSection() {
                         </button>
                     </div>
                 </div>
-                ${makeBar(pct, color)}`;
+                ${makeBar(pct, cssVar)}`;
         }).join('');
 
     return `
@@ -397,6 +458,20 @@ function attachScreentimeListeners() {
     container.querySelectorAll('.st-edit-limit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             openAddLimitForm(btn.dataset.domain, parseInt(btn.dataset.minutes, 10));
+        });
+    });
+
+    // Pause / Resume limit
+    container.querySelectorAll('.st-pause-limit-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const domain = btn.dataset.domain;
+            await screentimeTogglePause(domain);
+            await screentimeLoad();
+            renderScreentime();
+            const paused = isPaused(domain);
+            showToast?.(paused ? 'info' : 'success',
+                paused ? `Limit paused for ${domain}` : `Limit resumed for ${domain}`,
+                paused ? 'Time will not count toward the limit while paused.' : 'Time is counting again.');
         });
     });
 

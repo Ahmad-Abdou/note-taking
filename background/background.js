@@ -529,10 +529,12 @@ async function trackCurrentTab() {
         const domain = normalizeDomain(tab.url);
         if (!domain || domain.startsWith('chrome') || domain.startsWith('edge')) return;
 
-        // Check if already blocked (skip tracking if blocked)
-        if (isDomainBlockedForToday(domain)) {
-            return;
-        }
+        // Skip if blocked or limit is paused for this domain
+        if (isDomainBlockedForToday(domain)) return;
+
+        const pausedResult = await chrome.storage.local.get(['productivity_screentime_paused']);
+        const pausedDomains = pausedResult.productivity_screentime_paused || [];
+        if (pausedDomains.includes(domain)) return;
 
         // Track time for ALL domains (0.5 minutes = 30 seconds)
         timeTrackingState.currentDomain = domain;

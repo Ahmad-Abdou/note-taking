@@ -1,9 +1,10 @@
 /* ============================================================
-   SCREEN TIME — styles
+   SCREEN TIME — theme-aware styles
    ============================================================ */
 
 .screentime-root {
     padding: 0 0 24px;
+    color: var(--text-primary);
 }
 
 /* ── Tabs ──────────────────────────────────────────────────── */
@@ -11,7 +12,7 @@
     display: flex;
     gap: 4px;
     padding: 12px 16px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--border-color);
     margin-bottom: 16px;
 }
 
@@ -20,7 +21,7 @@
     border-radius: 8px 8px 0 0;
     border: none;
     background: transparent;
-    color: var(--text-muted, #9ca3af);
+    color: var(--text-secondary);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -29,33 +30,36 @@
     align-items: center;
     gap: 6px;
 }
-.st-tab:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+.st-tab:hover {
+    background: var(--primary-light);
+    color: var(--text-primary);
+}
 .st-tab.active {
-    background: rgba(99,102,241,0.15);
-    color: #a5b4fc;
-    border-bottom: 2px solid #6366f1;
+    background: var(--primary-light);
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+    font-weight: 600;
 }
 
 /* ── Panels ────────────────────────────────────────────────── */
 .st-panel {
     margin: 0 16px 16px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(99,102,241,0.15);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 16px;
 }
-.st-limits-panel { margin-top: 0; }
 
 .st-section-title {
     font-size: 14px;
     font-weight: 600;
-    color: #c7d2fe;
+    color: var(--text-primary);
     margin: 0 0 12px;
     display: flex;
     align-items: center;
     gap: 7px;
 }
-.st-section-title i { color: #6366f1; }
+.st-section-title i { color: var(--primary); }
 
 .st-section-header {
     display: flex;
@@ -71,11 +75,11 @@
     justify-content: space-between;
     align-items: center;
     padding: 6px 2px 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid var(--border-color);
     margin-bottom: 10px;
 }
-.st-total-label { font-size: 12px; color: #9ca3af; }
-.st-total-time { font-size: 20px; font-weight: 700; color: #a5b4fc; }
+.st-total-label { font-size: 12px; color: var(--text-secondary); }
+.st-total-time  { font-size: 20px; font-weight: 700; color: var(--primary); }
 
 /* ── Site rows ─────────────────────────────────────────────── */
 .st-site-list, .st-limits-list { display: flex; flex-direction: column; gap: 10px; }
@@ -105,7 +109,8 @@
 
 .st-site-name {
     font-size: 13px;
-    color: #e5e7eb;
+    font-weight: 500;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -114,71 +119,121 @@
 
 .st-site-time {
     font-size: 12px;
-    color: #9ca3af;
+    color: var(--text-secondary);
     white-space: nowrap;
     flex-shrink: 0;
 }
 
+/* ── Badges ────────────────────────────────────────────────── */
 .st-limit-badge {
     font-size: 10px;
-    padding: 2px 7px;
+    font-weight: 600;
+    padding: 2px 8px;
     border-radius: 10px;
-    background: rgba(99,102,241,0.15);
-    color: #a5b4fc;
     white-space: nowrap;
     flex-shrink: 0;
 }
-.st-limit-badge.st-blocked {
-    background: rgba(239,68,68,0.15);
-    color: #fca5a5;
+.st-limit-badge.st-normal {
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid var(--primary-glow);
 }
+.st-limit-badge.st-warning {
+    background: var(--warning-light);
+    color: var(--warning);
+    border: 1px solid rgba(245,158,11,0.3);
+}
+.st-limit-badge.st-danger {
+    background: var(--danger-light);
+    color: var(--danger);
+    border: 1px solid rgba(239,68,68,0.3);
+}
+.st-limit-badge.st-blocked {
+    background: var(--danger-light);
+    color: var(--danger);
+    border: 1px solid rgba(239,68,68,0.3);
+}
+.st-limit-badge.st-paused {
+    background: var(--warning-light);
+    color: var(--warning);
+    border: 1px solid rgba(245,158,11,0.3);
+}
+
+/* Time-remaining chip */
+.st-remaining-chip {
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 2px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.st-remaining-chip.low  { color: var(--warning); border-color: rgba(245,158,11,0.3); }
+.st-remaining-chip.crit { color: var(--danger);  border-color: rgba(239,68,68,0.3); }
 
 /* ── Progress bar ──────────────────────────────────────────── */
 .st-bar-track {
-    height: 4px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 2px;
+    height: 5px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
     overflow: hidden;
-    margin: 2px 0 2px;
+    margin: 3px 0 2px;
+    border: 1px solid var(--border-color);
 }
 .st-bar-fill {
     height: 100%;
-    border-radius: 2px;
+    border-radius: 3px;
     transition: width 0.4s ease;
 }
 
 /* ── Icon buttons ──────────────────────────────────────────── */
 .st-icon-btn {
     background: transparent;
-    border: none;
-    color: #6b7280;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
+    padding: 4px 7px;
     border-radius: 6px;
     font-size: 12px;
-    transition: color 0.15s, background 0.15s;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
     flex-shrink: 0;
 }
-.st-icon-btn:hover { color: #a5b4fc; background: rgba(99,102,241,0.1); }
-.st-limit-actions { display: flex; gap: 2px; }
+.st-icon-btn:hover {
+    color: var(--primary);
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+.st-icon-btn.st-pause-active {
+    color: var(--warning);
+    background: var(--warning-light);
+    border-color: rgba(245,158,11,0.4);
+}
+.st-limit-actions { display: flex; gap: 4px; align-items: center; }
 
 /* ── Add limit form ────────────────────────────────────────── */
 .st-add-limit-form {
     margin-top: 16px;
     padding: 14px;
-    background: rgba(99,102,241,0.07);
-    border: 1px solid rgba(99,102,241,0.2);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
     border-radius: 10px;
 }
-.st-form-title { font-size: 13px; color: #c7d2fe; margin: 0 0 10px; font-weight: 600; }
+.st-form-title {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin: 0 0 10px;
+    font-weight: 600;
+}
 
 .st-input {
     width: 100%;
-    background: #1e1e3f !important;
-    border: 1px solid rgba(99,102,241,0.3) !important;
+    background: var(--bg-input) !important;
+    border: 1px solid var(--border-light) !important;
     border-radius: 8px;
-    color: #e5e7eb !important;
-    -webkit-text-fill-color: #e5e7eb !important;
+    color: var(--text-primary) !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
     font-size: 13px;
     padding: 8px 10px;
     box-sizing: border-box;
@@ -186,8 +241,8 @@
     outline: none;
     transition: border-color 0.15s;
 }
-.st-input:focus { border-color: #6366f1 !important; }
-.st-input::placeholder { color: #6b7280; opacity: 1; }
+.st-input:focus { border-color: var(--primary) !important; }
+.st-input::placeholder { color: var(--text-muted); opacity: 1; }
 
 .st-limit-presets {
     display: flex;
@@ -198,16 +253,18 @@
 .st-preset-btn {
     padding: 5px 10px;
     font-size: 12px;
+    font-weight: 500;
     border-radius: 6px;
-    border: 1px solid rgba(99,102,241,0.25);
-    background: rgba(99,102,241,0.08);
-    color: #a5b4fc;
+    border: 1px solid var(--border-light);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .st-preset-btn:hover, .st-preset-btn.active {
-    background: rgba(99,102,241,0.25);
-    border-color: #6366f1;
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
 }
 
 .st-limit-custom-row {
@@ -218,10 +275,7 @@
 }
 .st-limit-minutes-input { flex: 1; margin-bottom: 0; }
 
-.st-form-buttons {
-    display: flex;
-    gap: 8px;
-}
+.st-form-buttons { display: flex; gap: 8px; }
 
 /* ── History ───────────────────────────────────────────────── */
 .st-hist-table { display: flex; flex-direction: column; gap: 2px; }
@@ -230,10 +284,11 @@
     display: grid;
     grid-template-columns: 90px 60px 1fr;
     font-size: 11px;
-    color: #6b7280;
+    color: var(--text-muted);
     padding: 4px 6px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    font-weight: 600;
 }
 
 .st-hist-row {
@@ -244,22 +299,19 @@
     border-radius: 7px;
     transition: background 0.12s;
 }
-.st-hist-row:hover { background: rgba(255,255,255,0.04); }
+.st-hist-row:hover { background: var(--bg-secondary); }
 
-.st-hist-date { font-size: 12px; color: #9ca3af; }
-.st-hist-total { font-size: 13px; font-weight: 600; color: #a5b4fc; }
-.st-hist-sites {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
+.st-hist-date  { font-size: 12px; color: var(--text-secondary); }
+.st-hist-total { font-size: 13px; font-weight: 600; color: var(--primary); }
+.st-hist-sites { display: flex; flex-wrap: wrap; gap: 6px; }
 .st-hist-site {
     display: flex;
     align-items: center;
     gap: 4px;
     font-size: 11px;
-    color: #9ca3af;
-    background: rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     padding: 2px 6px;
     border-radius: 6px;
 }
@@ -268,13 +320,24 @@
 .st-empty {
     text-align: center;
     padding: 24px 0 8px;
-    color: #6b7280;
+    color: var(--text-muted);
     font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
 }
-.st-hint { font-size: 11px; color: #6b7280; margin: 0; }
+.st-empty i { color: var(--text-muted); }
+.st-hint { font-size: 11px; color: var(--text-muted); margin: 0; }
 .st-loading {
     text-align: center;
     padding: 40px;
-    color: #6b7280;
+    color: var(--text-muted);
     font-size: 14px;
+}
+
+/* ── Divider between site rows ─────────────────────────────── */
+.st-site-list .st-bar-track,
+.st-limits-list .st-bar-track {
+    margin-bottom: 6px;
 }
