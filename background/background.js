@@ -44,6 +44,9 @@ const PROD_STORAGE_KEYS = {
 const PROD_NOTIF_ALARM_NAME = 'productivity_notifications_tick';
 const PROD_NOTIF_DEDUPE_KEY = 'productivity_notification_dedupe';
 
+const SCREENTIME_TICK_ALARM = 'screentime_tick';
+const SCREENTIME_MIDNIGHT_ALARM = 'screentime_midnight';
+
 function getTodayDateStr() {
     return new Date().toISOString().split('T')[0];
 }
@@ -292,9 +295,20 @@ async function initProductivityNotificationAlarms() {
     runProductivityNotificationTick();
 }
 
-chrome.alarms?.onAlarm?.addListener((alarm) => {
+chrome.alarms?.onAlarm?.addListener(async (alarm) => {
     if (alarm?.name === PROD_NOTIF_ALARM_NAME) {
         runProductivityNotificationTick();
+    }
+    if (alarm?.name === SCREENTIME_TICK_ALARM) {
+        await trackCurrentTab();
+    }
+    if (alarm?.name === SCREENTIME_MIDNIGHT_ALARM) {
+        // Reset daily usage for the new day
+        console.log('[TimeTracker] Midnight alarm fired — resetting daily usage');
+        await loadDailyUsage();
+        await clearTimeLimitBlockRules();
+        // Reschedule for the next midnight
+        scheduleScreentimeMidnightReset();
     }
 });
 
@@ -494,21 +508,34 @@ function hashCode(str) {
 
 // Start tracking time on active tab
 function startTimeTracking() {
-    // Track every 30 seconds (0.5 minutes)
+    // Use chrome.alarms instead of setInterval — alarms survive service worker restarts
     if (timeTrackingState.trackingInterval) {
         clearInterval(timeTrackingState.trackingInterval);
+        timeTrackingState.trackingInterval = null;
     }
 
-    timeTrackingState.trackingInterval = setInterval(async () => {
-        await trackCurrentTab();
-    }, 30000); // 30 seconds
+    // Create a repeating 1-minute alarm for tab tracking
+    chrome.alarms.create(SCREENTIME_TICK_ALARM, { periodInMinutes: 1 });
+
+    // Schedule midnight reset
+    scheduleScreentimeMidnightReset();
 
     // Also track on tab changes
     chrome.tabs.onActivated.addListener(handleTabChange);
     chrome.tabs.onUpdated.addListener(handleTabUpdate);
     chrome.windows.onFocusChanged.addListener(handleWindowFocus);
 
-    console.log('[TimeTracker] Time tracking started');
+    console.log('[TimeTracker] Time tracking started (alarm-based)');
+}
+
+// Schedule a one-shot alarm that fires at the next 00:00
+function scheduleScreentimeMidnightReset() {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0); // next midnight
+    const msUntilMidnight = midnight.getTime() - now.getTime();
+    chrome.alarms.create(SCREENTIME_MIDNIGHT_ALARM, { when: Date.now() + msUntilMidnight });
+    console.log(`[TimeTracker] Midnight reset alarm set for ${midnight.toLocaleString()}`);
 }
 
 // Handle tracking the current tab
@@ -521,6 +548,17 @@ async function trackCurrentTab() {
             await loadDailyUsage();
             await clearTimeLimitBlockRules();
         }
+
+        // Calculate elapsed minutes since last tick (handles service worker restarts)
+        const now = Date.now();
+        let elapsedMinutes = 1; // default: assume 1 minute per alarm tick
+        if (timeTrackingState.lastUpdateTime) {
+            const diffMs = now - timeTrackingState.lastUpdateTime;
+            const diffMin = diffMs / 60000;
+            // Clamp to [0.1, 2] minutes to ignore idle gaps > 2 min or sub-second noise
+            elapsedMinutes = Math.min(Math.max(diffMin, 0.1), 2);
+        }
+        timeTrackingState.lastUpdateTime = now;
 
         // Get active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -536,9 +574,9 @@ async function trackCurrentTab() {
         const pausedDomains = pausedResult.productivity_screentime_paused || [];
         if (pausedDomains.includes(domain)) return;
 
-        // Track time for ALL domains (0.5 minutes = 30 seconds)
+        // Track elapsed time for ALL domains
         timeTrackingState.currentDomain = domain;
-        await addTimeToCurrentDomain(0.5);
+        await addTimeToCurrentDomain(elapsedMinutes);
 
     } catch (error) {
         console.error('[TimeTracker] Track error:', error);
