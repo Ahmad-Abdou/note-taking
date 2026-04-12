@@ -51,12 +51,7 @@
 
     try {
         const runtimeId = chrome?.runtime?.id;
-        console.log('[EdgeNoteTaker][Content] build:', __EDGE_NOTE_TAKER_BUILD__, {
-            runtimeId,
-            href: location.href,
-            top: window === window.top,
-            frameId: runtimeId ? 'isolated/extension' : 'page'
-        });
+
         chrome.runtime.sendMessage({
             action: 'CONTENT_SCRIPT_HELLO',
             build: __EDGE_NOTE_TAKER_BUILD__,
@@ -66,10 +61,8 @@
         }, (resp) => {
             const err = chrome.runtime.lastError;
             if (err) {
-                console.log('[EdgeNoteTaker][Content] hello failed:', err.message);
                 return;
             }
-            console.log('[EdgeNoteTaker][Content] hello ok:', resp);
         });
     } catch (e) {
         // ignore
@@ -89,7 +82,6 @@
         window.addEventListener(evt, __edgeNoteTakerMarkGesture, { capture: true, passive: true });
     });
 
-    console.log('Edge Note Taker Content Script Loaded');
 
 // Initialize focus overlay monitoring after a short delay to ensure DOM is ready
 setTimeout(() => {
@@ -97,7 +89,6 @@ setTimeout(() => {
 }, 100);
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('[Content] Received message:', request.action);
 
     if (request.action === 'trigger_capture') {
         const selection = window.getSelection();
@@ -129,14 +120,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 sendResponse({ status: 'disabled' });
                 return;
             }
-            console.log('[Content] Task reminder request received:', request.message);
             showTaskReminderBanner(request.taskCount, request.message);
             sendResponse({ status: 'success' });
         });
         return true;
     } else if (request.action === 'show_focus_complete') {
         // Show focus session complete notification with sound
-        console.log('[Content] Focus complete notification:', request.message);
         showFocusCompleteBanner(request.message, request.playSound);
         sendResponse({ status: 'success' });
     } else if (request.action === 'FOCUS_SESSION_START') {
@@ -160,21 +149,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // ============================================
 
 function initFocusOverlayMonitor() {
-    console.log('[FocusOverlay] Initializing focus overlay monitor');
 
     // Check if there's an active focus session on page load
     chrome.storage.local.get(['focusSession', 'focusState', 'focusOverlaySettings'], (result) => {
-        console.log('[FocusOverlay] Initial check:', {
-            focusSession: result.focusSession?.isActive,
-            focusState: result.focusState?.isActive
-        });
+
 
         const isActive = (result.focusSession && result.focusSession.isActive) ||
             (result.focusState && result.focusState.isActive);
 
         if (isActive) {
             const settings = result.focusOverlaySettings || getDefaultOverlaySettings();
-            console.log('[FocusOverlay] Active session found, showing overlay with settings:', settings);
             if (settings.enabled) {
                 showFocusOverlay(settings);
             }
@@ -185,7 +169,6 @@ function initFocusOverlayMonitor() {
     chrome.storage.onChanged.addListener((changes, namespace) => {
         if (namespace !== 'local') return;
 
-        console.log('[FocusOverlay] Storage changed:', Object.keys(changes));
 
         if (changes.focusSession || changes.focusState) {
             const focusSession = changes.focusSession?.newValue;
@@ -194,18 +177,15 @@ function initFocusOverlayMonitor() {
             const isActive = (focusSession && focusSession.isActive) ||
                 (focusState && focusState.isActive);
 
-            console.log('[FocusOverlay] Focus state changed, isActive:', isActive);
 
             if (isActive) {
                 chrome.storage.local.get(['focusOverlaySettings'], (result) => {
                     const settings = result.focusOverlaySettings || getDefaultOverlaySettings();
                     if (settings.enabled) {
-                        console.log('[FocusOverlay] Showing overlay');
                         showFocusOverlay(settings);
                     }
                 });
             } else {
-                console.log('[FocusOverlay] Hiding overlay');
                 hideFocusOverlay();
             }
         }
@@ -231,10 +211,8 @@ function getDefaultOverlaySettings() {
 function showFocusOverlay(settings = {}) {
     settings = { ...getDefaultOverlaySettings(), ...settings };
 
-    console.log('[FocusOverlay] showFocusOverlay called with:', settings);
 
     if (!settings.enabled) {
-        console.log('[FocusOverlay] Overlay disabled, hiding');
         hideFocusOverlay();
         return;
     }
@@ -280,7 +258,6 @@ function showFocusOverlay(settings = {}) {
         ${boxShadowCSS ? `box-shadow: ${boxShadowCSS} !important;` : ''}
     `;
 
-    console.log('[FocusOverlay] Created overlay element with styles:', focusOverlayElement.style.cssText);
 
     // No animation - just static overlay
 
@@ -288,10 +265,7 @@ function showFocusOverlay(settings = {}) {
     const targetElement = document.body || document.documentElement;
     if (targetElement) {
         targetElement.appendChild(focusOverlayElement);
-        console.log('[FocusOverlay] Overlay appended to:', targetElement.tagName);
-    } else {
-        console.error('[FocusOverlay] No body or documentElement found!');
-    }
+    } 
 }
 
 function hideFocusOverlay() {
@@ -617,7 +591,6 @@ function showToast(message, type = 'success') {
 
 // Task Reminder Banner
 function showTaskReminderBanner(taskCount, message) {
-    console.log('[Content] showTaskReminderBanner called:', { taskCount, message });
 
     // Remove any legacy banners if present
     document.getElementById('edge-note-taker-reminder')?.remove();
@@ -648,7 +621,6 @@ function showTaskReminderBanner(taskCount, message) {
 
 // Focus Complete Banner (shown when focus session ends)
 function showFocusCompleteBanner(message, playSound = true) {
-    console.log('[Content] showFocusCompleteBanner called:', { message, playSound });
 
     document.getElementById('edge-note-taker-focus-complete')?.remove();
     document.getElementById('edge-note-taker-reminder')?.remove();
@@ -765,7 +737,6 @@ function highlightSelection() {
         selection.removeAllRanges();
         removeIcon();
     } catch (e) {
-        console.error('Highlight failed (likely due to complex selection or PDF):', e);
         alert('Cannot highlight this selection directly. Try adding it as a note instead.');
     }
 }

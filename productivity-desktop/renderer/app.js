@@ -3406,18 +3406,30 @@ function loadSettingsPage() {
 // NOTIFICATIONS PAGE
 // ============================================================================
 function loadNotificationsPage() {
-    if (!App.settings) return;
+    // Load from dedicated key first (most reliable), fall back to App.settings.
+    chrome.storage.local.get(['notificationPreferencesData'], (stored) => {
+        const dedicatedPrefs = stored?.notificationPreferencesData || null;
+        const settingsPrefs = App.settings?.notificationPreferences || null;
+        const runtimePrefs = window.NotificationState?.preferences || {};
 
-    // Merge saved settings with runtime NotificationState
-    const savedPrefs = App.settings.notificationPreferences || {};
-    const runtimePrefs = window.NotificationState?.preferences || {};
-    const notifPrefs = { ...runtimePrefs, ...savedPrefs };
+        // Priority: dedicatedPrefs > settingsPrefs > runtimePrefs (defaults)
+        const notifPrefs = { ...runtimePrefs, ...(settingsPrefs || {}), ...(dedicatedPrefs || {}) };
 
-    // Sync NotificationState with saved settings
-    if (window.NotificationState) {
-        Object.assign(window.NotificationState.preferences, savedPrefs);
-    }
+        // Sync NotificationState so notification code uses the latest values.
+        if (window.NotificationState) {
+            Object.assign(window.NotificationState.preferences, notifPrefs);
+        }
 
+        // If App.settings is loaded, keep it in sync too.
+        if (App.settings && dedicatedPrefs) {
+            App.settings.notificationPreferences = dedicatedPrefs;
+        }
+
+        _applyNotifPrefsToUI(notifPrefs);
+    });
+}
+
+function _applyNotifPrefsToUI(notifPrefs) {
     // Master toggle
     const notifyEnabled = document.getElementById('notify-enabled');
     if (notifyEnabled) notifyEnabled.checked = notifPrefs.enabled !== false;
@@ -3536,53 +3548,68 @@ function loadNotificationsPage() {
 }
 
 function setupNotificationAutoSave() {
-    // Only set up once
-    if (window._notificationAutoSaveSetup) return;
-    window._notificationAutoSaveSetup = true;
+    const notifPage = document.getElementById('page-notifications');
+    if (!notifPage) return;
+
+    // Use a flag on the element so it resets if the element is ever recreated,
+    // and avoids re-registering duplicate listeners on the same element.
+    if (notifPage._notifAutoSaveReady) return;
+    notifPage._notifAutoSaveReady = true;
+
+    const readPrefsFromUI = () => ({
+        enabled:        document.getElementById('notify-enabled')?.checked ?? true,
+        sound:          document.getElementById('notify-sound-enabled')?.checked ?? true,
+        soundType:      document.getElementById('notification-sound-type')?.value || 'reminder',
+        // Use parseInt with explicit radix; don't fall back to 70 so a real 0 is preserved
+        volume:         (parseInt(document.getElementById('notification-volume')?.value ?? '70', 10)) / 100,
+        breakReminders: document.getElementById('notify-breaks')?.checked ?? true,
+        taskReminders:  document.getElementById('notify-deadlines')?.checked ?? true,
+        focusAlerts:    document.getElementById('notify-focus')?.checked ?? true,
+        goalDeadlines:  document.getElementById('notify-goals')?.checked ?? true,
+        dailySummary:   document.getElementById('notify-summary')?.checked ?? true,
+        achievements:   document.getElementById('notify-achievements')?.checked ?? true,
+        streakReminders:document.getElementById('notify-streaks')?.checked ?? true
+    });
 
     const saveNotificationSettings = async () => {
-        const notifPrefs = {
-            enabled: document.getElementById('notify-enabled')?.checked !== false,
-            sound: document.getElementById('notify-sound-enabled')?.checked !== false,
-            soundType: document.getElementById('notification-sound-type')?.value || 'reminder',
-            volume: (parseInt(document.getElementById('notification-volume')?.value) || 70) / 100,
-            breakReminders: document.getElementById('notify-breaks')?.checked !== false,
-            taskReminders: document.getElementById('notify-deadlines')?.checked !== false,
-            focusAlerts: document.getElementById('notify-focus')?.checked !== false,
-            goalDeadlines: document.getElementById('notify-goals')?.checked !== false,
-            dailySummary: document.getElementById('notify-summary')?.checked !== false,
-            achievements: document.getElementById('notify-achievements')?.checked !== false,
-            streakReminders: document.getElementById('notify-streaks')?.checked !== false
-        };
+        const notifPrefs = readPrefsFromUI();
 
-        App.settings.notificationPreferences = notifPrefs;
-        App.settings.deadlineReminderMinutes = parseInt(document.getElementById('deadline-reminder-time')?.value) || 15;
-
+        // 1. Update runtime state immediately so other code sees the new values.
         if (window.NotificationState) {
             Object.assign(window.NotificationState.preferences, notifPrefs);
         }
 
-        // Keep the global task reminder toggle (used by background/content scripts)
-        // in sync with the Notifications page UI.
+        // 2. Save to a dedicated key so the prefs survive App.settings reloads.
         try {
-            const taskRemindersEnabled = (notifPrefs.enabled !== false) && (notifPrefs.taskReminders !== false);
-            await chrome.storage.local.set({ taskRemindersEnabled });
+            await chrome.storage.local.set({ notificationPreferencesData: notifPrefs });
+        } catch (e) { /* ignore */ }
+
+        // 3. Also mirror into App.settings + the main settings store.
+        try {
+            if (App.settings) {
+                App.settings.notificationPreferences = notifPrefs;
+                App.settings.deadlineReminderMinutes =
+                    parseInt(document.getElementById('deadline-reminder-time')?.value ?? '15', 10) || 15;
+                await ProductivityData.DataStore.saveSettings(App.settings);
+            }
         } catch (e) {
-            // ignore
+            console.error('[NotifSettings] Failed to save settings:', e);
         }
 
-        await ProductivityData.DataStore.saveSettings(App.settings);
+        // 4. Keep background task-reminder toggle in sync.
+        try {
+            const taskRemindersEnabled =
+                (notifPrefs.enabled !== false) && (notifPrefs.taskReminders !== false);
+            await chrome.storage.local.set({ taskRemindersEnabled });
+        } catch (e) { /* ignore */ }
     };
 
-    // Auto-save on change for toggles and selects
-    const notifPage = document.getElementById('page-notifications');
-    if (!notifPage) return;
-
+    // Attach change listeners to all toggles and selects on the page.
     notifPage.querySelectorAll('input[type="checkbox"], select').forEach(el => {
         el.addEventListener('change', saveNotificationSettings);
     });
 
-    // Volume slider
+    // Volume slider: live display update + save on release.
     const volumeSlider = document.getElementById('notification-volume');
     const volumeDisplay = document.getElementById('volume-display');
     if (volumeSlider) {
@@ -3595,7 +3622,7 @@ function setupNotificationAutoSave() {
     // Test sound button
     document.getElementById('test-sound-btn')?.addEventListener('click', () => {
         const soundType = document.getElementById('notification-sound-type')?.value || 'reminder';
-        const volume = (parseInt(document.getElementById('notification-volume')?.value) || 70) / 100;
+        const volume = parseInt(document.getElementById('notification-volume')?.value ?? '70', 10) / 100;
         if (window.NotificationSounds) {
             window.NotificationSounds.play(soundType, volume);
         }

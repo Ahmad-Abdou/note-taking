@@ -317,7 +317,35 @@ async function initTimeTracking() {
     console.log('[TimeTracker] Initializing...');
     await loadTimeLimits();
     await loadDailyUsage();
+    // Re-apply DNR block rules for any domains that were blocked before the
+    // service worker was restarted (DNR rules cleared on extension reload).
+    await reapplyBlockRulesFromStorage();
     startTimeTracking();
+}
+
+// Re-apply block rules for domains already in blockedUntilNextDay
+// (needed after service worker or browser restart when extension was reloaded)
+async function reapplyBlockRulesFromStorage() {
+    try {
+        const blocked = timeTrackingState.dailyUsage?.blockedUntilNextDay || [];
+        if (blocked.length === 0) return;
+
+        // Check which rules are already active to avoid duplicates
+        const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+        const existingRuleIds = new Set(existingRules.map(r => r.id));
+
+        for (const domain of blocked) {
+            const ruleId = 10000 + Math.abs(hashCode(domain) % 10000);
+            if (!existingRuleIds.has(ruleId)) {
+                const spent = timeTrackingState.dailyUsage?.sites?.[domain] || 0;
+                const limit = getTimeLimitForDomain(domain);
+                await applyTimeLimitBlockRule(domain, spent, limit?.dailyLimitMinutes || spent);
+                console.log(`[TimeTracker] Re-applied block rule for ${domain}`);
+            }
+        }
+    } catch (e) {
+        console.error('[TimeTracker] Error re-applying block rules:', e);
+    }
 }
 
 // Load time limits from storage
@@ -341,10 +369,11 @@ async function loadDailyUsage() {
         if (stored && stored.date === today) {
             timeTrackingState.dailyUsage = stored;
         } else {
-            // New day — archive yesterday before resetting
+            // New day — archive yesterday before resetting, and clear old block rules
             if (stored && stored.date && Object.keys(stored.sites || {}).length > 0) {
                 await archiveDailyUsage(stored);
             }
+            await clearTimeLimitBlockRules();
             timeTrackingState.dailyUsage = {
                 date: today,
                 sites: {},
@@ -471,16 +500,16 @@ async function applyTimeLimitBlockRule(domain, usedMinutes, limitMinutes) {
             });
         } catch (e) { }
 
-        // Add blocking rule
+        const blockedUrl = `/productivity/blocked.html?site=${encodeURIComponent(domain)}&reason=time_limit&usage=${Math.round(usedMinutes)}&limit=${limitMinutes}`;
+
+        // Add blocking rule (persists across navigations and service worker restarts)
         await chrome.declarativeNetRequest.updateDynamicRules({
             addRules: [{
                 id: ruleId,
                 priority: 2, // Higher priority than regular blocks
                 action: {
                     type: 'redirect',
-                    redirect: {
-                        extensionPath: `/productivity/blocked.html?site=${encodeURIComponent(domain)}&reason=time_limit&usage=${usedMinutes}&limit=${limitMinutes}`
-                    }
+                    redirect: { extensionPath: blockedUrl }
                 },
                 condition: {
                     urlFilter: `||${domain}`,
@@ -488,6 +517,19 @@ async function applyTimeLimitBlockRule(domain, usedMinutes, limitMinutes) {
                 }
             }]
         });
+
+        // Immediately redirect any already-open tabs for this domain
+        try {
+            const tabs = await chrome.tabs.query({});
+            const redirectTarget = chrome.runtime.getURL(blockedUrl);
+            for (const tab of tabs) {
+                if (!tab.url) continue;
+                const tabDomain = normalizeDomain(tab.url);
+                if (tabDomain === domain || tabDomain.endsWith('.' + domain)) {
+                    await chrome.tabs.update(tab.id, { url: redirectTarget });
+                }
+            }
+        } catch (e) { /* Non-fatal: tab redirect is best-effort */ }
 
         console.log(`[TimeTracker] Blocking rule applied for ${domain}`);
     } catch (error) {
@@ -663,7 +705,19 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     }
 
     if (changes.productivity_website_daily_usage) {
-        timeTrackingState.dailyUsage = changes.productivity_website_daily_usage.newValue;
+        const oldData = changes.productivity_website_daily_usage.oldValue;
+        const newData = changes.productivity_website_daily_usage.newValue;
+        timeTrackingState.dailyUsage = newData;
+
+        // If any domains were removed from blockedUntilNextDay, remove their DNR rules
+        const oldBlocked = oldData?.blockedUntilNextDay || [];
+        const newBlocked = newData?.blockedUntilNextDay || [];
+        const unblocked = oldBlocked.filter(d => !newBlocked.includes(d));
+        for (const domain of unblocked) {
+            const ruleId = 10000 + Math.abs(hashCode(domain) % 10000);
+            chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [ruleId] }).catch(() => {});
+            console.log(`[TimeTracker] DNR rule removed — ${domain} unblocked`);
+        }
     }
 });
 

@@ -42,6 +42,7 @@
             this.state = {
                 activeGoalId: this.defaultGoals[0]?.id || 'default',
                 activeView: 'monthly', // 'weekly' | 'monthly' | 'yearly' | 'custom'
+                periodOffset: 0,       // 0 = current period, -1 = one period back, etc.
                 isManageOpen: false,
                 editingGoalId: null,
                 data: { version: 2, goalsMeta: [], goals: {} }
@@ -58,6 +59,8 @@
             this._handleAddHabit = this._handleAddHabit.bind(this);
             this._handleReasonsTimelineClick = this._handleReasonsTimelineClick.bind(this);
             this._handleExternalDataChanged = this._handleExternalDataChanged.bind(this);
+            this._handleNavPrev = this._handleNavPrev.bind(this);
+            this._handleNavNext = this._handleNavNext.bind(this);
         }
 
         async init() {
@@ -318,6 +321,7 @@
                 };
                 if (stored.activeView) this.state.activeView = stored.activeView;
                 if (stored.activeGoalId) this.state.activeGoalId = stored.activeGoalId;
+                this.state.periodOffset = 0; // always start at current period on open
             }
         }
 
@@ -578,6 +582,37 @@
             controls.appendChild(goalLabel);
             controls.appendChild(manageBtn);
             controls.appendChild(viewTabs);
+
+            // Period navigation (prev / label / next) — hidden in custom view
+            if (this.state.activeView !== 'custom') {
+                const periodNav = document.createElement('div');
+                periodNav.className = 'habit-period-nav';
+
+                const prevBtn = document.createElement('button');
+                prevBtn.type = 'button';
+                prevBtn.className = 'habit-period-nav-btn';
+                prevBtn.setAttribute('aria-label', 'Previous period');
+                prevBtn.innerHTML = '&#8249;'; // ‹
+                prevBtn.addEventListener('click', this._handleNavPrev);
+
+                const periodLabel = document.createElement('span');
+                periodLabel.className = 'habit-period-label';
+                periodLabel.textContent = this._getPeriodLabel();
+
+                const nextBtn = document.createElement('button');
+                nextBtn.type = 'button';
+                nextBtn.className = 'habit-period-nav-btn';
+                nextBtn.setAttribute('aria-label', 'Next period');
+                nextBtn.innerHTML = '&#8250;'; // ›
+                nextBtn.disabled = (this.state.periodOffset || 0) >= 0;
+                nextBtn.addEventListener('click', this._handleNavNext);
+
+                periodNav.appendChild(prevBtn);
+                periodNav.appendChild(periodLabel);
+                periodNav.appendChild(nextBtn);
+                controls.appendChild(periodNav);
+            }
+
             controls.appendChild(dateControls);
             controls.appendChild(exportBtn);
             controls.appendChild(importBtn);
@@ -1195,7 +1230,7 @@
             const goalData = this.state.data.goals[goalId];
             if (!goalData) return false;
 
-            const range = this._getDateRangeForView(view);
+            const range = this._getDateRangeForView(view, this._getShiftedAnchor());
             if (!range) return false;
 
             const changed = goalData.startDate !== range.startDate || goalData.endDate !== range.endDate;
@@ -1226,11 +1261,70 @@
             this.render();
         }
 
+        // Returns a Date shifted by periodOffset periods from today
+        _getShiftedAnchor() {
+            const today = new Date();
+            const offset = this.state.periodOffset || 0;
+            if (offset === 0) return today;
+            const view = this.state.activeView;
+            if (view === 'weekly') {
+                const d = new Date(today);
+                d.setDate(d.getDate() + offset * 7);
+                return d;
+            }
+            if (view === 'monthly') {
+                return new Date(today.getFullYear(), today.getMonth() + offset, 1);
+            }
+            if (view === 'yearly') {
+                return new Date(today.getFullYear() + offset, 0, 1);
+            }
+            return today;
+        }
+
+        // Human-readable label for the current period (e.g. "April 2026", "Week of Mar 30")
+        _getPeriodLabel() {
+            if (this.state.activeView === 'custom') return '';
+            const anchor = this._getShiftedAnchor();
+            const view = this.state.activeView;
+            if (view === 'weekly') {
+                const ws = this._alignToWeekStart(anchor);
+                const we = this._alignToWeekEnd(anchor);
+                const opts = { month: 'short', day: 'numeric' };
+                return `${ws.toLocaleDateString(undefined, opts)} – ${we.toLocaleDateString(undefined, opts)}`;
+            }
+            if (view === 'monthly') {
+                return anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+            }
+            if (view === 'yearly') {
+                return String(anchor.getFullYear());
+            }
+            return '';
+        }
+
+        async _handleNavPrev() {
+            if (this.state.activeView === 'custom') return;
+            this.state.periodOffset = (this.state.periodOffset || 0) - 1;
+            this._applyViewRangeToAllGoals(this.state.activeView);
+            await this._save();
+            this.render();
+        }
+
+        async _handleNavNext() {
+            if (this.state.activeView === 'custom') return;
+            const next = (this.state.periodOffset || 0) + 1;
+            if (next > 0) return; // don't navigate into the future
+            this.state.periodOffset = next;
+            this._applyViewRangeToAllGoals(this.state.activeView);
+            await this._save();
+            this.render();
+        }
+
         async _handleViewChange(e) {
             const view = e.target.getAttribute('data-view');
             if (!view) return;
 
             this.state.activeView = view;
+            this.state.periodOffset = 0; // reset to current period when switching view
 
             // Keep all goals/challenges in sync with the currently selected period view.
             this._applyViewRangeToAllGoals(view);

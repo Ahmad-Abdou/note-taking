@@ -135,21 +135,34 @@ async function screentimeAddOrUpdateLimit(domain, dailyLimitMinutes) {
         });
     }
     await screentimeSaveLimits();
-    // If limit is already exceeded, block immediately
     const spent = getMinutesSpent(domain);
     if (spent >= dailyLimitMinutes) {
+        // Still over limit — ensure it's blocked
         const usage = screentimeState.todayUsage;
         if (usage && !isBlockedToday(domain)) {
             usage.blockedUntilNextDay = usage.blockedUntilNextDay || [];
             usage.blockedUntilNextDay.push(domain);
             await DataStore.set(STORAGE_KEYS.WEBSITE_DAILY_USAGE, usage);
         }
+    } else if (isBlockedToday(domain)) {
+        // New limit is now higher than time spent — unblock
+        await screentimeUnblockDomain(domain);
     }
 }
 
 async function screentimeRemoveLimit(id) {
     screentimeState.limits = screentimeState.limits.filter(l => l.id !== id);
     await screentimeSaveLimits();
+}
+
+// Remove a domain from today's block list (unblocks the site for the rest of the day)
+async function screentimeUnblockDomain(domain) {
+    domain = stNormalizeDomain(domain);
+    const usage = screentimeState.todayUsage;
+    if (!usage) return;
+    usage.blockedUntilNextDay = (usage.blockedUntilNextDay || []).filter(d => d !== domain);
+    screentimeState.todayUsage = usage;
+    await DataStore.set(STORAGE_KEYS.WEBSITE_DAILY_USAGE, usage);
 }
 
 async function screentimeToggleLimit(id, enabled) {
@@ -290,10 +303,13 @@ function renderLimitsSection() {
                         ${statusLabel}
                     </div>
                     <div class="st-limit-actions">
-                        ${!blocked ? `
+                        ${blocked ? `
+                        <button class="st-icon-btn st-unblock-btn" data-domain="${limit.domain}" title="Unblock for rest of today">
+                            <i class="fas fa-lock-open"></i>
+                        </button>` : `
                         <button class="st-icon-btn st-pause-limit-btn ${pauseClass}" data-domain="${limit.domain}" title="${pauseTitle}">
                             <i class="fas ${pauseIcon}"></i>
-                        </button>` : ''}
+                        </button>`}
                         <button class="st-icon-btn st-edit-limit-btn" data-id="${limit.id}" data-domain="${limit.domain}" data-minutes="${limit.dailyLimitMinutes}" title="Edit limit">
                             <i class="fas fa-edit"></i>
                         </button>
@@ -458,6 +474,17 @@ function attachScreentimeListeners() {
     container.querySelectorAll('.st-edit-limit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             openAddLimitForm(btn.dataset.domain, parseInt(btn.dataset.minutes, 10));
+        });
+    });
+
+    // Unblock blocked domain for the rest of today
+    container.querySelectorAll('.st-unblock-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const domain = btn.dataset.domain;
+            await screentimeUnblockDomain(domain);
+            await screentimeLoad();
+            renderScreentime();
+            showToast?.('success', `${domain} unblocked`, 'Site is accessible again until midnight.');
         });
     });
 
