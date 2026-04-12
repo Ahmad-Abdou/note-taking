@@ -6132,7 +6132,11 @@ export default function App() {
           </View>
 
           {filteredChallenges.length === 0 ? (
-            <Text style={styles.mutedText}>No challenges for this filter.</Text>
+            <View style={styles.emptyStateCenter}>
+              <Text style={styles.emptyStateIcon}>🏆</Text>
+              <Text style={styles.emptyStateTitle}>No challenges yet</Text>
+              <Text style={styles.mutedText}>Create a challenge to start tracking progress!</Text>
+            </View>
           ) : (
             filteredChallenges.map((challenge) => {
               const percent = Math.min(100, Math.round((challenge.currentProgress / challenge.targetProgress) * 100));
@@ -7527,6 +7531,21 @@ const styles = StyleSheet.create({
   mutedText: {
     color: COLORS.textSecondary,
     fontSize: 13,
+  },
+  emptyStateCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  emptyStateIcon: {
+    fontSize: 40,
+    marginBottom: 4,
+  },
+  emptyStateTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
   },
   reminderPreviewBox: {
     borderWidth: 1,

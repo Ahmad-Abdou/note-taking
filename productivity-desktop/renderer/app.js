@@ -132,6 +132,25 @@ function setupLiveRefreshListeners() {
         }
     });
 
+    // After a silent background cloud import, refresh the active page so
+    // the user sees up-to-date data without a full page reload.
+    window.addEventListener('productivity:data-synced', () => {
+        // Reload the dashboard in-memory state (tasks, goals, stats, etc.)
+        loadDashboard().catch(() => {});
+
+        // Refresh habit tracker if it's running
+        if (window.habitTrackerInstance?.syncExternalDailyItems) {
+            window.habitTrackerInstance.syncExternalDailyItems().catch(() => {});
+        }
+
+        // Re-render the currently active page
+        const activePage = document.querySelector('.nav-item.active')?.dataset?.page
+            || document.querySelector('.page.active')?.id?.replace('page-', '');
+        if (activePage && typeof navigateTo === 'function') {
+            navigateTo(activePage);
+        }
+    });
+
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden && dashboardRefreshPending) {
             queueDashboardRefresh({ immediate: true });

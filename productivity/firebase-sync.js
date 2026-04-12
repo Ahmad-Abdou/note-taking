@@ -619,7 +619,10 @@
         googleBtn.addEventListener('click', () => {
             setStatus('Signing in with Google…', 'info');
             signInWithGoogle()
-                .then(() => setStatus('Signed in. Click Sync Now.', 'success'))
+                .then(() => {
+                    setStatus('Signed in. Syncing…', 'info');
+                    syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
+                })
                 .catch((err) => {
                     console.error(err);
                     setStatus(err.message || 'Google sign-in failed.', 'error');
@@ -629,7 +632,10 @@
         emailSignInBtn.addEventListener('click', () => {
             setStatus('Signing in…', 'info');
             signInWithEmail()
-                .then(() => setStatus('Signed in. Click Sync Now.', 'success'))
+                .then(() => {
+                    setStatus('Signed in. Syncing…', 'info');
+                    syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
+                })
                 .catch((err) => {
                     console.error(err);
                     setStatus(err.message || 'Email sign-in failed.', 'error');
@@ -639,7 +645,10 @@
         signupBtn.addEventListener('click', () => {
             setStatus('Creating account…', 'info');
             createAccount()
-                .then(() => setStatus('Account created. Click Sync Now.', 'success'))
+                .then(() => {
+                    setStatus('Account created. Syncing…', 'info');
+                    syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
+                })
                 .catch((err) => {
                     console.error(err);
                     setStatus(err.message || 'Create account failed.', 'error');
