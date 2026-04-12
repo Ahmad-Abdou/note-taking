@@ -19,8 +19,7 @@
     box-shadow: var(--shadow-md);
     padding: var(--spacing-md);
     max-width: 100%;
-    overflow-x: hidden;
-    overflow-y: hidden;
+    overflow: visible;
     width: 100%;
     min-width: 0;
     position: relative;

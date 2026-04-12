@@ -1252,12 +1252,7 @@
         async _handleGoalChange(e) {
             const nextGoal = e.target.value;
             this.state.activeGoalId = nextGoal;
-
-            const changed = this._applyViewRangeToGoal(nextGoal, this.state.activeView);
-            if (changed) {
-                await this._save();
-            }
-
+            await this._save();
             this.render();
         }
 
@@ -1304,7 +1299,6 @@
         async _handleNavPrev() {
             if (this.state.activeView === 'custom') return;
             this.state.periodOffset = (this.state.periodOffset || 0) - 1;
-            this._applyViewRangeToAllGoals(this.state.activeView);
             await this._save();
             this.render();
         }
@@ -1314,7 +1308,6 @@
             const next = (this.state.periodOffset || 0) + 1;
             if (next > 0) return; // don't navigate into the future
             this.state.periodOffset = next;
-            this._applyViewRangeToAllGoals(this.state.activeView);
             await this._save();
             this.render();
         }
@@ -1325,9 +1318,6 @@
 
             this.state.activeView = view;
             this.state.periodOffset = 0; // reset to current period when switching view
-
-            // Keep all goals/challenges in sync with the currently selected period view.
-            this._applyViewRangeToAllGoals(view);
 
             await this._save();
             this.render();
@@ -1926,7 +1916,7 @@
         // --- Helpers ---
 
         _getActiveGoalRange() {
-            return this.state.data.goals[this.state.activeGoalId] || {
+            const goalData = this.state.data.goals[this.state.activeGoalId] || {
                 startDate: this._addDaysIso(this._isoToday(), -30),
                 endDate: this._isoToday(),
                 completed: {},
@@ -1934,6 +1924,19 @@
                 challengeDayStatus: {},
                 challengeTimeWindow: null
             };
+
+            // For non-custom views always compute the date range from activeView +
+            // periodOffset so switching tabs immediately shows the right grid,
+            // regardless of what was persisted in the goal's stored dates.
+            if (this.state.activeView !== 'custom') {
+                const anchor = this._getShiftedAnchor();
+                const range = this._getDateRangeForView(this.state.activeView, anchor);
+                if (range) {
+                    return { ...goalData, startDate: range.startDate, endDate: range.endDate };
+                }
+            }
+
+            return goalData;
         }
 
         _isChallengeTimingHabit(goalId) {
