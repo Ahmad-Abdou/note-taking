@@ -62,6 +62,18 @@ const ScheduleState = {
         originalStartTime: null,
         originalEndTime: null
     },
+    // Drag-to-create state
+    dragCreateState: {
+        isDragging: false,
+        column: null,
+        date: null,
+        startY: 0,
+        currentY: 0,
+        previewEl: null,
+        pxPerHour: 50,
+        startHour: 6
+    },
+    dragCreateJustFinished: false,
     ui: {
         sidebarTasksExpanded: false,
         filtersCollapsed: true // Filters collapsed by default
@@ -306,6 +318,9 @@ async function loadSchedule() {
 
             // Setup event resize functionality
             setupEventResize();
+
+            // Setup drag-to-create task functionality
+            setupDragToCreateTask();
         } catch (err) {
             console.error('Error during schedule setup:', err);
         }
@@ -631,9 +646,13 @@ function setupScheduleListeners() {
                 return;
             }
 
-            // Handle hour slot click (week view)
+            // Handle hour slot click (week view) - skip if drag-create just finished
             const hourSlot = e.target.closest('.hour-slot[data-hour]');
             if (hourSlot) {
+                if (ScheduleState.dragCreateJustFinished) {
+                    ScheduleState.dragCreateJustFinished = false;
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const date = hourSlot.dataset.date;
@@ -643,9 +662,13 @@ function setupScheduleListeners() {
                 return;
             }
 
-            // Handle day hour slot click
+            // Handle day hour slot click - skip if drag-create just finished
             const dayHourSlot = e.target.closest('.day-hour-slot[data-hour]');
             if (dayHourSlot) {
+                if (ScheduleState.dragCreateJustFinished) {
+                    ScheduleState.dragCreateJustFinished = false;
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 const dayColumn = dayHourSlot.closest('.day-events-column');
@@ -1482,6 +1505,169 @@ async function updateTaskTime(taskId, startTime, endTime) {
     } catch (e) {
         console.error('Failed to update task time:', e);
     }
+}
+
+// ============================================================================
+// DRAG TO CREATE TASK
+// ============================================================================
+function setupDragToCreateTask() {
+    // Guard to prevent duplicate listeners
+    if (ScheduleState.dragCreateListenersInitialized) return;
+    ScheduleState.dragCreateListenersInitialized = true;
+
+    const calendarGrid = document.getElementById('calendar-grid');
+    if (!calendarGrid) return;
+
+    // Helper: get the column container and pixel-per-hour for the current slot
+    function getColumnInfo(target) {
+        // Week view: .hour-slot inside .calendar-day-column
+        const hourSlot = target.closest('.hour-slot[data-hour]');
+        if (hourSlot) {
+            const col = hourSlot.closest('.calendar-day-column');
+            return col ? { column: col, date: col.dataset.date, pxPerHour: 50, startHour: 6, slotSelector: '.hour-slot' } : null;
+        }
+        // Day view: .day-hour-slot inside .day-events-column
+        const daySlot = target.closest('.day-hour-slot[data-hour]');
+        if (daySlot) {
+            const col = daySlot.closest('.day-events-column') || daySlot.closest('.day-events-container');
+            if (!col) return null;
+            const dateEl = col.closest('[data-date]') || col;
+            return { column: col, date: dateEl.dataset.date || new Date().toISOString().split('T')[0], pxPerHour: 60, startHour: 6, slotSelector: '.day-hour-slot' };
+        }
+        return null;
+    }
+
+    // Helper: convert Y offset (relative to column top) to snapped time string
+    function yToTime(y, pxPerHour, startHour) {
+        const totalMinutes = (y / pxPerHour) * 60 + startHour * 60;
+        const snapped = Math.round(totalMinutes / 15) * 15;
+        const clamped = Math.max(startHour * 60, Math.min(snapped, 23 * 60 + 45));
+        const h = Math.floor(clamped / 60);
+        const m = clamped % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    // Helper: convert time string to Y offset
+    function timeToY(timeStr, pxPerHour, startHour) {
+        const [h, m] = timeStr.split(':').map(Number);
+        return ((h - startHour) * 60 + m) * (pxPerHour / 60);
+    }
+
+    // MOUSEDOWN
+    calendarGrid.addEventListener('mousedown', function(e) {
+        // Only left mouse button
+        if (e.button !== 0) return;
+        // Don't start if clicking on an existing event or resize handle
+        if (e.target.closest('.calendar-event') || e.target.closest('.day-event') || e.target.closest('.resize-handle')) return;
+        // Don't start if a resize is in progress
+        if (ScheduleState.resizeState.isResizing) return;
+
+        const info = getColumnInfo(e.target);
+        if (!info) return;
+
+        const colRect = info.column.getBoundingClientRect();
+        const relY = e.clientY - colRect.top + info.column.scrollTop;
+
+        const state = ScheduleState.dragCreateState;
+        state.isDragging = true;
+        state.column = info.column;
+        state.date = info.date;
+        state.startY = relY;
+        state.currentY = relY;
+        state.pxPerHour = info.pxPerHour;
+        state.startHour = info.startHour;
+
+        // Create preview element
+        const preview = document.createElement('div');
+        preview.className = 'drag-create-preview';
+        const startTime = yToTime(relY, info.pxPerHour, info.startHour);
+        preview.style.top = `${timeToY(startTime, info.pxPerHour, info.startHour)}px`;
+        preview.style.height = '0px';
+        preview.textContent = startTime;
+        info.column.appendChild(preview);
+        state.previewEl = preview;
+
+        // Prevent text selection while dragging
+        e.preventDefault();
+    });
+
+    // MOUSEMOVE
+    document.addEventListener('mousemove', function(e) {
+        const state = ScheduleState.dragCreateState;
+        if (!state.isDragging || !state.column || !state.previewEl) return;
+
+        const colRect = state.column.getBoundingClientRect();
+        const relY = e.clientY - colRect.top + state.column.scrollTop;
+        state.currentY = relY;
+
+        const y1 = Math.min(state.startY, relY);
+        const y2 = Math.max(state.startY, relY);
+
+        const topTime = yToTime(y1, state.pxPerHour, state.startHour);
+        const bottomTime = yToTime(y2, state.pxPerHour, state.startHour);
+
+        const topPx = timeToY(topTime, state.pxPerHour, state.startHour);
+        const bottomPx = timeToY(bottomTime, state.pxPerHour, state.startHour);
+
+        state.previewEl.style.top = `${topPx}px`;
+        state.previewEl.style.height = `${Math.max(bottomPx - topPx, 12)}px`;
+        state.previewEl.textContent = `${topTime} – ${bottomTime}`;
+    });
+
+    // MOUSEUP
+    document.addEventListener('mouseup', function(e) {
+        const state = ScheduleState.dragCreateState;
+        if (!state.isDragging) return;
+
+        // Clean up preview
+        if (state.previewEl) {
+            state.previewEl.remove();
+            state.previewEl = null;
+        }
+
+        const y1 = Math.min(state.startY, state.currentY);
+        const y2 = Math.max(state.startY, state.currentY);
+
+        const startTime = yToTime(y1, state.pxPerHour, state.startHour);
+        let endTime = yToTime(y2, state.pxPerHour, state.startHour);
+        const date = state.date;
+
+        // Calculate drag distance in minutes
+        const dragMinutes = Math.abs((y2 - y1) / state.pxPerHour) * 60;
+
+        // Reset state
+        state.isDragging = false;
+        state.column = null;
+        state.date = null;
+
+        // Only open modal if the user actually dragged (at least ~15 min worth)
+        if (dragMinutes >= 10) {
+            // Ensure end is after start (at least 15 min)
+            if (endTime === startTime) {
+                const [h, m] = endTime.split(':').map(Number);
+                const endMins = Math.min(h * 60 + m + 15, 23 * 60 + 45);
+                endTime = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+            }
+
+            ScheduleState.dragCreateJustFinished = true;
+
+            // Open the task modal with prefilled data
+            if (typeof window.openTaskModal === 'function') {
+                window.openTaskModal(null, 'not-started', {
+                    startDate: date,
+                    startTime: startTime,
+                    dueDate: date,
+                    dueTime: endTime
+                });
+            } else {
+                openScheduleCreatePicker(date, startTime);
+            }
+
+            // Clear the flag after a short delay so the click event can check it
+            setTimeout(() => { ScheduleState.dragCreateJustFinished = false; }, 300);
+        }
+        // If drag was too short, let the normal click handler run
+    });
 }
 
 // ============================================================================
