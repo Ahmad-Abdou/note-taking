@@ -315,6 +315,32 @@ function startApp() {
         restorePinnedWidgets();
     }, 2000);
 
+    // Auto-check for updates after the window is ready (silently, with a delay)
+    // Also re-check periodically every 4 hours
+    if (app.isPackaged && !isPortableBuild()) {
+        setTimeout(() => {
+            try {
+                diag('info', 'auto-check for updates (startup)');
+                autoUpdater.checkForUpdates().catch(err => {
+                    diag('warn', 'startup update check failed', err?.message);
+                });
+            } catch (e) {
+                diag('warn', 'startup update check exception', e?.message);
+            }
+        }, 10000); // 10 seconds after launch
+
+        setInterval(() => {
+            try {
+                diag('info', 'auto-check for updates (periodic)');
+                autoUpdater.checkForUpdates().catch(err => {
+                    diag('warn', 'periodic update check failed', err?.message);
+                });
+            } catch (e) {
+                diag('warn', 'periodic update check exception', e?.message);
+            }
+        }, 4 * 60 * 60 * 1000); // Every 4 hours
+    }
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -483,7 +509,7 @@ function initAutoUpdater() {
 
     // Only meaningful for packaged apps (installed/portable).
     // In development, this will typically error due to missing update config.
-    autoUpdater.autoDownload = false;
+    autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
 
     autoUpdater.on('checking-for-update', () => {
@@ -501,6 +527,24 @@ function initAutoUpdater() {
             releaseDate: info?.releaseDate
         });
         diag('info', 'updater update-available', { version: info?.version });
+
+        // Show a native OS notification
+        try {
+            const notif = new Notification({
+                title: 'Update Available',
+                body: `A new version${info?.version ? ' (v' + info.version + ')' : ''} is available and downloading.`,
+                icon: path.join(__dirname, 'assets', 'icon.png')
+            });
+            notif.on('click', () => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.show();
+                    mainWindow.focus();
+                }
+            });
+            notif.show();
+        } catch (e) {
+            diag('warn', 'notification error (update-available)', e?.message);
+        }
 
         // For manual "Check for Updates", start download automatically once availability is confirmed.
         if (pendingCheckAutoDownload) {
@@ -550,6 +594,27 @@ function initAutoUpdater() {
         });
 
         diag('info', 'updater update-downloaded', { version: info?.version });
+
+        // Show a native OS notification that the update is ready
+        try {
+            const notif = new Notification({
+                title: 'Update Ready to Install',
+                body: `Version${info?.version ? ' v' + info.version : ''} has been downloaded. Click to restart and install.`,
+                icon: path.join(__dirname, 'assets', 'icon.png')
+            });
+            notif.on('click', () => {
+                try {
+                    isQuitting = true;
+                    autoUpdater.quitAndInstall(false, true);
+                } catch (e) {
+                    isQuitting = false;
+                    diagError('notification click quitAndInstall failed', e);
+                }
+            });
+            notif.show();
+        } catch (e) {
+            diag('warn', 'notification error (update-downloaded)', e?.message);
+        }
 
         if (installAfterDownload) {
             // Reset first to avoid loops.

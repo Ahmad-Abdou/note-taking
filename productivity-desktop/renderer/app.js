@@ -4409,13 +4409,15 @@ function setupAppUpdater() {
                 break;
             case 'available': {
                 const ver = payload?.version ? ` (v${payload.version})` : '';
-                statusEl.textContent = `A new update is available${ver}.`;
+                statusEl.textContent = `Update${ver} is downloading…`;
                 if (updateBtn) {
-                    updateBtn.style.display = 'inline-flex';
-                    updateBtn.disabled = false;
-                    updateBtn.textContent = 'Download & Install';
+                    updateBtn.style.display = 'none';
                 }
                 if (checkBtn) checkBtn.disabled = true;
+                // Show an in-app toast so the user sees it regardless of which page they're on
+                if (typeof showToast === 'function') {
+                    showToast('info', 'Update Available', `A new version${ver} is being downloaded.`);
+                }
                 break;
             }
             case 'download-starting':
@@ -4431,12 +4433,17 @@ function setupAppUpdater() {
                 statusEl.textContent = `Downloading update… ${pct}%`;
                 break;
             case 'downloaded':
-                statusEl.textContent = message || 'Update downloaded. Restart to install.';
+                statusEl.textContent = 'Update downloaded — ready to install!';
                 if (updateBtn) {
                     updateBtn.style.display = 'inline-flex';
                     updateBtn.disabled = false;
+                    updateBtn.textContent = 'Restart & Install';
                 }
                 if (checkBtn) checkBtn.disabled = false;
+                // Show an in-app toast
+                if (typeof showToast === 'function') {
+                    showToast('success', 'Update Ready', 'A new version has been downloaded. Click "Restart & Install" in Settings to apply it.');
+                }
                 break;
             case 'error':
                 statusEl.textContent = toFriendlyUpdaterError(message || payload?.error) || 'Update check failed.';
