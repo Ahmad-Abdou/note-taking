@@ -48,7 +48,8 @@ const SCREENTIME_TICK_ALARM = 'screentime_tick';
 const SCREENTIME_MIDNIGHT_ALARM = 'screentime_midnight';
 
 function getTodayDateStr() {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 async function getNotificationRuntimeState() {
@@ -362,7 +363,7 @@ async function loadTimeLimits() {
 // Load daily usage from storage
 async function loadDailyUsage() {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayDateStr();
         const result = await chrome.storage.local.get(['productivity_website_daily_usage']);
         const stored = result.productivity_website_daily_usage;
 
@@ -509,7 +510,7 @@ async function applyTimeLimitBlockRule(domain, usedMinutes, limitMinutes) {
                 priority: 2, // Higher priority than regular blocks
                 action: {
                     type: 'redirect',
-                    redirect: { extensionPath: blockedUrl }
+                    redirect: { url: chrome.runtime.getURL(blockedUrl) }
                 },
                 condition: {
                     urlFilter: `||${domain}`,
@@ -584,7 +585,7 @@ function scheduleScreentimeMidnightReset() {
 async function trackCurrentTab() {
     try {
         // Check for new day and reset if needed
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayDateStr();
         if (timeTrackingState.dailyUsage?.date !== today) {
             console.log('[TimeTracker] New day detected, resetting usage');
             await loadDailyUsage();
@@ -690,16 +691,31 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         console.log('[TimeTracker] Time limits updated:', timeTrackingState.timeLimits.length);
         // Re-apply any active block rules based on new limits + current usage
         if (timeTrackingState.dailyUsage) {
+            let changed = false;
             for (const limit of timeTrackingState.timeLimits) {
                 const domain = normalizeDomain(limit.domain);
                 const spent = timeTrackingState.dailyUsage.sites?.[domain] || 0;
-                if (limit.isEnabled !== false && spent >= limit.dailyLimitMinutes && !isDomainBlockedForToday(domain)) {
-                    if (!timeTrackingState.dailyUsage.blockedUntilNextDay) timeTrackingState.dailyUsage.blockedUntilNextDay = [];
-                    if (!timeTrackingState.dailyUsage.blockedUntilNextDay.includes(domain)) {
-                        timeTrackingState.dailyUsage.blockedUntilNextDay.push(domain);
+                if (limit.isEnabled !== false && spent >= limit.dailyLimitMinutes) {
+                    if (!isDomainBlockedForToday(domain)) {
+                        if (!timeTrackingState.dailyUsage.blockedUntilNextDay) timeTrackingState.dailyUsage.blockedUntilNextDay = [];
+                        if (!timeTrackingState.dailyUsage.blockedUntilNextDay.includes(domain)) {
+                            timeTrackingState.dailyUsage.blockedUntilNextDay.push(domain);
+                        }
+                        applyTimeLimitBlockRule(domain, spent, limit.dailyLimitMinutes);
+                        changed = true;
                     }
-                    applyTimeLimitBlockRule(domain, spent, limit.dailyLimitMinutes);
+                } else {
+                    if (isDomainBlockedForToday(domain)) {
+                        timeTrackingState.dailyUsage.blockedUntilNextDay = timeTrackingState.dailyUsage.blockedUntilNextDay.filter(d => d !== domain);
+                        const ruleId = 10000 + Math.abs(hashCode(domain) % 10000);
+                        chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [ruleId] }).catch(() => {});
+                        console.log(`[TimeTracker] DNR rule removed — ${domain} unblocked due to limit extension`);
+                        changed = true;
+                    }
                 }
+            }
+            if (changed) {
+                saveDailyUsage();
             }
         }
     }
@@ -776,7 +792,7 @@ async function applyBlockRules() {
                 action: {
                     type: 'redirect',
                     redirect: {
-                        extensionPath: '/productivity/blocked.html?site=' + encodeURIComponent(url)
+                        url: chrome.runtime.getURL('/productivity/blocked.html?site=' + encodeURIComponent(url))
                     }
                 },
                 condition: {

@@ -1248,8 +1248,9 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
     const modal = document.getElementById('task-modal') || createTaskModal();
     const isEditing = task !== null;
 
-    const today = new Date().toISOString().split('T')[0];
-    const defaultDueDate = prefillData.dueDate || task?.dueDate || '';
+    const d = new Date();
+    const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const defaultDueDate = prefillData.dueDate || task?.dueDate || today;
     const defaultStartDate = prefillData.startDate || task?.startDate || '';
     const defaultStartTime = prefillData.startTime || task?.startTime || '';
     const defaultDueTime = prefillData.dueTime || task?.dueTime || '';

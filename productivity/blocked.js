@@ -60,8 +60,10 @@ function initBlockedPage() {
     document.getElementById('quote-author').textContent = `— ${randomQuote.author}`;
 
     // Load stats
-    chrome.storage.local.get(['blockStats', `blockStats_${new Date().toISOString().split('T')[0]}`], (result) => {
-        const today = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const todayStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    chrome.storage.local.get(['blockStats', `blockStats_${todayStr}`], (result) => {
+        const today = todayStr;
         const todayStats = result[`blockStats_${today}`] || { blocks: 0 };
         const totalStats = result.blockStats || { savedMinutes: 0 };
 

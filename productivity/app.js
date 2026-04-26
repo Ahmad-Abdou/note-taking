@@ -612,8 +612,13 @@ async function loadDashboard() {
         await renderUpcomingDeadlines();
 
         // Update weekly progress chart
-        if (weekStats && weekStats.dailyStats) {
-            renderWeeklyChart(weekStats);
+        try {
+            if (typeof getWeeklyData === 'function') {
+                const weeklyChartData = await getWeeklyData();
+                renderWeeklyChart(weeklyChartData);
+            }
+        } catch (chartErr) {
+            console.error('[Dashboard] Weekly chart failed:', chartErr);
         }
 
         // Update goals preview

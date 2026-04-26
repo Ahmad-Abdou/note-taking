@@ -68,7 +68,8 @@ async function screentimeTogglePause(domain) {
 }
 
 function getTodayYMD() {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -473,7 +474,7 @@ function attachScreentimeListeners() {
     // Edit limit
     container.querySelectorAll('.st-edit-limit-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            openAddLimitForm(btn.dataset.domain, parseInt(btn.dataset.minutes, 10));
+            openAddLimitForm(btn.dataset.domain, parseInt(btn.dataset.minutes, 10), btn.dataset.id);
         });
     });
 
@@ -527,10 +528,21 @@ function attachScreentimeListeners() {
         saveBtn.addEventListener('click', async () => {
             const domainInput = document.getElementById('st-limit-domain');
             const minutesInput = document.getElementById('st-limit-minutes');
+            const form = document.getElementById('st-add-limit-form');
+            const editId = form?.dataset.editId || null;
+
             const domain = stNormalizeDomain(domainInput?.value?.trim() || '');
             const minutes = parseInt(minutesInput?.value || '0', 10);
             if (!domain) { showToast?.('error', 'Invalid domain', 'Enter a valid domain name.'); return; }
             if (!minutes || minutes < 1) { showToast?.('error', 'Invalid limit', 'Enter a number of minutes ≥ 1.'); return; }
+
+            if (editId) {
+                const existingById = screentimeState.limits.find(l => l.id === editId);
+                if (existingById && existingById.domain !== domain) {
+                    await screentimeRemoveLimit(editId);
+                }
+            }
+
             await screentimeAddOrUpdateLimit(domain, minutes);
             await screentimeLoad();
             renderScreentime();
@@ -548,10 +560,11 @@ function attachScreentimeListeners() {
     }
 }
 
-function openAddLimitForm(domain = '', minutes = null) {
+function openAddLimitForm(domain = '', minutes = null, id = null) {
     const form = document.getElementById('st-add-limit-form');
     if (!form) return;
     form.style.display = 'block';
+    form.dataset.editId = id || '';
     const domainInput = document.getElementById('st-limit-domain');
     const minutesInput = document.getElementById('st-limit-minutes');
     if (domainInput) domainInput.value = domain;

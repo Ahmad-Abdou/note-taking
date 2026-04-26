@@ -1124,11 +1124,12 @@ function toggleFiltersSection() {
 }
 
 async function togglePinnedCountdown(eventId, skipPrompt = false) {
-    const index = ScheduleState.pinnedCountdowns.indexOf(eventId);
+    const idStr = String(eventId);
+    const index = ScheduleState.pinnedCountdowns.findIndex(id => String(id) === idStr);
     const willPin = index === -1;
 
     if (willPin) {
-        const event = ScheduleState.events.find(e => e.id === eventId);
+        const event = ScheduleState.events.find(e => String(e.id) === idStr);
         const eventTitle = event?.title || 'Event';
 
         // Prompt for custom title unless skipped
@@ -1141,32 +1142,33 @@ async function togglePinnedCountdown(eventId, skipPrompt = false) {
             }
         }
 
-        ScheduleState.pinnedCountdowns.push(eventId);
+        ScheduleState.pinnedCountdowns.push(idStr);
 
         // Store custom title if provided and different from original
         if (customTitle && customTitle.trim() && customTitle.trim() !== eventTitle) {
-            ScheduleState.countdownTitles[eventId] = customTitle.trim();
+            ScheduleState.countdownTitles[idStr] = customTitle.trim();
         }
 
         showToast('success', 'Countdown Added', 'You\'ll see a countdown for this event');
     } else {
         ScheduleState.pinnedCountdowns.splice(index, 1);
         // Remove custom title when unpinning
+        delete ScheduleState.countdownTitles[idStr];
         delete ScheduleState.countdownTitles[eventId];
         showToast('info', 'Countdown Removed', 'Event removed from countdown tracking');
     }
 
     await savePinnedCountdowns();
 
-    const event = ScheduleState.events.find(e => e.id === eventId);
+    const event = ScheduleState.events.find(e => String(e.id) === idStr);
     if (event?.isTask && event.taskId) {
         try {
             const stored = await chrome.storage.local.get(['taskCountdowns']);
             const taskCountdowns = Array.isArray(stored.taskCountdowns) ? stored.taskCountdowns : [];
-            const taskIndex = taskCountdowns.indexOf(event.taskId);
+            const taskIndex = taskCountdowns.findIndex(id => String(id) === String(event.taskId));
 
             if (willPin && taskIndex === -1) {
-                taskCountdowns.unshift(event.taskId);
+                taskCountdowns.unshift(String(event.taskId));
             } else if (!willPin && taskIndex >= 0) {
                 taskCountdowns.splice(taskIndex, 1);
             }
@@ -1182,13 +1184,14 @@ async function togglePinnedCountdown(eventId, skipPrompt = false) {
 }
 
 async function editCountdownTitle(eventId) {
-    const event = ScheduleState.events.find(e => e.id === eventId);
+    const idStr = String(eventId);
+    const event = ScheduleState.events.find(e => String(e.id) === idStr);
     if (!event) {
         showToast('error', 'Error', 'Event not found');
         return;
     }
 
-    const currentTitle = ScheduleState.countdownTitles[eventId] || event.title;
+    const currentTitle = ScheduleState.countdownTitles[idStr] || ScheduleState.countdownTitles[eventId] || event.title;
     const newTitle = prompt('Edit countdown title:', currentTitle);
 
     // If user cancels the prompt, do nothing
@@ -1198,10 +1201,11 @@ async function editCountdownTitle(eventId) {
 
     // If new title is empty or same as original event title, remove custom title
     if (!newTitle.trim() || newTitle.trim() === event.title) {
+        delete ScheduleState.countdownTitles[idStr];
         delete ScheduleState.countdownTitles[eventId];
         showToast('info', 'Title Reset', 'Using original event title');
     } else {
-        ScheduleState.countdownTitles[eventId] = newTitle.trim();
+        ScheduleState.countdownTitles[idStr] = newTitle.trim();
         showToast('success', 'Title Updated', 'Countdown title has been changed');
     }
 
@@ -1216,7 +1220,7 @@ function renderCountdownsSection() {
     // Get pinned events that are in the future
     const today = new Date().toISOString().split('T')[0];
     const pinnedEvents = ScheduleState.events.filter(e =>
-        ScheduleState.pinnedCountdowns.includes(e.id) && e.date >= today
+        ScheduleState.pinnedCountdowns.some(id => String(id) === String(e.id)) && e.date >= today
     ).sort((a, b) => a.date.localeCompare(b.date));
 
     // Render the TOP countdown bar (primary display)
@@ -1229,9 +1233,8 @@ function renderCountdownsSection() {
             topBarContainer.innerHTML = pinnedEvents.map(event => {
                 const countdown = calculateCountdown(event.date);
                 const color = getEventDisplayColors(event).border;
-                // Use custom title if available, otherwise use original event title
-                const displayTitle = ScheduleState.countdownTitles[event.id] || event.title;
-                const tooltipTitle = ScheduleState.countdownTitles[event.id]
+                const displayTitle = ScheduleState.countdownTitles[String(event.id)] || ScheduleState.countdownTitles[event.id] || event.title;
+                const tooltipTitle = ScheduleState.countdownTitles[String(event.id)] || ScheduleState.countdownTitles[event.id]
                     ? `${displayTitle} (${event.title})`
                     : event.title;
 
@@ -3436,10 +3439,10 @@ function viewEvent(eventId) {
                     <i class="fas fa-trash"></i> Delete
                 </button>
                 <div class="footer-right">
-                    <button class="btn-outline pin-countdown-btn ${ScheduleState.pinnedCountdowns.includes(event.id) ? 'pinned' : ''}" 
+                    <button class="btn-outline pin-countdown-btn ${ScheduleState.pinnedCountdowns.some(id => String(id) === String(event.id)) ? 'pinned' : ''}" 
                             data-action="toggle-countdown" data-event-id="${event.id}" 
-                            title="${ScheduleState.pinnedCountdowns.includes(event.id) ? 'Remove from countdowns' : 'Pin to countdown'}">
-                        <i class="fas fa-${ScheduleState.pinnedCountdowns.includes(event.id) ? 'check' : 'thumbtack'}"></i>
+                            title="${ScheduleState.pinnedCountdowns.some(id => String(id) === String(event.id)) ? 'Remove from countdowns' : 'Pin to countdown'}">
+                        <i class="fas fa-${ScheduleState.pinnedCountdowns.some(id => String(id) === String(event.id)) ? 'check' : 'thumbtack'}"></i>
                     </button>
                     <button class="btn-secondary" data-action="close-event-details">Close</button>
                     <button class="btn-primary" data-action="edit-event" data-event-id="${event.id}">

@@ -664,14 +664,7 @@ function setupScheduleListeners() {
                 return;
             }
 
-            // Handle month day click (not on event dot)
-            const monthDay = e.target.closest('.month-day[data-date]');
-            if (monthDay && !monthDay.classList.contains('other-month')) {
-                e.preventDefault();
-                e.stopPropagation();
-                openScheduleCreatePicker(monthDay.dataset.date);
-                return;
-            }
+            // Handle month day click is now handled by mousedown/mouseup logic for drag-select
 
             // Handle agenda event click
             const agendaEvent = e.target.closest('.agenda-event[data-event-id]');
@@ -680,6 +673,86 @@ function setupScheduleListeners() {
                 e.stopPropagation();
                 viewEvent(agendaEvent.dataset.eventId);
                 return;
+            }
+        });
+
+        // Add dynamic CSS for range selection if not present
+        if (!document.getElementById('schedule-drag-select-css')) {
+            const style = document.createElement('style');
+            style.id = 'schedule-drag-select-css';
+            style.textContent = `
+                .month-day.selected-range-highlight {
+                    background-color: rgba(99, 102, 241, 0.15) !important;
+                    box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.5) !important;
+                }
+                .month-day {
+                    user-select: none;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // ========== DATE RANGE SELECTION FOR MONTH VIEW ==========
+        let dateSelectStart = null;
+        let isDateSelecting = false;
+
+        calendarGrid.addEventListener('mousedown', function(e) {
+            const monthDay = e.target.closest('.month-day[data-date]');
+            // Ignore if we clicked on an event or if it's outside the current month
+            if (monthDay && !monthDay.classList.contains('other-month') && !e.target.closest('.month-event-dot')) {
+                e.preventDefault(); // Prevent default text selection
+                isDateSelecting = true;
+                dateSelectStart = monthDay.dataset.date;
+                
+                // Clear any previous selection visual
+                document.querySelectorAll('.month-day.date-selected').forEach(el => el.classList.remove('date-selected', 'selected-range-highlight'));
+                monthDay.classList.add('date-selected', 'selected-range-highlight');
+            }
+        });
+
+        calendarGrid.addEventListener('mouseover', function(e) {
+            if (!isDateSelecting || !dateSelectStart) return;
+            const monthDay = e.target.closest('.month-day[data-date]');
+            if (monthDay && !monthDay.classList.contains('other-month')) {
+                const currentHoverDate = monthDay.dataset.date;
+                const d1 = new Date(dateSelectStart);
+                const d2 = new Date(currentHoverDate);
+                const startStr = d1 <= d2 ? dateSelectStart : currentHoverDate;
+                const endStr = d1 <= d2 ? currentHoverDate : dateSelectStart;
+                
+                // Highlight range
+                document.querySelectorAll('.month-day').forEach(el => {
+                    const date = el.dataset.date;
+                    if (date && date >= startStr && date <= endStr && !el.classList.contains('other-month')) {
+                        el.classList.add('date-selected', 'selected-range-highlight');
+                    } else {
+                        el.classList.remove('date-selected', 'selected-range-highlight');
+                    }
+                });
+            }
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isDateSelecting) {
+                isDateSelecting = false;
+                
+                // Find all selected elements to determine range
+                const selectedElements = Array.from(calendarGrid.querySelectorAll('.month-day.date-selected'));
+                document.querySelectorAll('.month-day.date-selected').forEach(el => el.classList.remove('date-selected', 'selected-range-highlight'));
+                
+                if (selectedElements.length > 0) {
+                    const dates = selectedElements.map(el => el.dataset.date).sort();
+                    const startStr = dates[0];
+                    const endStr = dates[dates.length - 1];
+                    
+                    if (startStr === endStr) {
+                        openScheduleCreatePicker(startStr);
+                    } else {
+                        // Pass both start and end date to picker
+                        openScheduleCreatePicker(startStr, null, endStr);
+                    }
+                }
+                dateSelectStart = null;
             }
         });
 
@@ -1124,49 +1197,34 @@ function toggleFiltersSection() {
 }
 
 async function togglePinnedCountdown(eventId, skipPrompt = false) {
-    const index = ScheduleState.pinnedCountdowns.indexOf(eventId);
+    const idStr = String(eventId);
+    const index = ScheduleState.pinnedCountdowns.findIndex(id => String(id) === idStr);
     const willPin = index === -1;
 
     if (willPin) {
-        const event = ScheduleState.events.find(e => e.id === eventId);
-        const eventTitle = event?.title || 'Event';
+        const event = ScheduleState.events.find(e => String(e.id) === idStr);
 
-        // Prompt for custom title unless skipped
-        let customTitle = null;
-        if (!skipPrompt) {
-            customTitle = prompt('Enter a custom title for this countdown (leave empty to use original):', eventTitle);
-            // If user cancels the prompt, abort pinning
-            if (customTitle === null) {
-                return;
-            }
-        }
-
-        ScheduleState.pinnedCountdowns.push(eventId);
-
-        // Store custom title if provided and different from original
-        if (customTitle && customTitle.trim() && customTitle.trim() !== eventTitle) {
-            ScheduleState.countdownTitles[eventId] = customTitle.trim();
-        }
-
+        ScheduleState.pinnedCountdowns.push(idStr);
         showToast('success', 'Countdown Added', 'You\'ll see a countdown for this event');
     } else {
         ScheduleState.pinnedCountdowns.splice(index, 1);
         // Remove custom title when unpinning
+        delete ScheduleState.countdownTitles[idStr];
         delete ScheduleState.countdownTitles[eventId];
         showToast('info', 'Countdown Removed', 'Event removed from countdown tracking');
     }
 
     await savePinnedCountdowns();
 
-    const event = ScheduleState.events.find(e => e.id === eventId);
+    const event = ScheduleState.events.find(e => String(e.id) === idStr);
     if (event?.isTask && event.taskId) {
         try {
             const stored = await chrome.storage.local.get(['taskCountdowns']);
             const taskCountdowns = Array.isArray(stored.taskCountdowns) ? stored.taskCountdowns : [];
-            const taskIndex = taskCountdowns.indexOf(event.taskId);
+            const taskIndex = taskCountdowns.findIndex(id => String(id) === String(event.taskId));
 
             if (willPin && taskIndex === -1) {
-                taskCountdowns.unshift(event.taskId);
+                taskCountdowns.unshift(String(event.taskId));
             } else if (!willPin && taskIndex >= 0) {
                 taskCountdowns.splice(taskIndex, 1);
             }
@@ -1182,13 +1240,14 @@ async function togglePinnedCountdown(eventId, skipPrompt = false) {
 }
 
 async function editCountdownTitle(eventId) {
-    const event = ScheduleState.events.find(e => e.id === eventId);
+    const idStr = String(eventId);
+    const event = ScheduleState.events.find(e => String(e.id) === idStr);
     if (!event) {
         showToast('error', 'Error', 'Event not found');
         return;
     }
 
-    const currentTitle = ScheduleState.countdownTitles[eventId] || event.title;
+    const currentTitle = ScheduleState.countdownTitles[idStr] || ScheduleState.countdownTitles[eventId] || event.title;
     const newTitle = prompt('Edit countdown title:', currentTitle);
 
     // If user cancels the prompt, do nothing
@@ -1198,10 +1257,11 @@ async function editCountdownTitle(eventId) {
 
     // If new title is empty or same as original event title, remove custom title
     if (!newTitle.trim() || newTitle.trim() === event.title) {
+        delete ScheduleState.countdownTitles[idStr];
         delete ScheduleState.countdownTitles[eventId];
         showToast('info', 'Title Reset', 'Using original event title');
     } else {
-        ScheduleState.countdownTitles[eventId] = newTitle.trim();
+        ScheduleState.countdownTitles[idStr] = newTitle.trim();
         showToast('success', 'Title Updated', 'Countdown title has been changed');
     }
 
@@ -1214,9 +1274,10 @@ function renderCountdownsSection() {
     const topBarContainer = document.getElementById('countdown-bar-items');
 
     // Get pinned events that are in the future
-    const today = new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     const pinnedEvents = ScheduleState.events.filter(e =>
-        ScheduleState.pinnedCountdowns.includes(e.id) && e.date >= today
+        ScheduleState.pinnedCountdowns.some(id => String(id) === String(e.id)) && e.date >= today
     ).sort((a, b) => a.date.localeCompare(b.date));
 
     // Render the TOP countdown bar (primary display)
@@ -1229,9 +1290,8 @@ function renderCountdownsSection() {
             topBarContainer.innerHTML = pinnedEvents.map(event => {
                 const countdown = calculateCountdown(event.date);
                 const color = getEventDisplayColors(event).border;
-                // Use custom title if available, otherwise use original event title
-                const displayTitle = ScheduleState.countdownTitles[event.id] || event.title;
-                const tooltipTitle = ScheduleState.countdownTitles[event.id]
+                const displayTitle = ScheduleState.countdownTitles[String(event.id)] || ScheduleState.countdownTitles[event.id] || event.title;
+                const tooltipTitle = ScheduleState.countdownTitles[String(event.id)] || ScheduleState.countdownTitles[event.id]
                     ? `${displayTitle} (${event.title})`
                     : event.title;
 
@@ -2963,13 +3023,16 @@ async function refreshImportedCalendar(calId) {
 // ============================================================================
 // SCHEDULE CREATE PICKER (Task/Event Selection)
 // ============================================================================
-function openScheduleCreatePicker(date = null, time = null) {
-    const defaultDate = date || new Date().toISOString().split('T')[0];
+function openScheduleCreatePicker(date = null, time = null, endDate = null) {
+    const d = new Date();
+    const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const defaultDate = date || today;
 
     // Tasks-only: always open the task modal
     if (typeof window.openTaskModal === 'function') {
         const prefillData = {
-            dueDate: defaultDate,
+            startDate: defaultDate,
+            dueDate: endDate || defaultDate,
             dueTime: time || null
         };
         window.openTaskModal(null, 'not-started', prefillData);
@@ -3436,10 +3499,10 @@ function viewEvent(eventId) {
                     <i class="fas fa-trash"></i> Delete
                 </button>
                 <div class="footer-right">
-                    <button class="btn-outline pin-countdown-btn ${ScheduleState.pinnedCountdowns.includes(event.id) ? 'pinned' : ''}" 
+                    <button class="btn-outline pin-countdown-btn ${ScheduleState.pinnedCountdowns.some(id => String(id) === String(event.id)) ? 'pinned' : ''}" 
                             data-action="toggle-countdown" data-event-id="${event.id}" 
-                            title="${ScheduleState.pinnedCountdowns.includes(event.id) ? 'Remove from countdowns' : 'Pin to countdown'}">
-                        <i class="fas fa-${ScheduleState.pinnedCountdowns.includes(event.id) ? 'check' : 'thumbtack'}"></i>
+                            title="${ScheduleState.pinnedCountdowns.some(id => String(id) === String(event.id)) ? 'Remove from countdowns' : 'Pin to countdown'}">
+                        <i class="fas fa-${ScheduleState.pinnedCountdowns.some(id => String(id) === String(event.id)) ? 'check' : 'thumbtack'}"></i>
                     </button>
                     <button class="btn-secondary" data-action="close-event-details">Close</button>
                     <button class="btn-primary" data-action="edit-event" data-event-id="${event.id}">

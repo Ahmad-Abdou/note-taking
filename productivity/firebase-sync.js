@@ -368,6 +368,9 @@
         const { auth } = ensureFirebaseInitialized();
         await auth.signOut();
 
+        // Clear saved session so we don't silently re-auth after sign-out.
+        clearSavedSession();
+
         // Best-effort: clear cached Chrome Identity token so next sign-in is clean.
         if (window.chrome?.identity?.getAuthToken && window.chrome?.identity?.removeCachedAuthToken) {
             try {
@@ -383,6 +386,65 @@
                 // ignore
             }
         }
+    }
+
+    // ---- Session persistence helpers ----
+    // Firebase Auth's IndexedDB persistence doesn't reliably survive
+    // extension popup closes or Electron restarts.  Save a lightweight
+    // credential envelope to chrome.storage.local and silently restore
+    // the session on the next open.
+
+    const SESSION_KEY = 'firebase_auth_session';
+
+    function saveSession(method, extra = {}) {
+        try {
+            const data = { method, ...extra, savedAt: Date.now() };
+            chrome.storage.local.set({ [SESSION_KEY]: data });
+        } catch (_) { /* ignore */ }
+    }
+
+    function clearSavedSession() {
+        try { chrome.storage.local.remove(SESSION_KEY); } catch (_) { /* ignore */ }
+    }
+
+    async function attemptSilentReauth(auth) {
+        // 1. Read saved session info
+        let session = null;
+        try {
+            session = await new Promise((resolve) => {
+                chrome.storage.local.get([SESSION_KEY], (r) => resolve(r?.[SESSION_KEY] || null));
+            });
+        } catch (_) { return false; }
+        if (!session || !session.method) return false;
+
+        // 2. Google — use chrome.identity (non-interactive)
+        if (session.method === 'google') {
+            if (chrome?.identity?.getAuthToken) {
+                try {
+                    const token = await new Promise((resolve, reject) => {
+                        chrome.identity.getAuthToken({ interactive: false }, (t) => {
+                            if (chrome.runtime?.lastError || !t) reject();
+                            else resolve(t);
+                        });
+                    });
+                    const credential = firebase.auth.GoogleAuthProvider.credential(null, token);
+                    await auth.signInWithCredential(credential);
+                    return true;
+                } catch (_) { /* token expired or revoked */ }
+            }
+            // Edge launchWebAuthFlow has no non-interactive mode
+            return false;
+        }
+
+        // 3. Email/password — re-authenticate with saved credentials
+        if (session.method === 'email' && session.email && session.password) {
+            try {
+                await auth.signInWithEmailAndPassword(session.email, session.password);
+                return true;
+            } catch (_) { clearSavedSession(); }
+        }
+
+        return false;
     }
 
     async function syncNow(options = {}) {
@@ -604,8 +666,14 @@
                     startAutoSyncPolling();
                     startRemoteSnapshotListener(db, user);
                 } else {
-                    stopAutoSyncPolling();
-                    stopRemoteSnapshotListener();
+                    // Try to silently restore a saved session
+                    attemptSilentReauth(auth).then((restored) => {
+                        if (!restored) {
+                            stopAutoSyncPolling();
+                            stopRemoteSnapshotListener();
+                        }
+                        // If restored, onAuthStateChanged will fire again with the user
+                    });
                 }
             });
         } catch (e) {
@@ -620,6 +688,7 @@
             setStatus('Signing in with Google…', 'info');
             signInWithGoogle()
                 .then(() => {
+                    saveSession('google');
                     setStatus('Signed in. Syncing…', 'info');
                     syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
                 })
@@ -630,9 +699,11 @@
         });
 
         emailSignInBtn.addEventListener('click', () => {
+            const { email, password } = getEmailPassword();
             setStatus('Signing in…', 'info');
             signInWithEmail()
                 .then(() => {
+                    saveSession('email', { email, password });
                     setStatus('Signed in. Syncing…', 'info');
                     syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
                 })
@@ -643,9 +714,11 @@
         });
 
         signupBtn.addEventListener('click', () => {
+            const { email, password } = getEmailPassword();
             setStatus('Creating account…', 'info');
             createAccount()
                 .then(() => {
+                    saveSession('email', { email, password });
                     setStatus('Account created. Syncing…', 'info');
                     syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
                 })

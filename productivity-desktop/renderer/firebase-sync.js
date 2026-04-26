@@ -292,6 +292,41 @@
     async function signOut() {
         const { auth } = ensureFirebaseInitialized();
         await auth.signOut();
+        clearSavedSession();
+    }
+
+    // ---- Session persistence helpers ----
+    const SESSION_KEY = 'firebase_auth_session';
+
+    function saveSession(method, extra = {}) {
+        try {
+            const data = { method, ...extra, savedAt: Date.now() };
+            chrome.storage.local.set({ [SESSION_KEY]: data });
+        } catch (_) { /* ignore */ }
+    }
+
+    function clearSavedSession() {
+        try { chrome.storage.local.remove(SESSION_KEY); } catch (_) { /* ignore */ }
+    }
+
+    async function attemptSilentReauth(auth) {
+        let session = null;
+        try {
+            session = await new Promise((resolve) => {
+                chrome.storage.local.get([SESSION_KEY], (r) => resolve(r?.[SESSION_KEY] || null));
+            });
+        } catch (_) { return false; }
+        if (!session || !session.method) return false;
+
+        // Desktop doesn't have chrome.identity, so Google silent re-auth is not possible.
+        // Only email/password sessions can be restored.
+        if (session.method === 'email' && session.email && session.password) {
+            try {
+                await auth.signInWithEmailAndPassword(session.email, session.password);
+                return true;
+            } catch (_) { clearSavedSession(); }
+        }
+        return false;
     }
 
     async function syncNow(options = {}) {
@@ -520,8 +555,12 @@
                     startAutoSyncPolling();
                     startRemoteSnapshotListener(db, user);
                 } else {
-                    stopAutoSyncPolling();
-                    stopRemoteSnapshotListener();
+                    attemptSilentReauth(auth).then((restored) => {
+                        if (!restored) {
+                            stopAutoSyncPolling();
+                            stopRemoteSnapshotListener();
+                        }
+                    });
                 }
             });
         } catch (e) {
@@ -536,6 +575,7 @@
             setStatus('Signing in with Google…', 'info');
             signInWithGoogle()
                 .then(() => {
+                    saveSession('google');
                     setStatus('Signed in. Syncing…', 'info');
                     syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
                 })
@@ -546,9 +586,11 @@
         });
 
         emailSignInBtn.addEventListener('click', () => {
+            const { email, password } = getEmailPassword();
             setStatus('Signing in…', 'info');
             signInWithEmail()
                 .then(() => {
+                    saveSession('email', { email, password });
                     setStatus('Signed in. Syncing…', 'info');
                     syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
                 })
@@ -559,9 +601,11 @@
         });
 
         signupBtn.addEventListener('click', () => {
+            const { email, password } = getEmailPassword();
             setStatus('Creating account…', 'info');
             createAccount()
                 .then(() => {
+                    saveSession('email', { email, password });
                     setStatus('Account created. Syncing…', 'info');
                     syncNow({ silent: false, reloadOnImport: true }).catch(() => {});
                 })
