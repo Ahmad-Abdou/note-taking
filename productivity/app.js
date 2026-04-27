@@ -937,7 +937,7 @@ function isDailyRecurringTaskForDate(task, targetYmd) {
 
     const isRecurring = !!(task.isRecurring || task.recurring);
     const repeatType = String(task.repeatType || task.recurrence || '').toLowerCase();
-    if (!isRecurring || repeatType !== 'daily') return false;
+    if (!isRecurring || !repeatType) return false;
 
     const start = normalizeYMD(task.startDate);
     if (start && start > targetYmd) return false;
@@ -951,7 +951,47 @@ function isDailyRecurringTaskForDate(task, targetYmd) {
         if (Number.isFinite(remaining) && remaining <= 0) return false;
     }
 
-    return true;
+    // Check if the target date matches the repeat pattern
+    const targetDate = new Date(targetYmd + 'T00:00:00');
+    const dayOfWeek = targetDate.getDay(); // 0=Sun, 6=Sat
+
+    if (repeatType === 'daily') {
+        return true;
+    } else if (repeatType === 'weekdays') {
+        return dayOfWeek >= 1 && dayOfWeek <= 5;
+    } else if (repeatType === 'weekends') {
+        return dayOfWeek === 0 || dayOfWeek === 6;
+    } else if (repeatType === 'custom_days') {
+        const repeatDays = Array.isArray(task.repeatDays) ? task.repeatDays : [];
+        return repeatDays.includes(dayOfWeek);
+    } else if (repeatType === 'custom_interval') {
+        // Check if the day difference is a multiple of the interval
+        const taskStart = normalizeYMD(task.dueDate || task.startDate);
+        if (!taskStart) return false;
+        const startMs = new Date(taskStart + 'T00:00:00').getTime();
+        const targetMs = targetDate.getTime();
+        const diffDays = Math.round((targetMs - startMs) / (1000 * 60 * 60 * 24));
+        const interval = (task.repeatInterval && task.repeatInterval >= 2) ? task.repeatInterval : 2;
+        return diffDays >= 0 && diffDays % interval === 0;
+    } else if (repeatType === 'weekly') {
+        const taskStart = normalizeYMD(task.dueDate || task.startDate);
+        if (!taskStart) return false;
+        const startDay = new Date(taskStart + 'T00:00:00').getDay();
+        return dayOfWeek === startDay;
+    } else if (repeatType === 'biweekly') {
+        const taskStart = normalizeYMD(task.dueDate || task.startDate);
+        if (!taskStart) return false;
+        const startMs = new Date(taskStart + 'T00:00:00').getTime();
+        const diffDays = Math.round((targetDate.getTime() - startMs) / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays % 14 === 0;
+    } else if (repeatType === 'monthly') {
+        const taskStart = normalizeYMD(task.dueDate || task.startDate);
+        if (!taskStart) return false;
+        const startDayOfMonth = new Date(taskStart + 'T00:00:00').getDate();
+        return targetDate.getDate() === startDayOfMonth;
+    }
+
+    return false;
 }
 
 function normalizeTaskLinkUrlInDashboard(raw) {

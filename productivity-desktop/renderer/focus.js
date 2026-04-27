@@ -2978,74 +2978,193 @@ function hideFocusOverlay(options = {}) {
 // ============================================================================
 // AMBIENT SOUNDS
 // ============================================================================
+
+/**
+ * Helper: generate a noise buffer of a specific color.
+ * 'white'  — flat spectrum
+ * 'pink'   — -3 dB/octave (softer highs, like a waterfall)
+ * 'brown'  — -6 dB/octave (deep rumble, like wind)
+ */
+function _generateNoiseBuffer(ctx, color = 'white') {
+    const bufferSize = 2 * ctx.sampleRate;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    if (color === 'white') {
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+    } else if (color === 'pink') {
+        // Paul Kellet's pink noise algorithm
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+            b6 = white * 0.115926;
+        }
+    } else if (color === 'brown') {
+        // Brownian / red noise — integrated white noise
+        let last = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            last = (last + 0.02 * white) / 1.02;
+            data[i] = last * 3.5; // scale up
+        }
+    }
+
+    return buffer;
+}
+
 function startAmbientSound(type) {
     stopAmbientSound();
 
+    if (!type) return;
+
     FocusState.currentSoundType = type;
 
-    // Create audio context for generating ambient sounds
+    // Create audio context
     if (!FocusState.audioContext) {
         FocusState.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    // For demo, using oscillator-based sounds
-    // In production, would load actual audio files
-    switch (type) {
-        case 'rain':
-            createRainSound();
-            break;
-        case 'whitenoise':
-            createWhiteNoiseSound();
-            break;
-        case 'lofi':
-            // Would load actual lo-fi music
-            showToast('info', 'Sound', 'Lo-fi music would play here');
-            break;
-        case 'nature':
-            createNatureSound();
-            break;
-        case 'cafe':
-            // Would load actual cafe ambience
-            showToast('info', 'Sound', 'Cafe ambience would play here');
-            break;
-    }
-}
-
-function createWhiteNoiseSound() {
     const ctx = FocusState.audioContext;
-    const bufferSize = 2 * ctx.sampleRate;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
+    if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
     }
 
-    const whiteNoise = ctx.createBufferSource();
-    whiteNoise.buffer = noiseBuffer;
-    whiteNoise.loop = true;
+    // Show volume slider
+    const volGroup = document.getElementById('ambient-volume-group');
+    if (volGroup) volGroup.style.display = '';
 
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = FocusState.soundVolume * 0.1;
-
-    whiteNoise.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    whiteNoise.start();
-
-    FocusState.ambientSound = whiteNoise;
-    FocusState.gainNode = gainNode;
+    switch (type) {
+        case 'whitenoise':
+            _createFilteredNoise(ctx, 'white');
+            break;
+        case 'pinknoise':
+            _createFilteredNoise(ctx, 'pink');
+            break;
+        case 'brownnoise':
+            _createFilteredNoise(ctx, 'brown');
+            break;
+        case 'rain':
+            _createRainSound(ctx);
+            break;
+        case 'ocean':
+            _createOceanSound(ctx);
+            break;
+        default:
+            _createFilteredNoise(ctx, 'white');
+    }
 }
 
-function createRainSound() {
-    // Simplified rain sound using filtered noise
-    createWhiteNoiseSound();
-    // In production, would use actual rain audio
+function _createFilteredNoise(ctx, color) {
+    const buffer = _generateNoiseBuffer(ctx, color);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    const gain = ctx.createGain();
+    gain.gain.value = FocusState.soundVolume * 0.15;
+
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
+
+    FocusState.ambientSound = source;
+    FocusState.gainNode = gain;
+    FocusState._ambientExtraNodes = [];
 }
 
-function createNatureSound() {
-    // Simplified nature sound
-    createWhiteNoiseSound();
-    // In production, would use actual nature audio
+function _createRainSound(ctx) {
+    // Rain = white noise through a bandpass filter with gentle modulation
+    const buffer = _generateNoiseBuffer(ctx, 'white');
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    // Bandpass filter to shape rain character
+    const bpFilter = ctx.createBiquadFilter();
+    bpFilter.type = 'bandpass';
+    bpFilter.frequency.value = 800;
+    bpFilter.Q.value = 0.5;
+
+    // Lowpass to soften harshness
+    const lpFilter = ctx.createBiquadFilter();
+    lpFilter.type = 'lowpass';
+    lpFilter.frequency.value = 3500;
+    lpFilter.Q.value = 0.7;
+
+    // Subtle volume modulation (LFO) to simulate rain intensity variation
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.15; // Very slow
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.02; // Subtle modulation depth
+
+    const gain = ctx.createGain();
+    gain.gain.value = FocusState.soundVolume * 0.2;
+
+    // Connect: source -> BP -> LP -> gain -> destination
+    source.connect(bpFilter);
+    bpFilter.connect(lpFilter);
+    lpFilter.connect(gain);
+    gain.connect(ctx.destination);
+
+    // LFO modulates gain
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+    lfo.start();
+
+    source.start();
+
+    FocusState.ambientSound = source;
+    FocusState.gainNode = gain;
+    FocusState._ambientExtraNodes = [bpFilter, lpFilter, lfo, lfoGain];
+}
+
+function _createOceanSound(ctx) {
+    // Ocean = brown noise with slow volume oscillation (wave motion)
+    const buffer = _generateNoiseBuffer(ctx, 'brown');
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    // Lowpass to give deep, smooth character
+    const lpFilter = ctx.createBiquadFilter();
+    lpFilter.type = 'lowpass';
+    lpFilter.frequency.value = 1200;
+    lpFilter.Q.value = 0.3;
+
+    // Slow LFO for wave-like volume swells
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.08; // ~12s per wave cycle
+
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.06; // Prominent swell
+
+    const gain = ctx.createGain();
+    gain.gain.value = FocusState.soundVolume * 0.2;
+
+    source.connect(lpFilter);
+    lpFilter.connect(gain);
+    gain.connect(ctx.destination);
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+    lfo.start();
+
+    source.start();
+
+    FocusState.ambientSound = source;
+    FocusState.gainNode = gain;
+    FocusState._ambientExtraNodes = [lpFilter, lfo, lfoGain];
 }
 
 function stopAmbientSound() {
@@ -3057,13 +3176,29 @@ function stopAmbientSound() {
         }
         FocusState.ambientSound = null;
     }
+
+    // Clean up extra nodes (filters, LFOs)
+    if (FocusState._ambientExtraNodes) {
+        for (const node of FocusState._ambientExtraNodes) {
+            try {
+                if (node.stop) node.stop();
+                node.disconnect();
+            } catch (_) {}
+        }
+        FocusState._ambientExtraNodes = null;
+    }
+
     FocusState.currentSoundType = null;
+
+    // Hide volume slider
+    const volGroup = document.getElementById('ambient-volume-group');
+    if (volGroup) volGroup.style.display = 'none';
 }
 
 function setAmbientVolume(volume) {
     FocusState.soundVolume = volume;
     if (FocusState.gainNode) {
-        FocusState.gainNode.gain.value = volume * 0.1;
+        FocusState.gainNode.gain.value = volume * 0.2;
     }
 }
 
@@ -3560,14 +3695,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Ambient sound selector
     document.getElementById('ambient-sound-select')?.addEventListener('change', (e) => {
-        if (FocusState.isActive) {
-            if (e.target.value) {
-                startAmbientSound(e.target.value);
-            } else {
-                stopAmbientSound();
-            }
+        const volGroup = document.getElementById('ambient-volume-group');
+        if (e.target.value) {
+            startAmbientSound(e.target.value);
+            if (volGroup) volGroup.style.display = '';
+            // Remember selection
+            try { chrome.storage.local.set({ lastAmbientSound: e.target.value }); } catch(_) {}
+        } else {
+            stopAmbientSound();
+            if (volGroup) volGroup.style.display = 'none';
+            try { chrome.storage.local.set({ lastAmbientSound: '' }); } catch(_) {}
         }
     });
+
+    // Restore last ambient sound selection
+    try {
+        chrome.storage.local.get(['lastAmbientSound'], (result) => {
+            const select = document.getElementById('ambient-sound-select');
+            if (select && result.lastAmbientSound) {
+                select.value = result.lastAmbientSound;
+            }
+        });
+    } catch(_) {}
 
     // Volume control
     document.getElementById('ambient-volume')?.addEventListener('input', (e) => {

@@ -1343,10 +1343,27 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
                         <div class="repeat-options-grid">
                             <select id="task-repeat-frequency">
                                 <option value="daily" ${task?.repeatType === 'daily' ? 'selected' : ''}>Daily</option>
+                                <option value="weekdays" ${task?.repeatType === 'weekdays' ? 'selected' : ''}>Weekdays (Mon–Fri)</option>
+                                <option value="weekends" ${task?.repeatType === 'weekends' ? 'selected' : ''}>Weekends (Sat–Sun)</option>
+                                <option value="custom_days" ${task?.repeatType === 'custom_days' ? 'selected' : ''}>Custom Days…</option>
+                                <option value="custom_interval" ${task?.repeatType === 'custom_interval' ? 'selected' : ''}>Every X Days…</option>
                                 <option value="weekly" ${task?.repeatType === 'weekly' ? 'selected' : ''}>Weekly</option>
                                 <option value="biweekly" ${task?.repeatType === 'biweekly' ? 'selected' : ''}>Every 2 weeks</option>
                                 <option value="monthly" ${task?.repeatType === 'monthly' ? 'selected' : ''}>Monthly</option>
                             </select>
+
+                            <!-- Day picker for custom_days -->
+                            <div id="task-repeat-days" class="repeat-day-picker ${task?.repeatType === 'custom_days' ? '' : 'hidden'}">
+                                ${['S','M','T','W','T','F','S'].map((label, i) =>
+                                    `<button type="button" class="day-btn ${task?.repeatDays?.includes(i) ? 'active' : ''}" data-day="${i}">${label}</button>`
+                                ).join('')}
+                            </div>
+
+                            <!-- Interval input for custom_interval -->
+                            <div id="task-repeat-interval-group" class="repeat-interval-group ${task?.repeatType === 'custom_interval' ? '' : 'hidden'}">
+                                <label>Every <input type="number" id="task-repeat-interval" min="2" max="365" value="${task?.repeatInterval || 3}"> days</label>
+                            </div>
+
                             <div class="repeat-end-options">
                                 <select id="task-repeat-end-type">
                                     <option value="never" ${(!task?.repeatEndType || task?.repeatEndType === 'never') ? 'selected' : ''}>Never ends</option>
@@ -1522,6 +1539,20 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
     // Repeat toggle
     document.getElementById('task-repeat-enabled')?.addEventListener('change', (e) => {
         document.getElementById('task-repeat-options')?.classList.toggle('hidden', !e.target.checked);
+    });
+
+    // Repeat frequency change — show/hide day picker and interval input
+    document.getElementById('task-repeat-frequency')?.addEventListener('change', (e) => {
+        const val = e.target.value;
+        document.getElementById('task-repeat-days')?.classList.toggle('hidden', val !== 'custom_days');
+        document.getElementById('task-repeat-interval-group')?.classList.toggle('hidden', val !== 'custom_interval');
+    });
+
+    // Day picker toggle buttons
+    document.querySelectorAll('#task-repeat-days .day-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.classList.toggle('active');
+        });
     });
 
     // Repeat end type change
@@ -2042,6 +2073,20 @@ async function saveTask(e) {
     const repeatEndDate = document.getElementById('task-repeat-end-date')?.value || null;
     const repeatCount = parseInt(document.getElementById('task-repeat-count')?.value) || 10;
 
+    // Flexible repeat fields
+    let repeatDays = [...document.querySelectorAll('#task-repeat-days .day-btn.active')]
+        .map(btn => parseInt(btn.dataset.day));
+    // Auto-populate for weekdays/weekends presets
+    if (repeatType === 'weekdays') repeatDays = [1, 2, 3, 4, 5];
+    else if (repeatType === 'weekends') repeatDays = [0, 6];
+    const repeatInterval = parseInt(document.getElementById('task-repeat-interval')?.value) || 3;
+
+    // Validation: custom_days requires at least one day selected
+    if (isRecurring && repeatType === 'custom_days' && repeatDays.length === 0) {
+        showToast('error', 'Validation Error', 'Please select at least one day for the repeat schedule.');
+        return;
+    }
+
     // Tags
     const tagsValue = document.getElementById('task-tags')?.value || '';
     const tags = tagsValue ? tagsValue.split(',').filter(t => t.trim()) : [];
@@ -2076,6 +2121,8 @@ async function saveTask(e) {
         repeatEndType: isRecurring ? repeatEndType : null,
         repeatEndDate: isRecurring && repeatEndType === 'date' ? repeatEndDate : null,
         repeatCount: isRecurring && repeatEndType === 'count' ? repeatCount : null,
+        repeatDays: isRecurring && ['custom_days', 'weekdays', 'weekends'].includes(repeatType) ? repeatDays : [],
+        repeatInterval: isRecurring && repeatType === 'custom_interval' ? repeatInterval : null,
         listId,
         color,
         subtasks,
@@ -2094,6 +2141,11 @@ async function saveTask(e) {
             if (index >= 0) TaskState.tasks[index] = task;
         } else {
             TaskState.tasks.push(task);
+
+            // Create recurring child tasks if this is a new recurring task
+            if (task.isRecurring && task.repeatType) {
+                await createRecurringTasks(task);
+            }
         }
 
         // Check if user wants to add this task as a countdown
@@ -2236,8 +2288,25 @@ async function deleteTask(taskId) {
     if (!ok) return;
 
     try {
+        // Cascade-delete child tasks (recurring instances) before deleting parent
+        const childTasks = TaskState.tasks.filter(t => t.parentTaskId === taskId);
+        for (const child of childTasks) {
+            await ProductivityData.DataStore.deleteTask(child.id);
+        }
+
+        // Also check storage for children not yet in local state
+        try {
+            const allTasks = await ProductivityData.DataStore.getTasks();
+            const storageChildren = allTasks.filter(t => t.parentTaskId === taskId);
+            for (const child of storageChildren) {
+                if (!childTasks.find(c => c.id === child.id)) {
+                    await ProductivityData.DataStore.deleteTask(child.id);
+                }
+            }
+        } catch (_) { /* ignore */ }
+
         await ProductivityData.DataStore.deleteTask(taskId);
-        TaskState.tasks = TaskState.tasks.filter(t => t.id !== taskId);
+        TaskState.tasks = TaskState.tasks.filter(t => t.id !== taskId && t.parentTaskId !== taskId);
 
         closeTaskDetails();
         refreshTaskView();
@@ -2584,52 +2653,106 @@ async function bulkDelete() {
 // ============================================================================
 async function createRecurringTasks(baseTask) {
     if (!baseTask?.isRecurring || !baseTask?.repeatType) return;
-    if (baseTask.repeatEndType !== 'date' || !baseTask.repeatEndDate) return;
 
-    const start = baseTask.dueDate ? new Date(baseTask.dueDate) : new Date();
-    const end = new Date(baseTask.repeatEndDate);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+    // Support both 'date' end type and 'never'/'count' end types
+    const startDate = baseTask.dueDate || baseTask.startDate;
+    if (!startDate) return;
 
-    const dayIncrement = {
-        daily: 1,
-        weekly: 7,
-        biweekly: 14,
-        monthly: 0
-    }[baseTask.repeatType] || 7;
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) return;
 
+    // Determine end date for instance generation
+    let end;
+    if (baseTask.repeatEndType === 'date' && baseTask.repeatEndDate) {
+        end = new Date(baseTask.repeatEndDate);
+    } else if (baseTask.repeatEndType === 'count' && baseTask.repeatCount) {
+        end = null; // count-based loop
+    } else if (baseTask.repeatEndType === 'never' || !baseTask.repeatEndType) {
+        end = new Date(start);
+        end.setDate(end.getDate() + 90);
+    } else {
+        return;
+    }
+
+    if (end && Number.isNaN(end.getTime())) return;
+
+    // Determine the day increment and day-of-week filter based on repeat type
+    const rt = baseTask.repeatType;
+    let dayIncrement;
+    let validDays = null; // null = all days valid
+
+    if (rt === 'daily') {
+        dayIncrement = 1;
+    } else if (rt === 'weekly') {
+        dayIncrement = 7;
+    } else if (rt === 'biweekly') {
+        dayIncrement = 14;
+    } else if (rt === 'monthly') {
+        dayIncrement = 0; // special handling
+    } else if (rt === 'custom_interval') {
+        dayIncrement = (baseTask.repeatInterval && baseTask.repeatInterval >= 2) ? baseTask.repeatInterval : 2;
+    } else if (rt === 'weekdays') {
+        dayIncrement = 1;
+        validDays = [1, 2, 3, 4, 5];
+    } else if (rt === 'weekends') {
+        dayIncrement = 1;
+        validDays = [0, 6];
+    } else if (rt === 'custom_days') {
+        dayIncrement = 1;
+        validDays = Array.isArray(baseTask.repeatDays) && baseTask.repeatDays.length > 0
+            ? baseTask.repeatDays : [1, 2, 3, 4, 5]; // fallback to weekdays
+    } else {
+        dayIncrement = 7;
+    }
+
+    const maxInstances = baseTask.repeatCount || 365; // Safety cap
     const tasks = [];
     let current = new Date(start);
+    let count = 0;
 
-    if (baseTask.repeatType === 'monthly') {
-        current.setMonth(current.getMonth() + 1);
-        while (current <= end) {
-            tasks.push({
-                ...baseTask,
-                id: undefined,
-                dueDate: current.toISOString().split('T')[0],
-                parentTaskId: baseTask.id,
-                status: 'not-started',
-                completedAt: null,
-                isRecurring: false,
-                recurring: false
-            });
+    const advanceCurrent = () => {
+        if (rt === 'monthly') {
             current.setMonth(current.getMonth() + 1);
-        }
-    } else {
-        current.setDate(current.getDate() + dayIncrement);
-        while (current <= end) {
-            tasks.push({
-                ...baseTask,
-                id: undefined,
-                dueDate: current.toISOString().split('T')[0],
-                parentTaskId: baseTask.id,
-                status: 'not-started',
-                completedAt: null,
-                isRecurring: false,
-                recurring: false
-            });
+        } else {
             current.setDate(current.getDate() + dayIncrement);
         }
+    };
+
+    // Skip the first date (that's the parent task)
+    advanceCurrent();
+
+    // Safety: limit total iterations to prevent infinite loops for filtered types
+    let iterations = 0;
+    const maxIterations = maxInstances * 8; // generous upper bound
+
+    while (count < maxInstances && iterations < maxIterations) {
+        if (end && current > end) break;
+        iterations++;
+
+        // For day-of-week filtered types, skip invalid days
+        if (validDays && !validDays.includes(current.getDay())) {
+            advanceCurrent();
+            continue;
+        }
+
+        const childDate = current.toISOString().split('T')[0];
+
+        tasks.push({
+            ...baseTask,
+            id: undefined,
+            dueDate: childDate,
+            startDate: baseTask.startDate ? childDate : null,
+            dueTime: baseTask.dueTime || null,
+            startTime: baseTask.startTime || null,
+            parentTaskId: baseTask.id,
+            status: 'not-started',
+            completedAt: null,
+            isRecurring: false,
+            recurring: false
+        });
+
+        count++;
+        advanceCurrent();
     }
 
     for (const taskData of tasks) {

@@ -866,6 +866,21 @@
                                         <option value="15">15 minutes</option>
                                     </select>
                                 </div>
+                                <div class="setting-group">
+                                    <label for="ambient-sound-select"><i class="fas fa-volume-up"></i> White Noise</label>
+                                    <select id="ambient-sound-select">
+                                        <option value="">None</option>
+                                        <option value="whitenoise">White Noise</option>
+                                        <option value="pinknoise">Pink Noise</option>
+                                        <option value="brownnoise">Brown Noise</option>
+                                        <option value="rain">Rain</option>
+                                        <option value="ocean">Ocean Waves</option>
+                                    </select>
+                                </div>
+                                <div class="setting-group ambient-volume-group" id="ambient-volume-group" style="display: none;">
+                                    <label for="ambient-volume"><i class="fas fa-sliders-h"></i> Volume</label>
+                                    <input type="range" id="ambient-volume" min="0" max="1" step="0.05" value="0.5" class="volume-slider">
+                                </div>
                             </div>
 
                             <div class="settings-toggles">

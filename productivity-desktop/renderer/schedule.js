@@ -3753,13 +3753,31 @@ function setupEventDetailsListeners(modal, event) {
     modal.querySelector('[data-action="delete-event"]')?.addEventListener('click', async () => {
         if (event?.taskId) {
             try {
+                // Cascade-delete child tasks (recurring instances)
+                const allTasks = await ProductivityData.DataStore.getTasks();
+                const childTasks = allTasks.filter(t => t.parentTaskId === event.taskId);
+                for (const child of childTasks) {
+                    await ProductivityData.DataStore.deleteTask(child.id);
+                }
+                // Remove children from TaskState if available
+                if (window.TaskState?.tasks) {
+                    window.TaskState.tasks = window.TaskState.tasks.filter(t => t.parentTaskId !== event.taskId);
+                }
+
                 await ProductivityData.DataStore.deleteTask(event.taskId);
+                // Remove parent from TaskState
+                if (window.TaskState?.tasks) {
+                    window.TaskState.tasks = window.TaskState.tasks.filter(t => t.id !== event.taskId);
+                }
                 closeEventDetails();
                 await loadTasksAsEvents();
                 await renderCurrentView();
                 renderTodayAgenda();
                 renderUpcomingEvents();
-                showToast('info', 'Task Deleted', 'The task has been removed.');
+                const deletedCount = childTasks.length;
+                showToast('info', 'Task Deleted', deletedCount > 0
+                    ? `Task and ${deletedCount} recurring instance${deletedCount > 1 ? 's' : ''} removed.`
+                    : 'The task has been removed.');
             } catch (err) {
                 console.error('Failed to delete task from schedule:', err);
                 showToast('error', 'Delete Failed', 'Could not delete the task.');

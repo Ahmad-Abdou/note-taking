@@ -128,11 +128,14 @@ class Task {
         this.recurring = this.isRecurring;
 
         // Preferred fields
-        this.repeatType = data.repeatType || data.recurrence || null; // daily, weekly, biweekly, monthly
+        this.repeatType = data.repeatType || data.recurrence || null; // daily, weekly, biweekly, monthly, weekdays, weekends, custom_days, custom_interval
         this.repeatEndType = data.repeatEndType || (data.repeatEndDate || data.repeatUntil || data.recurrenceEndDate ? 'date' : null); // never, date, count
         this.repeatEndDate = data.repeatEndDate || data.repeatUntil || data.recurrenceEndDate || null;
         this.repeatCount = (data.repeatCount ?? null);
         this.repeatRemaining = (data.repeatRemaining ?? null);
+        // Flexible repeat: specific days of week [0=Sun..6=Sat] and custom interval in days
+        this.repeatDays = Array.isArray(data.repeatDays) ? data.repeatDays : [];
+        this.repeatInterval = (typeof data.repeatInterval === 'number' && data.repeatInterval >= 2) ? data.repeatInterval : null;
 
         // Legacy fields (kept for backward compatibility)
         this.recurrence = data.recurrence || this.repeatType || null;
@@ -231,21 +234,52 @@ function coerceLocalYMD(value) {
 function normalizeRepeatType(type) {
     if (!type) return null;
     const t = String(type).toLowerCase();
-    if (t === 'daily' || t === 'weekly' || t === 'monthly' || t === 'biweekly') return t;
+    if (['daily', 'weekly', 'monthly', 'biweekly', 'weekdays', 'weekends', 'custom_days', 'custom_interval'].includes(t)) return t;
     return null;
 }
 
-function nextDueYMD(currentDueYMD, repeatType) {
+/**
+ * Calculate the next due date for a recurring task.
+ * @param {string} currentDueYMD - Current due date in YYYY-MM-DD format
+ * @param {string} repeatType - Repeat type
+ * @param {object} [task] - Full task object (needed for custom_days/custom_interval)
+ */
+function nextDueYMD(currentDueYMD, repeatType, task) {
     const base = parseLocalYMD(currentDueYMD);
     if (!base) return null;
     const rt = normalizeRepeatType(repeatType);
     if (!rt) return null;
 
     const next = new Date(base.getTime());
-    if (rt === 'daily') next.setDate(next.getDate() + 1);
-    else if (rt === 'weekly') next.setDate(next.getDate() + 7);
-    else if (rt === 'biweekly') next.setDate(next.getDate() + 14);
-    else if (rt === 'monthly') next.setMonth(next.getMonth() + 1);
+
+    if (rt === 'daily') {
+        next.setDate(next.getDate() + 1);
+    } else if (rt === 'weekly') {
+        next.setDate(next.getDate() + 7);
+    } else if (rt === 'biweekly') {
+        next.setDate(next.getDate() + 14);
+    } else if (rt === 'monthly') {
+        next.setMonth(next.getMonth() + 1);
+    } else if (rt === 'custom_interval') {
+        const interval = (task?.repeatInterval && task.repeatInterval >= 2) ? task.repeatInterval : 2;
+        next.setDate(next.getDate() + interval);
+    } else if (rt === 'weekdays' || rt === 'weekends' || rt === 'custom_days') {
+        // Advance day-by-day until we hit a valid day
+        let validDays;
+        if (rt === 'weekdays') validDays = [1, 2, 3, 4, 5];
+        else if (rt === 'weekends') validDays = [0, 6];
+        else validDays = Array.isArray(task?.repeatDays) ? task.repeatDays : [];
+
+        if (validDays.length === 0) {
+            next.setDate(next.getDate() + 1);
+        } else {
+            // Advance up to 8 days to find next valid day
+            for (let i = 0; i < 8; i++) {
+                next.setDate(next.getDate() + 1);
+                if (validDays.includes(next.getDay())) break;
+            }
+        }
+    }
 
     return formatLocalYMD(next);
 }
@@ -273,7 +307,7 @@ function rolloverRecurringTasks(tasks, now = new Date()) {
         let advances = 0;
         let candidate = occurrenceYMD;
         while (true) {
-            const next = nextDueYMD(candidate, repeatType);
+            const next = nextDueYMD(candidate, repeatType, task);
             if (!next) break;
             advances += 1;
             candidate = next;
