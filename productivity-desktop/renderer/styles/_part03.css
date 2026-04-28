@@ -859,6 +859,11 @@
     padding-top: 2px;
     font-size: 0.7rem;
     color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.calendar-times .time-slot:last-child {
+    border-bottom: none;
 }
 
 .calendar-days {

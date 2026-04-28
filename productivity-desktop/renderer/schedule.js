@@ -1744,8 +1744,8 @@ async function renderWeekView() {
     // Get events for the week
     const weekEvents = getEventsForDateRange(weekDates[0], weekDates[6]);
 
-    // Generate time slots (12 AM to 11 PM)
-    const hours = Array.from({ length: 24 }, (_, i) => i);
+    // Generate time slots (6 AM to 11 PM)
+    const hours = Array.from({ length: 18 }, (_, i) => i + 6);
 
     container.innerHTML = `
         <div class="calendar-week-view">
@@ -2201,8 +2201,8 @@ async function renderDayView() {
     // Get events for this day
     const dayEvents = getEventsForDateRange(dateStr, dateStr);
 
-    // Generate time slots (12 AM to 11 PM)
-    const hours = Array.from({ length: 24 }, (_, i) => i);
+    // Generate time slots (6 AM to 11 PM)
+    const hours = Array.from({ length: 18 }, (_, i) => i + 6);
 
     container.innerHTML = `
         <div class="calendar-day-view">
@@ -2226,7 +2226,7 @@ async function renderDayView() {
                         ${hours.map(hour => `
                             <div class="day-hour-slot" data-hour="${hour}"></div>
                         `).join('')}
-                        ${renderDayViewEvents(dayEvents)}
+                        ${renderDayViewEvents(dayEvents, hours[0])}
                     </div>
                 </div>
             </div>
@@ -2235,7 +2235,7 @@ async function renderDayView() {
 }
 
 
-function renderDayViewEvents(events) {
+function renderDayViewEvents(events, startHour = 6) {
     // Position overlapping events
     const positioned = positionOverlappingEvents([...events]);
 
@@ -2244,8 +2244,8 @@ function renderDayViewEvents(events) {
         const endMinutes = timeToMinutes(event.endTime);
         const duration = endMinutes - startMinutes;
 
-        // Calculate position (relative to 6 AM)
-        const top = (startMinutes / 60) * 60; // 60px per hour
+        // Calculate position relative to the first visible hour (6 AM)
+        const top = ((startMinutes / 60) - startHour) * 60; // 60px per hour
         const height = Math.max((duration / 60) * 60, 25); // minimum 25px
 
         const colors = getEventDisplayColors(event);

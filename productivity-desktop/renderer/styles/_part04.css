@@ -543,7 +543,7 @@ body:has(.calendar-event.dragging) .calendar-event {
 .day-body {
     display: flex;
     overflow-y: auto;
-    max-height: 600px;
+    max-height: 1080px;
 }
 
 .day-time-column {
@@ -558,6 +558,11 @@ body:has(.calendar-event.dragging) .calendar-event {
     align-items: flex-start;
     justify-content: center;
     padding-top: 4px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.day-time-slot:last-child {
+    border-bottom: none;
 }
 
 .day-time-slot .time-label {
