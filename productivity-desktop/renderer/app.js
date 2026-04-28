@@ -4456,6 +4456,9 @@ function setupAppUpdater() {
         if (raw === 'not_packaged') {
             return 'Updates are available only in packaged desktop builds.';
         }
+        if (raw === 'updater_handler_missing') {
+            return 'Update support is not available in this desktop build. Reinstall the latest release to restore it.';
+        }
         if (raw === 'missing_app_update_yml') {
             return 'Update configuration is missing. Reinstall the Setup build and try again.';
         }

@@ -43,8 +43,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Auto-updates (desktop app)
     updates: {
         getVersion: () => ipcRenderer.invoke('updater-get-version'),
-        check: () => ipcRenderer.invoke('updater-check'),
-        updateNow: () => ipcRenderer.invoke('updater-update-now'),
+        check: async () => {
+            try {
+                return await ipcRenderer.invoke('updater-check');
+            } catch (error) {
+                const message = String(error?.message || error || '');
+                if (message.includes('No handler registered for') || message.includes('updater-check')) {
+                    return { ok: false, error: 'updater_handler_missing' };
+                }
+                throw error;
+            }
+        },
+        updateNow: async () => {
+            try {
+                return await ipcRenderer.invoke('updater-update-now');
+            } catch (error) {
+                const message = String(error?.message || error || '');
+                if (message.includes('No handler registered for') || message.includes('updater-update-now')) {
+                    return { ok: false, error: 'updater_handler_missing' };
+                }
+                throw error;
+            }
+        },
         onStatus: (callback) => {
             const listener = (event, payload) => callback(payload);
             ipcRenderer.on('updater-status', listener);
