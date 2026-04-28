@@ -96,6 +96,14 @@ const PRIORITY_CONFIG = {
     low: { color: '#64748b', weight: 1, label: 'Low', icon: 'fa-arrow-down' }
 };
 
+function isRecurringTaskInstance(task) {
+    return !!(task && task.parentTaskId && !(task.isRecurring || task.recurring));
+}
+
+function getVisibleTasks(tasks = TaskState.tasks) {
+    return (Array.isArray(tasks) ? tasks : []).filter(task => !isRecurringTaskInstance(task));
+}
+
 function ymdLocal(date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -475,7 +483,7 @@ function refreshTaskView() {
 // FILTERING AND SORTING
 // ============================================================================
 function getFilteredTasks() {
-    let filtered = [...TaskState.tasks];
+    let filtered = getVisibleTasks();
 
     // Apply search filter
     if (TaskState.filters.search) {
@@ -2767,12 +2775,13 @@ async function createRecurringTasks(baseTask) {
 // ============================================================================
 function updateTaskStats() {
     const today = new Date().toISOString().split('T')[0];
+    const visibleTasks = getVisibleTasks();
 
     const stats = {
-        total: TaskState.tasks.length,
-        completed: TaskState.tasks.filter(t => t.status === 'completed').length,
-        overdue: TaskState.tasks.filter(t => t.dueDate && t.dueDate < today && t.status !== 'completed').length,
-        today: TaskState.tasks.filter(t => t.dueDate === today && t.status !== 'completed').length
+        total: visibleTasks.length,
+        completed: visibleTasks.filter(t => t.status === 'completed').length,
+        overdue: visibleTasks.filter(t => t.dueDate && t.dueDate < today && t.status !== 'completed').length,
+        today: visibleTasks.filter(t => t.dueDate === today && t.status !== 'completed').length
     };
 
     // Update UI elements if they exist

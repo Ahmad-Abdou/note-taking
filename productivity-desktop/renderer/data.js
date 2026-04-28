@@ -459,6 +459,7 @@ class Goal {
         this.title = data.title || '';
         this.description = data.description || '';
         this.category = data.category || 'academic'; // academic, skill, project, career
+        this.startDate = data.startDate || null;
         this.targetDate = data.targetDate || null;
         this.status = data.status || 'active'; // active, completed, paused, abandoned
         this.progress = data.progress || 0; // 0-100
@@ -497,6 +498,17 @@ class Goal {
 
     // Calculate progress based on milestones
     calculateProgress() {
+        if (this.trackingType === 'days') {
+            const state = getDateTrackedGoalState(this, new Date());
+            this.trackingTarget = state.totalDays;
+            this.trackingCurrent = state.currentDays;
+            if (state.complete && this.status === 'active') {
+                this.status = 'completed';
+                if (!this.completedAt) this.completedAt = new Date().toISOString();
+            }
+            return state.progress;
+        }
+
         if (this.trackingType === 'focus_hours' || this.trackingType === 'tasks_completed' || this.trackingType === 'website_minutes' || this.trackingType === 'challenges_completed') {
             const target = toFiniteGoalNumber(this.trackingTarget, 0);
             const current = toFiniteGoalNumber(this.trackingCurrent, 0);
@@ -514,6 +526,12 @@ class Goal {
     // Get days remaining
     get daysRemaining() {
         if (!this.targetDate) return null;
+
+        if (this.trackingType === 'days') {
+            const state = getDateTrackedGoalState(this, new Date());
+            return Math.max(0, state.totalDays - state.currentDays);
+        }
+
         const target = new Date(this.targetDate);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -526,6 +544,7 @@ class Goal {
             title: this.title,
             description: this.description,
             category: this.category,
+            startDate: this.startDate,
             targetDate: this.targetDate,
             status: this.status,
             progress: this.progress,
@@ -552,6 +571,7 @@ class Goal {
 
 function normalizeTrackedGoalType(value) {
     const candidate = String(value || '').trim().toLowerCase();
+    if (candidate === 'days' || candidate === 'duration_days' || candidate === 'countdown_days') return 'days';
     if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes' || candidate === 'challenges_completed') return candidate;
     return 'milestones';
 }
@@ -587,6 +607,30 @@ function getGoalTrackingStartTs(goal) {
         ?? 0;
 }
 
+function getDateTrackedGoalState(goal, now = new Date()) {
+    const startTs = getGoalTrackingStartTs(goal);
+    const nowTs = now.getTime();
+    const targetDateTs = toGoalTimestamp(goal?.targetDate);
+    const explicitTargetDays = Math.max(1, toFiniteGoalNumber(goal?.trackingTarget, 0));
+    const inferredTargetDays = (startTs && targetDateTs && targetDateTs >= startTs)
+        ? Math.max(1, Math.ceil((targetDateTs - startTs) / (1000 * 60 * 60 * 24)))
+        : explicitTargetDays;
+    const totalDays = Math.max(1, inferredTargetDays);
+    const elapsedDays = startTs
+        ? Math.max(0, Math.floor((nowTs - startTs) / (1000 * 60 * 60 * 24)) + 1)
+        : 1;
+    const currentDays = Math.min(totalDays, elapsedDays);
+    const progress = Math.max(0, Math.min(100, Math.round((currentDays / totalDays) * 100)));
+
+    return {
+        startTs,
+        totalDays,
+        currentDays,
+        progress,
+        complete: currentDays >= totalDays
+    };
+}
+
 function getWebsiteUsageMinutesTotal(websiteUsage) {
     if (!websiteUsage || typeof websiteUsage !== 'object') return 0;
     const sites = websiteUsage.sites;
@@ -615,6 +659,20 @@ function applyTrackedGoalProgressFromActivity(goals, tasks, sessions, websiteUsa
         goal.trackingType = trackingType;
 
         if (trackingType === 'milestones') {
+            continue;
+        }
+
+        if (trackingType === 'days') {
+            const state = getDateTrackedGoalState(goal, new Date());
+            goal.trackingTarget = state.totalDays;
+            goal.trackingCurrent = state.currentDays;
+            goal.progress = state.progress;
+
+            if (goal.status === 'active' && state.complete) {
+                goal.status = 'completed';
+                if (!goal.completedAt) goal.completedAt = nowIso;
+            }
+
             continue;
         }
 

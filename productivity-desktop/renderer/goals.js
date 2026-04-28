@@ -192,6 +192,7 @@ function getGoalStartDate(goal) {
 
 function normalizeGoalTrackingTypeValue(value) {
     const candidate = String(value || '').trim().toLowerCase();
+    if (candidate === 'days' || candidate === 'duration_days' || candidate === 'countdown_days') return 'days';
     if (candidate === 'focus_hours' || candidate === 'tasks_completed' || candidate === 'website_minutes' || candidate === 'challenges_completed') return candidate;
     return 'milestones';
 }
@@ -232,6 +233,9 @@ function getGoalTrackingSummary(goal) {
     if (tracking.type === 'challenges_completed') {
         return `${formatGoalTrackingNumber(tracking.current, 0)} / ${formatGoalTrackingNumber(tracking.target, 0)} challenges`;
     }
+    if (tracking.type === 'days') {
+        return `${formatGoalTrackingNumber(tracking.current, 0)} / ${formatGoalTrackingNumber(tracking.target, 0)} days`;
+    }
     return '';
 }
 
@@ -241,6 +245,7 @@ function getGoalTrackingIcon(goal) {
     if (type === 'tasks_completed') return 'fa-list-check';
     if (type === 'website_minutes') return 'fa-globe';
     if (type === 'challenges_completed') return 'fa-trophy';
+    if (type === 'days') return 'fa-calendar-day';
     return 'fa-flag';
 }
 
@@ -997,6 +1002,7 @@ function createGoalModal() {
                             <label for="goal-tracking-type-input">Progress Source</label>
                             <select id="goal-tracking-type-input">
                                 <option value="milestones">Milestones</option>
+                                <option value="days">Days</option>
                                 <option value="focus_hours">Focus Time (Hours)</option>
                                 <option value="tasks_completed">Completed Tasks</option>
                                 <option value="website_minutes">Website Time Today (Minutes)</option>
@@ -1256,6 +1262,17 @@ function updateGoalTrackingFormState() {
         return;
     }
 
+    if (trackingType === 'days') {
+        if (trackingTargetLabel) trackingTargetLabel.textContent = 'Duration (Days)';
+        if (trackingHint) trackingHint.textContent = 'The goal will count up one day at a time until it reaches the target.';
+        if (trackingTargetInput) {
+            trackingTargetInput.min = '1';
+            trackingTargetInput.step = '1';
+            trackingTargetInput.placeholder = 'e.g., 30';
+        }
+        return;
+    }
+
     if (trackingType === 'website_minutes') {
         if (trackingTargetLabel) trackingTargetLabel.textContent = 'Target Minutes';
         if (trackingHint) trackingHint.textContent = 'Example: 90 means 90 website minutes tracked today.';
@@ -1489,6 +1506,8 @@ async function saveGoal(e) {
             let targetValidationMessage = 'Set a completed-tasks target (minimum 1).';
             if (trackingType === 'focus_hours') {
                 targetValidationMessage = 'Set a focus-hours target (minimum 0.5).';
+            } else if (trackingType === 'days') {
+                targetValidationMessage = 'Set a day target (minimum 1).';
             } else if (trackingType === 'website_minutes') {
                 targetValidationMessage = 'Set a website-minutes target (minimum 1).';
             } else if (trackingType === 'challenges_completed') {

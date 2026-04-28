@@ -2033,10 +2033,22 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Target Date *</label>
-                    <input type="date" id="goal-target-date-input" required>
+                    <label>Goal Type</label>
+                    <select id="goal-tracking-type-input">
+                        <option value="milestones">Milestones</option>
+                        <option value="days">Daily Duration</option>
+                    </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="goal-tracking-target-group">
+                    <label>Duration (days)</label>
+                    <input type="number" id="goal-tracking-target-input" min="1" step="1" value="30">
+                    <small style="display:block; opacity:0.7; margin-top:6px;">Counts up once per day until it reaches the target.</small>
+                </div>
+                <div class="form-group" id="goal-target-date-group">
+                    <label>Target Date *</label>
+                    <input type="date" id="goal-target-date-input">
+                </div>
+                <div class="form-group" id="goal-milestones-group">
                     <label>Milestones</label>
                     <div class="milestones-list" id="milestones-list">
                         <!-- Milestones added dynamically -->

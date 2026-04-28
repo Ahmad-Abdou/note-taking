@@ -71,7 +71,7 @@ const ScheduleState = {
         currentY: 0,
         previewEl: null,
         pxPerHour: 50,
-        startHour: 6
+        startHour: 0
     },
     dragCreateJustFinished: false,
     ui: {
@@ -1214,6 +1214,15 @@ async function editCountdownTitle(eventId) {
         return;
     }
 
+    if (event.isTask && typeof window.openTaskModal === 'function') {
+        const tasks = await ProductivityData.DataStore.getTasks();
+        const task = tasks.find(t => String(t.id) === String(event.taskId));
+        if (task) {
+            window.openTaskModal(task);
+            return;
+        }
+    }
+
     const currentTitle = ScheduleState.countdownTitles[idStr] || ScheduleState.countdownTitles[eventId] || event.title;
     const newTitle = prompt('Edit countdown title:', currentTitle);
 
@@ -1396,7 +1405,7 @@ function handleResizeMove(e) {
     // Visual preview update
     const [startH, startM] = newStartTime.split(':').map(Number);
     const [endH, endM] = newEndTime.split(':').map(Number);
-    const startHour = 6; // Calendar starts at 6 AM
+    const startHour = 0; // Calendar starts at 12 AM
     const top = ((startH - startHour) * 60 + startM) * (50 / 60);
     const height = ((endH - startH) * 60 + (endM - startM)) * (50 / 60);
 
@@ -1524,7 +1533,7 @@ function setupDragToCreateTask() {
         const hourSlot = target.closest('.hour-slot[data-hour]');
         if (hourSlot) {
             const col = hourSlot.closest('.calendar-day-column');
-            return col ? { column: col, date: col.dataset.date, pxPerHour: 50, startHour: 6, slotSelector: '.hour-slot' } : null;
+            return col ? { column: col, date: col.dataset.date, pxPerHour: 50, startHour: 0, slotSelector: '.hour-slot' } : null;
         }
         // Day view: .day-hour-slot inside .day-events-column
         const daySlot = target.closest('.day-hour-slot[data-hour]');
@@ -1532,7 +1541,7 @@ function setupDragToCreateTask() {
             const col = daySlot.closest('.day-events-column') || daySlot.closest('.day-events-container');
             if (!col) return null;
             const dateEl = col.closest('[data-date]') || col;
-            return { column: col, date: dateEl.dataset.date || new Date().toISOString().split('T')[0], pxPerHour: 60, startHour: 6, slotSelector: '.day-hour-slot' };
+            return { column: col, date: dateEl.dataset.date || new Date().toISOString().split('T')[0], pxPerHour: 60, startHour: 0, slotSelector: '.day-hour-slot' };
         }
         return null;
     }
@@ -1687,8 +1696,8 @@ async function renderWeekView() {
     // Get events for the week
     const weekEvents = getEventsForDateRange(weekDates[0], weekDates[6]);
 
-    // Generate time slots (6 AM to 11 PM)
-    const hours = Array.from({ length: 18 }, (_, i) => i + 6);
+    // Generate time slots (12 AM to 11 PM)
+    const hours = Array.from({ length: 24 }, (_, i) => i);
 
     container.innerHTML = `
         <div class="calendar-week-view">
@@ -1821,8 +1830,8 @@ function updateCurrentTimeLine() {
     const hours = now.getHours();
     const minutes = now.getMinutes();
 
-    if (hours >= 6 && hours <= 23) {
-        const top = ((hours - 6) * 60 + minutes) * (50 / 60);
+    if (hours >= 0 && hours <= 23) {
+        const top = (hours * 60 + minutes) * (50 / 60);
         line.style.top = `${top}px`;
         line.style.display = 'block';
     } else {
@@ -2144,8 +2153,8 @@ async function renderDayView() {
     // Get events for this day
     const dayEvents = getEventsForDateRange(dateStr, dateStr);
 
-    // Generate time slots (6 AM to 11 PM)
-    const hours = Array.from({ length: 18 }, (_, i) => i + 6);
+    // Generate time slots (12 AM to 11 PM)
+    const hours = Array.from({ length: 24 }, (_, i) => i);
 
     container.innerHTML = `
         <div class="calendar-day-view">
@@ -2188,7 +2197,7 @@ function renderDayViewEvents(events) {
         const duration = endMinutes - startMinutes;
 
         // Calculate position (relative to 6 AM)
-        const top = ((startMinutes - 360) / 60) * 60; // 60px per hour
+        const top = (startMinutes / 60) * 60; // 60px per hour
         const height = Math.max((duration / 60) * 60, 25); // minimum 25px
 
         const colors = getEventDisplayColors(event);
@@ -3679,7 +3688,7 @@ function setupEventDetailsListeners(modal, event) {
     modal.querySelector('[data-action="edit-event"]')?.addEventListener('click', async () => {
         if (event?.taskId && typeof window.openTaskModal === 'function') {
             const tasks = await ProductivityData.DataStore.getTasks();
-            const task = tasks.find(t => t.id === event.taskId);
+            const task = tasks.find(t => String(t.id) === String(event.taskId));
             if (task) {
                 closeEventDetails();
                 window.openTaskModal(task, task.status || 'not-started', {});

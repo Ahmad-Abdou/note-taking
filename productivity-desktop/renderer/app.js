@@ -1072,6 +1072,10 @@ async function openExternalUrlFromDashboard(url) {
     }
 }
 
+function isRecurringChildTask(task) {
+    return !!(task && task.parentTaskId && !(task.isRecurring || task.recurring));
+}
+
 function renderTodayTasksCard(allTasks) {
     const list = document.getElementById('today-tasks-list');
     if (!list) return;
@@ -1082,6 +1086,7 @@ function renderTodayTasksCard(allTasks) {
     const todayTasks = tasks
         .filter(t => {
             if (!t) return false;
+            if (isRecurringChildTask(t)) return false;
             if (t.status === 'completed') return false;
             const due = normalizeYMD(t.dueDate);
             const start = normalizeYMD(t.startDate);
@@ -2115,6 +2120,7 @@ async function renderTodayTasksWidget() {
         const todayTasks = tasks
             .filter(t => {
                 if (!t || t.status === 'completed') return false;
+                if (isRecurringChildTask(t)) return false;
                 const due = normalizeYMD(t.dueDate);
                 const start = normalizeYMD(t.startDate);
                 return due === today || start === today || isDailyRecurringTaskForDate(t, today);
@@ -2530,6 +2536,9 @@ function initializeModals() {
     // Save handlers
     document.getElementById('save-task-btn')?.addEventListener('click', saveTask);
     document.getElementById('save-goal-btn')?.addEventListener('click', saveGoal);
+    document.getElementById('goal-tracking-type-input')?.addEventListener('change', (e) => {
+        updateGoalTrackingFields(e.target.value);
+    });
 
     // Add milestone button - use goals.js function if available, fallback to local
     document.getElementById('add-milestone-btn')?.addEventListener('click', () => {
@@ -2799,6 +2808,11 @@ function openGoalModal(goal = null) {
     document.getElementById('goal-description-input').value = goal?.description || '';
     document.getElementById('goal-category-input').value = goal?.category || 'academic';
     document.getElementById('goal-target-date-input').value = goal?.targetDate || '';
+    document.getElementById('goal-tracking-type-input').value = goal?.trackingType || 'milestones';
+    document.getElementById('goal-tracking-target-input').value = String(goal?.trackingTarget || 30);
+    document.getElementById('goal-modal').dataset.goalStartDate = goal?.startDate || goal?.createdAt || new Date().toISOString().split('T')[0];
+
+    updateGoalTrackingFields(goal?.trackingType || 'milestones');
 
     // Reset milestones
     const milestonesList = document.getElementById('milestones-list');
@@ -2814,6 +2828,20 @@ function openGoalModal(goal = null) {
     document.getElementById('goal-modal').dataset.goalId = goal?.id || '';
 
     openModal('goal-modal');
+}
+
+function addDaysToYMD(dateYmd, days) {
+    const base = dateYmd ? new Date(`${dateYmd}T00:00:00`) : new Date();
+    if (Number.isNaN(base.getTime())) return null;
+    base.setDate(base.getDate() + days);
+    return base.toISOString().split('T')[0];
+}
+
+function updateGoalTrackingFields(trackingType) {
+    const isDaysGoal = String(trackingType || '').toLowerCase() === 'days';
+    document.getElementById('goal-tracking-target-group')?.classList.toggle('hidden', !isDaysGoal);
+    document.getElementById('goal-target-date-group')?.classList.toggle('hidden', isDaysGoal);
+    document.getElementById('goal-milestones-group')?.classList.toggle('hidden', isDaysGoal);
 }
 
 function addMilestoneField(title = '', targetDate = '') {
@@ -2853,6 +2881,13 @@ function addMilestoneField(title = '', targetDate = '') {
 async function saveGoal() {
     const modal = document.getElementById('goal-modal');
     const goalId = modal.dataset.goalId;
+    const trackingType = document.getElementById('goal-tracking-type-input')?.value || 'milestones';
+    const trackingTarget = Math.max(1, parseInt(document.getElementById('goal-tracking-target-input')?.value, 10) || 30);
+    const startDate = modal.dataset.goalStartDate || new Date().toISOString().split('T')[0];
+    const targetDateInput = document.getElementById('goal-target-date-input')?.value || '';
+    const targetDate = trackingType === 'days'
+        ? (addDaysToYMD(startDate, trackingTarget) || targetDateInput || null)
+        : targetDateInput;
 
     // Gather milestones
     const milestones = Array.from(document.querySelectorAll('#milestones-list .milestone-item')).map((item, index) => ({
@@ -2866,8 +2901,12 @@ async function saveGoal() {
         title: document.getElementById('goal-title-input').value.trim(),
         description: document.getElementById('goal-description-input').value.trim(),
         category: document.getElementById('goal-category-input').value,
-        targetDate: document.getElementById('goal-target-date-input').value,
-        milestones: milestones
+        startDate,
+        targetDate,
+        trackingType,
+        trackingTarget: trackingType === 'days' ? trackingTarget : 0,
+        trackingCurrent: trackingType === 'days' ? 0 : 0,
+        milestones: trackingType === 'days' ? [] : milestones
     };
 
     if (!goalData.title) {

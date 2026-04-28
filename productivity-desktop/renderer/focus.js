@@ -72,7 +72,8 @@ const FocusState = {
 
 // Ambient sound URLs (using free sounds)
 const AmbientSounds = {
-    rain: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ==', // Placeholder - would use actual audio
+    rain: 'https://assets.mixkit.co/active_storage/sfx/2393/2393-preview.mp3',
+    ocean: 'https://assets.mixkit.co/active_storage/sfx/1208/1208-preview.mp3',
     lofi: null,
     nature: null,
     whitenoise: null,
@@ -2987,34 +2988,49 @@ function hideFocusOverlay(options = {}) {
  */
 function _generateNoiseBuffer(ctx, color = 'white') {
     const bufferSize = 2 * ctx.sampleRate;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
+    const buffer = ctx.createBuffer(2, bufferSize, ctx.sampleRate);
+    const dataL = buffer.getChannelData(0);
+    const dataR = buffer.getChannelData(1);
 
     if (color === 'white') {
         for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
+            dataL[i] = Math.random() * 2 - 1;
+            dataR[i] = Math.random() * 2 - 1;
         }
     } else if (color === 'pink') {
         // Paul Kellet's pink noise algorithm
-        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        let b0L = 0, b1L = 0, b2L = 0, b3L = 0, b4L = 0, b5L = 0, b6L = 0;
+        let b0R = 0, b1R = 0, b2R = 0, b3R = 0, b4R = 0, b5R = 0, b6R = 0;
         for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            b0 = 0.99886 * b0 + white * 0.0555179;
-            b1 = 0.99332 * b1 + white * 0.0750759;
-            b2 = 0.96900 * b2 + white * 0.1538520;
-            b3 = 0.86650 * b3 + white * 0.3104856;
-            b4 = 0.55000 * b4 + white * 0.5329522;
-            b5 = -0.7616 * b5 - white * 0.0168980;
-            data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-            b6 = white * 0.115926;
+            const whiteL = Math.random() * 2 - 1;
+            b0L = 0.99886 * b0L + whiteL * 0.0555179;
+            b1L = 0.99332 * b1L + whiteL * 0.0750759;
+            b2L = 0.96900 * b2L + whiteL * 0.1538520;
+            b3L = 0.86650 * b3L + whiteL * 0.3104856;
+            b4L = 0.55000 * b4L + whiteL * 0.5329522;
+            b5L = -0.7616 * b5L - whiteL * 0.0168980;
+            dataL[i] = (b0L + b1L + b2L + b3L + b4L + b5L + b6L + whiteL * 0.5362) * 0.11;
+            b6L = whiteL * 0.115926;
+
+            const whiteR = Math.random() * 2 - 1;
+            b0R = 0.99886 * b0R + whiteR * 0.0555179;
+            b1R = 0.99332 * b1R + whiteR * 0.0750759;
+            b2R = 0.96900 * b2R + whiteR * 0.1538520;
+            b3R = 0.86650 * b3R + whiteR * 0.3104856;
+            b4R = 0.55000 * b4R + whiteR * 0.5329522;
+            b5R = -0.7616 * b5R - whiteR * 0.0168980;
+            dataR[i] = (b0R + b1R + b2R + b3R + b4R + b5R + b6R + whiteR * 0.5362) * 0.11;
+            b6R = whiteR * 0.115926;
         }
     } else if (color === 'brown') {
-        // Brownian / red noise — integrated white noise
-        let last = 0;
+        let lastL = 0, lastR = 0;
         for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            last = (last + 0.02 * white) / 1.02;
-            data[i] = last * 3.5; // scale up
+            const whiteL = Math.random() * 2 - 1;
+            lastL = (lastL + 0.02 * whiteL) / 1.02;
+            dataL[i] = lastL * 3.5;
+            const whiteR = Math.random() * 2 - 1;
+            lastR = (lastR + 0.02 * whiteR) / 1.02;
+            dataR[i] = lastR * 3.5;
         }
     }
 
@@ -3053,14 +3069,39 @@ function startAmbientSound(type) {
             _createFilteredNoise(ctx, 'brown');
             break;
         case 'rain':
-            _createRainSound(ctx);
+            _createAmbientAudioLoop(ctx, type, AmbientSounds.rain, 0.38);
             break;
         case 'ocean':
-            _createOceanSound(ctx);
+            _createAmbientAudioLoop(ctx, type, AmbientSounds.ocean, 0.3);
             break;
         default:
             _createFilteredNoise(ctx, 'white');
     }
+}
+
+function _createAmbientAudioLoop(ctx, type, url, volumeScale) {
+    if (!url) {
+        _createFilteredNoise(ctx, type === 'ocean' ? 'brown' : 'pink');
+        return;
+    }
+
+    const audio = new Audio(url);
+    audio.loop = true;
+    audio.preload = 'auto';
+    audio.crossOrigin = 'anonymous';
+
+    const source = ctx.createMediaElementSource(audio);
+    const gain = ctx.createGain();
+    gain.gain.value = FocusState.soundVolume * volumeScale;
+
+    source.connect(gain);
+    gain.connect(ctx.destination);
+
+    audio.play().catch(() => {});
+
+    FocusState.ambientSound = audio;
+    FocusState.gainNode = gain;
+    FocusState._ambientExtraNodes = [source];
 }
 
 function _createFilteredNoise(ctx, color) {
@@ -3069,108 +3110,175 @@ function _createFilteredNoise(ctx, color) {
     source.buffer = buffer;
     source.loop = true;
 
-    const gain = ctx.createGain();
-    gain.gain.value = FocusState.soundVolume * 0.15;
+    // Apply a low-pass filter to make it less harsh, especially for white noise
+    const lpFilter = ctx.createBiquadFilter();
+    lpFilter.type = 'lowpass';
+    
+    if (color === 'white') {
+        lpFilter.frequency.value = 8000;
+        lpFilter.Q.value = 0.2;
+    } else if (color === 'pink') {
+        lpFilter.frequency.value = 10000;
+        lpFilter.Q.value = 0.5;
+    } else {
+        lpFilter.frequency.value = 12000;
+        lpFilter.Q.value = 0.5;
+    }
 
-    source.connect(gain);
+    const gain = ctx.createGain();
+    
+    // Adjust perceived volume balance
+    if (color === 'white') gain.gain.value = FocusState.soundVolume * 0.08;
+    else if (color === 'pink') gain.gain.value = FocusState.soundVolume * 0.12;
+    else gain.gain.value = FocusState.soundVolume * 0.20;
+
+    source.connect(lpFilter);
+    lpFilter.connect(gain);
     gain.connect(ctx.destination);
     source.start();
 
     FocusState.ambientSound = source;
     FocusState.gainNode = gain;
-    FocusState._ambientExtraNodes = [];
+    FocusState._ambientExtraNodes = [lpFilter];
 }
 
 function _createRainSound(ctx) {
-    // Rain = white noise through a bandpass filter with gentle modulation
-    const buffer = _generateNoiseBuffer(ctx, 'white');
+    // Uses pink noise as a base for rain (more natural distribution than white)
+    const buffer = _generateNoiseBuffer(ctx, 'pink');
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
 
-    // Bandpass filter to shape rain character
-    const bpFilter = ctx.createBiquadFilter();
-    bpFilter.type = 'bandpass';
-    bpFilter.frequency.value = 800;
-    bpFilter.Q.value = 0.5;
+    // Dual bandpass to simulate different droplet sizes
+    const bpFilter1 = ctx.createBiquadFilter();
+    bpFilter1.type = 'bandpass';
+    bpFilter1.frequency.value = 1200; // heavy drops
+    bpFilter1.Q.value = 0.5;
 
-    // Lowpass to soften harshness
+    const bpFilter2 = ctx.createBiquadFilter();
+    bpFilter2.type = 'bandpass';
+    bpFilter2.frequency.value = 3500; // light splatters
+    bpFilter2.Q.value = 0.8;
+
+    // Highpass to remove rumble
+    const hpFilter = ctx.createBiquadFilter();
+    hpFilter.type = 'highpass';
+    hpFilter.frequency.value = 300;
+
+    // Lowpass to simulate distance
     const lpFilter = ctx.createBiquadFilter();
     lpFilter.type = 'lowpass';
-    lpFilter.frequency.value = 3500;
-    lpFilter.Q.value = 0.7;
+    lpFilter.frequency.value = 6000;
 
-    // Subtle volume modulation (LFO) to simulate rain intensity variation
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.15; // Very slow
+    // Multiple LFOs for organic intensity variation
+    const lfo1 = ctx.createOscillator();
+    lfo1.type = 'sine';
+    lfo1.frequency.value = 0.1;
+
+    const lfo2 = ctx.createOscillator();
+    lfo2.type = 'triangle';
+    lfo2.frequency.value = 0.3;
+
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.02; // Subtle modulation depth
+    lfoGain.gain.value = 0.05;
 
     const gain = ctx.createGain();
-    gain.gain.value = FocusState.soundVolume * 0.2;
+    gain.gain.value = FocusState.soundVolume * 0.4;
 
-    // Connect: source -> BP -> LP -> gain -> destination
-    source.connect(bpFilter);
-    bpFilter.connect(lpFilter);
+    source.connect(bpFilter1);
+    source.connect(bpFilter2);
+    bpFilter1.connect(hpFilter);
+    bpFilter2.connect(hpFilter);
+    hpFilter.connect(lpFilter);
     lpFilter.connect(gain);
     gain.connect(ctx.destination);
 
-    // LFO modulates gain
-    lfo.connect(lfoGain);
+    lfo1.connect(lfoGain);
+    lfo2.connect(lfoGain);
     lfoGain.connect(gain.gain);
-    lfo.start();
 
+    lfo1.start();
+    lfo2.start();
     source.start();
 
     FocusState.ambientSound = source;
     FocusState.gainNode = gain;
-    FocusState._ambientExtraNodes = [bpFilter, lpFilter, lfo, lfoGain];
+    FocusState._ambientExtraNodes = [bpFilter1, bpFilter2, hpFilter, lpFilter, lfo1, lfo2, lfoGain];
 }
 
 function _createOceanSound(ctx) {
-    // Ocean = brown noise with slow volume oscillation (wave motion)
+    // Ocean = brown noise with very complex LFO wave motion
     const buffer = _generateNoiseBuffer(ctx, 'brown');
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
 
     // Lowpass to give deep, smooth character
-    const lpFilter = ctx.createBiquadFilter();
-    lpFilter.type = 'lowpass';
-    lpFilter.frequency.value = 1200;
-    lpFilter.Q.value = 0.3;
+    const lpFilter1 = ctx.createBiquadFilter();
+    lpFilter1.type = 'lowpass';
+    lpFilter1.frequency.value = 800;
+    lpFilter1.Q.value = 0.2;
 
-    // Slow LFO for wave-like volume swells
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.08; // ~12s per wave cycle
+    const hpFilter = ctx.createBiquadFilter();
+    hpFilter.type = 'highpass';
+    hpFilter.frequency.value = 100;
 
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.06; // Prominent swell
+    const lfo1 = ctx.createOscillator();
+    lfo1.type = 'sine';
+    lfo1.frequency.value = 0.05;
+
+    const lfo2 = ctx.createOscillator();
+    lfo2.type = 'triangle';
+    lfo2.frequency.value = 0.08;
+
+    const lfo3 = ctx.createOscillator();
+    lfo3.type = 'sine';
+    lfo3.frequency.value = 0.15;
+
+    const lfoGain1 = ctx.createGain();
+    lfoGain1.gain.value = 0.07;
+
+    const lfoGain2 = ctx.createGain();
+    lfoGain2.gain.value = 0.04;
+
+    const filterLfo = ctx.createGain();
+    filterLfo.gain.value = 400;
 
     const gain = ctx.createGain();
-    gain.gain.value = FocusState.soundVolume * 0.2;
+    gain.gain.value = FocusState.soundVolume * 0.3;
 
-    source.connect(lpFilter);
-    lpFilter.connect(gain);
+    source.connect(hpFilter);
+    hpFilter.connect(lpFilter1);
+    lpFilter1.connect(gain);
     gain.connect(ctx.destination);
 
-    lfo.connect(lfoGain);
-    lfoGain.connect(gain.gain);
-    lfo.start();
+    lfo1.connect(lfoGain1);
+    lfo2.connect(lfoGain2);
+    lfoGain1.connect(gain.gain);
+    lfoGain2.connect(gain.gain);
 
+    lfo1.connect(filterLfo);
+    filterLfo.connect(lpFilter1.frequency);
+
+    lfo1.start();
+    lfo2.start();
+    lfo3.start();
     source.start();
 
     FocusState.ambientSound = source;
     FocusState.gainNode = gain;
-    FocusState._ambientExtraNodes = [lpFilter, lfo, lfoGain];
+    FocusState._ambientExtraNodes = [hpFilter, lpFilter1, lfo1, lfo2, lfo3, lfoGain1, lfoGain2, filterLfo];
 }
 
 function stopAmbientSound() {
     if (FocusState.ambientSound) {
         try {
-            FocusState.ambientSound.stop();
+            if (typeof FocusState.ambientSound.stop === 'function') {
+                FocusState.ambientSound.stop();
+            } else {
+                FocusState.ambientSound.pause();
+                FocusState.ambientSound.currentTime = 0;
+            }
         } catch (e) {
             // Already stopped
         }
@@ -3198,7 +3306,7 @@ function stopAmbientSound() {
 function setAmbientVolume(volume) {
     FocusState.soundVolume = volume;
     if (FocusState.gainNode) {
-        FocusState.gainNode.gain.value = volume * 0.2;
+        FocusState.gainNode.gain.value = volume;
     }
 }
 
@@ -3316,142 +3424,6 @@ function showWebNotification(title, body) {
 
 async function requestNotificationPermission() {
     if ('Notification' in window) {
-        const permission = await Notification.requestPermission();
-        FocusState.settings.notificationsEnabled = permission === 'granted';
-        return permission === 'granted';
-    }
-    return false;
-}
-
-// ============================================================================
-// DISTRACTION BLOCKING
-// ============================================================================
-async function enableDistractionBlocking() {
-    try {
-        await chrome.runtime.sendMessage({
-            type: 'ENABLE_FOCUS_BLOCKING',
-            duration: FocusState.selectedMinutes
-        });
-    } catch (e) {
-        // Debug removed
-    }
-}
-
-async function disableDistractionBlocking() {
-    try {
-        await chrome.runtime.sendMessage({
-            type: 'DISABLE_FOCUS_BLOCKING'
-        });
-    } catch (e) {
-        // Debug removed
-    }
-}
-
-// ============================================================================
-// STATS & ACHIEVEMENTS
-// ============================================================================
-async function updateFocusStats_Internal(minutes, completed) {
-    try {
-        const stats = await ProductivityData.DataStore.getDailyStats();
-        stats.focusMinutes = (stats.focusMinutes || 0) + minutes;
-        if (completed) {
-            stats.focusSessions = (stats.focusSessions || 0) + 1;
-        }
-        await ProductivityData.DataStore.saveDailyStats(stats);
-
-        // Update streak - getStreakData returns a StreakData object with updateStreak method
-        const streakData = await ProductivityData.DataStore.getStreakData();
-        if (streakData && typeof streakData.updateStreak === 'function') {
-            streakData.updateStreak(null, true); // true = was productive
-            await ProductivityData.DataStore.saveStreakData(streakData);
-        }
-
-        // Refresh best records (may have set a new one)
-        loadBestRecords(true).catch(() => void 0);
-    } catch (e) {
-        console.error('Failed to update focus stats:', e);
-    }
-}
-
-// ============================================================================
-// BEST RECORDS
-// ============================================================================
-
-/**
- * Scans all daily stats to find the user's personal best day (by focus time).
- * Shows the record prominently and compares today's progress against it.
- * @param {boolean} checkNewRecord - If true, compare against previous best & toast if beaten
- */
-let _previousBestMinutes = 0; // tracks last known record for new-record detection
-
-async function loadBestRecords(checkNewRecord = false) {
-    const container = document.getElementById('best-record-section');
-    if (!container) return;
-
-    try {
-        // Fetch ALL daily stats
-        const allStats = await ProductivityData.DataStore.get('productivity_daily_stats', {});
-        const today = new Date().toISOString().split('T')[0];
-        const todayStats = allStats[today] || { focusMinutes: 0, focusSessions: 0, tasksCompleted: 0, productivityScore: 0 };
-
-        // Find the best day by focus time
-        let bestDay = null;
-        for (const [date, stats] of Object.entries(allStats)) {
-            const fm = stats.focusMinutes || 0;
-            if (fm > 0 && (!bestDay || fm > bestDay.focusMinutes)) {
-                bestDay = {
-                    date,
-                    focusMinutes: fm,
-                    focusSessions: stats.focusSessions || 0,
-                    tasksCompleted: stats.tasksCompleted || 0,
-                    productivityScore: stats.productivityScore || 0
-                };
-            }
-        }
-
-        if (!bestDay || bestDay.focusMinutes === 0) {
-            container.innerHTML = '';
-            return;
-        }
-
-        const todayFocus = todayStats.focusMinutes || 0;
-        const todaySessions = todayStats.focusSessions || 0;
-        const todayTasks = todayStats.tasksCompleted || 0;
-        const isToday = bestDay.date === today;
-        const progress = Math.min((todayFocus / bestDay.focusMinutes) * 100, 100);
-        const isNewRecord = isToday && todayFocus >= bestDay.focusMinutes && todayFocus > 0;
-        const remaining = Math.max(0, bestDay.focusMinutes - todayFocus);
-
-        // Check for newly broken record (toast once)
-        if (checkNewRecord && isNewRecord && _previousBestMinutes > 0 && todayFocus > _previousBestMinutes) {
-            if (typeof showToast === 'function') {
-                showToast('success', '\uD83C\uDFC6 New Record!', `You beat your personal best! ${formatFocusTime(todayFocus)} of focus today.`);
-            }
-        }
-        _previousBestMinutes = bestDay.focusMinutes;
-
-        // Format the record date
-        const recordDate = new Date(bestDay.date + 'T00:00:00');
-        const dateLabel = isToday ? 'Today — New Record!' : recordDate.toLocaleDateString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
-        });
-
-        container.innerHTML = `
-            <div class="best-record-card ${isNewRecord ? 'is-record' : ''}">
-                <div class="best-record-header">
-                    <div class="best-record-icon">${isNewRecord ? '\uD83C\uDFC6' : '\uD83C\uDFC5'}</div>
-                    <div class="best-record-heading">
-                        <h3>${isNewRecord ? 'New Personal Record!' : 'Personal Best'}</h3>
-                        <span class="best-record-date">${dateLabel}</span>
-                    </div>
-                </div>
-
-                <div class="best-record-stats">
-                    <div class="best-record-stat primary">
-                        <span class="best-record-stat-value">${formatFocusTime(bestDay.focusMinutes)}</span>
-                        <span class="best-record-stat-label">Focus Time</span>
-                    </div>
-                    <div class="best-record-stat">
                         <span class="best-record-stat-value">${bestDay.focusSessions}</span>
                         <span class="best-record-stat-label">Sessions</span>
                     </div>
@@ -4194,3 +4166,4 @@ document.addEventListener('visibilitychange', () => {
         // We can optionally stop our local interval since background handles it
     }
 });
+
