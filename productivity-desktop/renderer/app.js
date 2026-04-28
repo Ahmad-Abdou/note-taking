@@ -445,7 +445,7 @@ async function handleSmartFocusStart() {
             // FocusState, as that triggers checkAutoStartFromTask() which
             // auto-starts a session and shows the boredom modal.
             try {
-                const dropdown = document.getElementById('focus-task-dropdown');
+                const dropdown = document.getElementById('focus-task-select');
                 if (dropdown) dropdown.value = firstTask.id;
             } catch (_) {
                 // ignore
@@ -517,8 +517,8 @@ function showSmartFocusCreateTaskPrompt() {
             // Start focus session with new task
             if (typeof startFocusOnTask === 'function') {
                 startFocusOnTask(task.id);
-            } else if (typeof window.startFocusSession === 'function') {
-                window.startFocusSession(task.id, task.title);
+            } else if (typeof window.openFocusDurationForTask === 'function') {
+                window.openFocusDurationForTask(task.id, task.title);
             }
         } catch (error) {
             console.error('Failed to create task for focus:', error);

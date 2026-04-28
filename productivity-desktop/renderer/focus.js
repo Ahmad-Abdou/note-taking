@@ -1515,55 +1515,65 @@ async function startOpenEndedSession() {
     // Best-effort: unlock audio on a user gesture (start click) so milestone
     // sounds can play reliably later.
     try {
-        window.NotificationSounds?.init?.();
-    } catch (e) {
-        // Ignore audio unlock errors
-    }
+    try {
+        const tasks = await ProductivityData.DataStore.getTasks();
+        const pendingTasks = (Array.isArray(tasks) ? tasks : []).filter(t => t.status !== 'completed');
 
-    // Check if there's a paused session - show options modal
-    const pausedCheck = await checkPausedSessionBeforeStart();
-    if (pausedCheck.action === 'cancelled') {
-        return; // User cancelled
-    }
-    if (pausedCheck.action === 'resume') {
-        // Resume the paused session
-        resumeFocusSession();
-        return;
-    }
-    if (pausedCheck.action === 'start-fresh-add-time') {
-        // End paused session, add time to stats, then start fresh
-        await endPausedSessionForFreshStart(true);
-    } else if (pausedCheck.action === 'start-fresh-discard') {
-        // End paused session without adding time
-        await endPausedSessionForFreshStart(false);
-    }
-    // If 'no-paused-session', just continue normally
+        // Group by priority
+        const urgent = pendingTasks.filter(t => t.priority === 'urgent');
+        const high = pendingTasks.filter(t => t.priority === 'high');
+        const other = pendingTasks.filter(t => !['urgent', 'high'].includes(t.priority));
 
-    // Ask boredom level before starting
-    const boredom = await maybeGetBoredomLevel({});
-    if (!boredom.confirmed) {
-        showToast('info', 'Start canceled', 'No session started.');
-        return;
+        let html = '<option value="">No specific task</option>';
+
+        if (urgent.length > 0) {
+            html += '<optgroup label="🔴 Urgent">';
+            html += urgent.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
+            html += '</optgroup>';
+        }
+
+        if (high.length > 0) {
+            html += '<optgroup label="🟠 High Priority">';
+            html += high.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
+            html += '</optgroup>';
+        }
+
+        if (other.length > 0) {
+            html += '<optgroup label="📋 Other Tasks">';
+            html += other.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
+            html += '</optgroup>';
+        }
+
+        select.innerHTML = html;
+    } catch (error) {
+        console.error('[Focus] Failed to load task options:', error);
+        select.innerHTML = '<option value="">No specific task</option>';
+    }
     }
 
     // Reset state for open-ended mode
     FocusState.isActive = true;
     FocusState.isPaused = false;
     FocusState.isBreak = false;
-    FocusState.isOpenEnded = true;
-    FocusState.elapsedSeconds = 0;
-    FocusState.remainingSeconds = 0; // Not used in open-ended mode
-    FocusState.selectedMinutes = 0;  // Will be calculated at end
+    try {
+        // Get subjects from tasks and sessions
+        const subjects = new Set();
 
-    FocusState.startTimestamp = Date.now();
-    FocusState.endTimestamp = null;
-    FocusState.pausedElapsedSeconds = null;
-    FocusState.pausedRemainingSeconds = null;
+        const tasks = await ProductivityData.DataStore.getTasks();
+        (Array.isArray(tasks) ? tasks : []).forEach(t => {
+            if (t.subject) subjects.add(t.subject);
+        });
 
-    // Get linked task info
-    const taskSelect = document.getElementById('focus-task-select');
-    const linkedTaskId = taskSelect?.value || null;
-    const linkedTaskTitle = linkedTaskId ? taskSelect?.selectedOptions[0]?.text : '';
+        // Add common subjects
+        ['Math', 'Science', 'English', 'History', 'Programming', 'Reading', 'Writing', 'Research', 'Other']
+            .forEach(s => subjects.add(s));
+
+        select.innerHTML = '<option value="">General Focus</option>' +
+            Array.from(subjects).sort().map(s => `<option value="${s}">${s}</option>`).join('');
+    } catch (error) {
+        console.error('[Focus] Failed to load subject options:', error);
+        select.innerHTML = '<option value="">General Focus</option>';
+    }
 
     // Get subject
     const subjectSelect = document.getElementById('focus-subject-select');

@@ -1012,6 +1012,104 @@ function setupGridCardInteractions(container) {
 // ============================================================================
 let taskCalendarDate = new Date();
 let calendarNavInitialized = false;
+let taskCalendarExpandedGroups = new Set();
+
+function buildCalendarTaskGroups(dateStr) {
+    const matchingTasks = (Array.isArray(TaskState.tasks) ? TaskState.tasks : []).filter(task => {
+        const key = normalizeTaskDate(task.dueDate || task.startDate);
+        return key === dateStr && task.status !== 'completed';
+    });
+
+    const groups = new Map();
+
+    for (const task of matchingTasks) {
+        const groupKey = task.parentTaskId || task.id;
+        if (!groups.has(groupKey)) {
+            groups.set(groupKey, {
+                key: groupKey,
+                parentTask: null,
+                childTasks: [],
+                sourceTasks: []
+            });
+        }
+
+        const group = groups.get(groupKey);
+        group.sourceTasks.push(task);
+
+        if (isRecurringTaskInstance(task)) {
+            group.childTasks.push(task);
+        } else {
+            group.parentTask = task;
+        }
+    }
+
+    for (const group of groups.values()) {
+        if (!group.parentTask && group.key) {
+            const parentTask = (Array.isArray(TaskState.tasks) ? TaskState.tasks : []).find(task => task.id === group.key);
+            if (parentTask) {
+                group.parentTask = parentTask;
+            }
+        }
+
+        if (!group.parentTask && group.sourceTasks.length > 0) {
+            group.parentTask = group.sourceTasks[0];
+        }
+
+        group.hasRecurringChildren = !!(group.parentTask && isRecurringTaskParent(group.parentTask) && getRecurringChildCount(group.parentTask) > 0);
+        group.hasChildren = group.childTasks.length > 0 || group.hasRecurringChildren;
+        group.displayTask = group.parentTask || group.sourceTasks[0] || group.childTasks[0] || null;
+    }
+
+    return Array.from(groups.values());
+}
+
+function renderCalendarTaskGroup(group) {
+    const task = group.displayTask;
+    if (!task) return '';
+
+    const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+    const title = escapeHtml(task.title || 'Untitled Task');
+    const shortTitle = escapeHtml((task.title || 'Untitled Task').substring(0, 18));
+    const titleSuffix = (task.title || '').length > 18 ? '...' : '';
+    const expanded = taskCalendarExpandedGroups.has(group.key);
+    const recurringBadge = group.parentTask && isRecurringTaskParent(group.parentTask)
+        ? renderRecurringParentBadge(group.parentTask)
+        : (group.hasChildren
+            ? `<span class="task-recurring-parent-badge" title="Expandable task group"><i class="fas fa-sitemap"></i><span>Parent</span><strong>${group.childTasks.length}</strong></span>`
+            : '');
+
+    if (!group.hasChildren) {
+        return `<div class="day-task" style="border-left-color: ${priorityConfig.color}" data-task-id="${task.id}" title="${title}">
+                    ${shortTitle}${titleSuffix}
+                </div>`;
+    }
+
+    const childRows = group.childTasks.length > 0
+        ? group.childTasks.map(childTask => {
+            const childPriority = PRIORITY_CONFIG[childTask.priority] || PRIORITY_CONFIG.medium;
+            const childTitle = escapeHtml(childTask.title || 'Untitled Task');
+            const childShortTitle = escapeHtml((childTask.title || 'Untitled Task').substring(0, 18));
+            const childTitleSuffix = (childTask.title || '').length > 18 ? '...' : '';
+
+            return `<div class="day-task day-task-child" data-task-id="${childTask.id}" title="${childTitle}" style="margin-left: 10px; padding-left: 8px; font-size: 0.7rem; border-left-color: ${childPriority.color}; background: var(--bg-secondary);">
+                        <i class="fas fa-level-down-alt" style="margin-right: 6px; opacity: 0.7;"></i>${childShortTitle}${childTitleSuffix}
+                    </div>`;
+        }).join('')
+        : `<div class="day-task day-task-child" style="margin-left: 10px; padding-left: 8px; font-size: 0.7rem; color: var(--text-muted); background: var(--bg-secondary); border-left-color: var(--border-color); cursor: default;">
+                No repeated instances on this date
+            </div>`;
+
+    return `
+        <div class="day-task day-task-parent" data-task-group="${group.key}" title="Click to ${expanded ? 'collapse' : 'expand'} recurring task" style="display: flex; align-items: center; gap: 6px; border-left-color: ${priorityConfig.color}; cursor: pointer;">
+            <i class="fas fa-chevron-right" style="font-size: 0.7rem; color: var(--text-muted); transition: transform var(--transition-fast); transform: rotate(${expanded ? 90 : 0}deg);"></i>
+            <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortTitle}${titleSuffix}</span>
+            ${recurringBadge}
+        </div>
+        <div class="day-task-children" data-task-group-children="${group.key}" style="display: ${expanded ? 'block' : 'none'}; margin-left: 10px; padding-left: 8px; border-left: 1px dashed var(--border-color);">
+            ${childRows}
+        </div>
+    `;
+}
 
 function renderTaskCalendarView() {
     const container = document.getElementById('task-calendar-grid');
@@ -1063,39 +1161,22 @@ function renderTaskCalendarView() {
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        // Prefer dueDate; fall back to startDate so tasks still appear when users only set a start.
-        // Filter to show only parent tasks (hide child instances) - matches task list/board/dashboard behavior
-        const dayTasks = TaskState.tasks.filter(t => {
-            // Skip if it's a recurring child instance (non-parent recurring task)
-            if (isRecurringTaskInstance(t)) return false;
-            const key = normalizeTaskDate(t.dueDate || t.startDate);
-            return key === dateStr && t.status !== 'completed';
-        });
-        const completedTasks = TaskState.tasks.filter(t => {
-            // Skip completed child instances too
-            if (isRecurringTaskInstance(t)) return false;
+        const dayTaskGroups = buildCalendarTaskGroups(dateStr);
+        const completedTasks = (Array.isArray(TaskState.tasks) ? TaskState.tasks : []).filter(t => {
             const key = normalizeTaskDate(t.dueDate || t.startDate);
             return key === dateStr && t.status === 'completed';
         });
         const isToday = dateStr === today;
         const isPast = dateStr < today;
-        const hasOverdue = isPast && dayTasks.length > 0;
+        const hasOverdue = isPast && dayTaskGroups.length > 0;
+        const visibleGroups = dayTaskGroups.slice(0, 3);
 
         html += `
             <div class="task-cal-day ${isToday ? 'today' : ''} ${hasOverdue ? 'overdue' : ''}" data-date="${dateStr}">
                 <span class="day-number">${day}</span>
                 <div class="day-tasks">
-                    ${dayTasks.slice(0, 3).map(task => {
-            const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
-            const childCount = getRecurringChildCount(task);
-            const hasChildren = childCount > 0;
-            return `<div class="day-task" style="border-left-color: ${priorityConfig.color}" 
-                                     data-task-id="${task.id}" title="${escapeHtml(task.title)}">
-                            ${hasChildren ? `<span class="day-task-recurring-badge" title="${childCount} recurring instance${childCount !== 1 ? 's' : ''}"><i class="fas fa-redo"></i></span> ` : ''}
-                            ${escapeHtml(task.title.substring(0, 15))}${task.title.length > 15 ? '...' : ''}
-                        </div>`;
-        }).join('')}
-                    ${dayTasks.length > 3 ? `<div class="day-task-more">+${dayTasks.length - 3} more</div>` : ''}
+                    ${visibleGroups.map(group => renderCalendarTaskGroup(group)).join('')}
+                    ${dayTaskGroups.length > 3 ? `<div class="day-task-more">+${dayTaskGroups.length - 3} more</div>` : ''}
                     ${completedTasks.length > 0 ? `<div class="day-task-completed">${completedTasks.length} done</div>` : ''}
                 </div>
             </div>
@@ -1110,6 +1191,26 @@ function renderTaskCalendarView() {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
             viewTask(el.dataset.taskId);
+        });
+    });
+
+    container.querySelectorAll('.day-task-parent[data-task-group]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const groupKey = el.dataset.taskGroup;
+            if (!groupKey) return;
+
+            if (taskCalendarExpandedGroups.has(groupKey)) {
+                taskCalendarExpandedGroups.delete(groupKey);
+            } else {
+                taskCalendarExpandedGroups.add(groupKey);
+            }
+
+            renderTaskCalendarView();
+        });
+
+        el.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
         });
     });
 
