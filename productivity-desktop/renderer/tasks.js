@@ -1064,11 +1064,16 @@ function renderTaskCalendarView() {
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         // Prefer dueDate; fall back to startDate so tasks still appear when users only set a start.
+        // Filter to show only parent tasks (hide child instances) - matches task list/board/dashboard behavior
         const dayTasks = TaskState.tasks.filter(t => {
+            // Skip if it's a recurring child instance (non-parent recurring task)
+            if (isRecurringTaskInstance(t)) return false;
             const key = normalizeTaskDate(t.dueDate || t.startDate);
             return key === dateStr && t.status !== 'completed';
         });
         const completedTasks = TaskState.tasks.filter(t => {
+            // Skip completed child instances too
+            if (isRecurringTaskInstance(t)) return false;
             const key = normalizeTaskDate(t.dueDate || t.startDate);
             return key === dateStr && t.status === 'completed';
         });
@@ -1082,8 +1087,11 @@ function renderTaskCalendarView() {
                 <div class="day-tasks">
                     ${dayTasks.slice(0, 3).map(task => {
             const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+            const childCount = getRecurringChildCount(task);
+            const hasChildren = childCount > 0;
             return `<div class="day-task" style="border-left-color: ${priorityConfig.color}" 
                                      data-task-id="${task.id}" title="${escapeHtml(task.title)}">
+                            ${hasChildren ? `<span class="day-task-recurring-badge" title="${childCount} recurring instance${childCount !== 1 ? 's' : ''}"><i class="fas fa-redo"></i></span> ` : ''}
                             ${escapeHtml(task.title.substring(0, 15))}${task.title.length > 15 ? '...' : ''}
                         </div>`;
         }).join('')}

@@ -1124,8 +1124,14 @@ async function loadTaskOptions() {
     const select = document.getElementById('focus-task-select');
     if (!select) return;
 
-    const tasks = await ProductivityData.DataStore.getTasks();
-    const pendingTasks = tasks.filter(t => t.status !== 'completed');
+    try {
+        const tasks = await ProductivityData.DataStore.getTasks();
+        if (!Array.isArray(tasks)) {
+            console.error('[Focus] getTasks() returned non-array:', tasks);
+            select.innerHTML = '<option value="">No specific task</option>';
+            return;
+        }
+        const pendingTasks = tasks.filter(t => t.status !== 'completed');
 
     // Group by priority
     const urgent = pendingTasks.filter(t => t.priority === 'urgent');
@@ -1153,26 +1159,37 @@ async function loadTaskOptions() {
     }
 
     select.innerHTML = html;
+    } catch (error) {
+        console.error('[Focus] Failed to load task options:', error);
+        select.innerHTML = '<option value="">No specific task</option>';
+    }
 }
 
 async function loadSubjectOptions() {
     const select = document.getElementById('focus-subject-select');
     if (!select) return;
 
-    // Get subjects from tasks and sessions
-    const subjects = new Set();
+    try {
+        // Get subjects from tasks and sessions
+        const subjects = new Set();
 
-    const tasks = await ProductivityData.DataStore.getTasks();
-    tasks.forEach(t => {
-        if (t.subject) subjects.add(t.subject);
-    });
+        const tasks = await ProductivityData.DataStore.getTasks();
+        if (Array.isArray(tasks)) {
+            tasks.forEach(t => {
+                if (t.subject) subjects.add(t.subject);
+            });
+        }
 
-    // Add common subjects
-    ['Math', 'Science', 'English', 'History', 'Programming', 'Reading', 'Writing', 'Research', 'Other']
-        .forEach(s => subjects.add(s));
+        // Add common subjects
+        ['Math', 'Science', 'English', 'History', 'Programming', 'Reading', 'Writing', 'Research', 'Other']
+            .forEach(s => subjects.add(s));
 
-    select.innerHTML = '<option value="">General Focus</option>' +
-        Array.from(subjects).sort().map(s => `<option value="${s}">${s}</option>`).join('');
+        select.innerHTML = '<option value="">General Focus</option>' +
+            Array.from(subjects).sort().map(s => `<option value="${s}">${s}</option>`).join('');
+    } catch (error) {
+        console.error('[Focus] Failed to load subject options:', error);
+        select.innerHTML = '<option value="">General Focus</option>';
+    }
 }
 
 function updateTimerPresetsUI() {
