@@ -305,6 +305,19 @@
     padding: 0 24px 20px;
 }
 
+.task-recurring-sync-option {
+    margin: 0 24px 20px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--bg-secondary);
+}
+
+.task-recurring-sync-option .toggle-switch-label {
+    width: 100%;
+    justify-content: flex-start;
+}
+
 .repeat-toggle {
     margin-bottom: 12px;
 }

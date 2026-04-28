@@ -100,6 +100,99 @@ function isRecurringTaskInstance(task) {
     return !!(task && task.parentTaskId && !(task.isRecurring || task.recurring));
 }
 
+function isRecurringTaskParent(task) {
+    return !!(task && (task.isRecurring || task.recurring) && !task.parentTaskId);
+}
+
+function getRecurringChildTasks(parentTaskId, tasks = TaskState.tasks) {
+    return (Array.isArray(tasks) ? tasks : []).filter(task => task.parentTaskId === parentTaskId);
+}
+
+function getRecurringChildCount(task, tasks = TaskState.tasks) {
+    if (!isRecurringTaskParent(task)) return 0;
+    return getRecurringChildTasks(task.id, tasks).length;
+}
+
+function renderRecurringParentBadge(task) {
+    const childCount = getRecurringChildCount(task);
+    if (childCount <= 0) return '';
+
+    return `
+        <span class="task-recurring-parent-badge" title="Recurring parent task with ${childCount} child task${childCount === 1 ? '' : 's'}">
+            <i class="fas fa-sitemap"></i>
+            <span>Parent</span>
+            <strong>${childCount}</strong>
+        </span>
+    `;
+}
+
+function cloneSubtasks(subtasks = []) {
+    return Array.isArray(subtasks) ? subtasks.map(subtask => ({ ...subtask })) : [];
+}
+
+function buildRecurringChildSyncData(parentTask) {
+    return {
+        title: parentTask.title,
+        description: parentTask.description,
+        linkUrl: parentTask.linkUrl,
+        startTime: parentTask.startTime,
+        dueTime: parentTask.dueTime,
+        reminderMinutes: parentTask.reminderMinutes,
+        priority: parentTask.priority,
+        category: parentTask.category,
+        subject: parentTask.subject,
+        estimatedMinutes: parentTask.estimatedMinutes,
+        listId: parentTask.listId,
+        color: parentTask.color,
+        tags: Array.isArray(parentTask.tags) ? [...parentTask.tags] : [],
+        notes: parentTask.notes || '',
+        subtasks: cloneSubtasks(parentTask.subtasks)
+    };
+}
+
+async function syncRecurringChildTasks(parentTask) {
+    if (!isRecurringTaskParent(parentTask)) return 0;
+
+    const syncData = buildRecurringChildSyncData(parentTask);
+    let updatedCount = 0;
+
+    let childTasks = getRecurringChildTasks(parentTask.id);
+    if (childTasks.length === 0) {
+        try {
+            const allTasks = await ProductivityData.DataStore.getTasks();
+            childTasks = (Array.isArray(allTasks) ? allTasks : []).filter(task => task.parentTaskId === parentTask.id);
+        } catch (error) {
+            console.warn('[Tasks] Failed to load recurring child tasks for sync:', error);
+        }
+    }
+
+    for (const childTask of childTasks) {
+        const updatedChild = new ProductivityData.Task({
+            ...childTask,
+            ...syncData,
+            id: childTask.id,
+            parentTaskId: childTask.parentTaskId || parentTask.id,
+            dueDate: childTask.dueDate,
+            startDate: childTask.startDate,
+            status: childTask.status || 'not-started',
+            completedAt: childTask.completedAt || null,
+            isRecurring: false,
+            recurring: false
+        });
+
+        await ProductivityData.DataStore.saveTask(updatedChild);
+
+        const localIndex = TaskState.tasks.findIndex(task => task.id === updatedChild.id);
+        if (localIndex >= 0) {
+            TaskState.tasks[localIndex] = updatedChild;
+        }
+
+        updatedCount++;
+    }
+
+    return updatedCount;
+}
+
 function getVisibleTasks(tasks = TaskState.tasks) {
     return (Array.isArray(tasks) ? tasks : []).filter(task => !isRecurringTaskInstance(task));
 }
@@ -646,6 +739,7 @@ function renderTaskItem(task, isOverdue = false) {
                 <div class="task-title-row">
                     <span class="task-title">${linkifyText(task.title)}</span>
                     ${task.isRecurring ? '<i class="fas fa-redo task-recurring-icon" title="Recurring task"></i>' : ''}
+                    ${renderRecurringParentBadge(task)}
                     ${task.linkedGoalId ? '<i class="fas fa-bullseye task-goal-icon" title="Linked to goal"></i>' : ''}
                 </div>
                 <div class="task-meta">
@@ -836,6 +930,7 @@ function renderGridCard(task) {
             <div class="grid-card-footer">
                 <div class="grid-card-icons">
                     ${task.isRecurring ? '<i class="fas fa-redo" title="Recurring"></i>' : ''}
+                    ${getRecurringChildCount(task) > 0 ? `<span class="grid-card-recurring-badge" title="Recurring parent task"><i class="fas fa-sitemap"></i> ${getRecurringChildCount(task)}</span>` : ''}
                     ${task.linkedGoalId ? '<i class="fas fa-bullseye" title="Linked to goal"></i>' : ''}
                     ${task.linkUrl ? '<i class="fas fa-link" title="Has link"></i>' : ''}
                     ${task.estimatedTime ? `<span title="Estimated time"><i class="fas fa-clock"></i> ${task.estimatedTime}m</span>` : ''}
@@ -1144,7 +1239,10 @@ function renderBoardCard(task) {
                     <i class="fas ${categoryConfig.icon}"></i>
                 </span>
             </div>
-            <div class="card-title">${linkifyText(task.title)}</div>
+            <div class="card-title-row">
+                <div class="card-title">${linkifyText(task.title)}</div>
+                ${getRecurringChildCount(task) > 0 ? `<span class="card-recurring-parent-badge" title="Recurring parent task with ${getRecurringChildCount(task)} children"><i class="fas fa-sitemap"></i> Parent ${getRecurringChildCount(task)}</span>` : ''}
+            </div>
             ${task.description ? `
                 <div class="card-description">${escapeHtml(truncate(task.description, 60))}</div>
             ` : ''}
@@ -1157,6 +1255,7 @@ function renderBoardCard(task) {
                 </div>
             ` : ''}
             <div class="card-footer">
+                ${getRecurringChildCount(task) > 0 ? `<span class="card-recurring-parent-badge" title="Recurring parent task with ${getRecurringChildCount(task)} children"><i class="fas fa-sitemap"></i> Parent ${getRecurringChildCount(task)}</span>` : '<span></span>'}
                 ${task.dueDate ? `
                     <span class="card-due ${isOverdue(task) ? 'overdue' : ''}">
                         <i class="fas fa-calendar-alt"></i> ${formatTaskDate(task.dueDate)}
@@ -1262,6 +1361,7 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
     const defaultStartDate = prefillData.startDate || task?.startDate || '';
     const defaultStartTime = prefillData.startTime || task?.startTime || '';
     const defaultDueTime = prefillData.dueTime || task?.dueTime || '';
+    const recurringChildCount = isRecurringTaskParent(task) ? getRecurringChildCount(task) : 0;
 
     modal.innerHTML = `
         <div class="modal-backdrop" data-action="close-task-modal"></div>
@@ -1386,6 +1486,17 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
                         </div>
                     </div>
                 </div>
+
+                ${isEditing && recurringChildCount > 0 ? `
+                    <div class="task-recurring-sync-option">
+                        <label class="toggle-switch-label">
+                            <input type="checkbox" id="task-apply-to-children" checked>
+                            <span class="toggle-switch"></span>
+                            <i class="fas fa-sitemap"></i>
+                            Apply this edit to ${recurringChildCount} child task${recurringChildCount === 1 ? '' : 's'}
+                        </label>
+                    </div>
+                ` : ''}
                 
                 <!-- List & Tags Section -->
                 <div class="task-organization-section">
@@ -1547,6 +1658,7 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
     // Repeat toggle
     document.getElementById('task-repeat-enabled')?.addEventListener('change', (e) => {
         document.getElementById('task-repeat-options')?.classList.toggle('hidden', !e.target.checked);
+        document.querySelector('.task-recurring-sync-option')?.classList.toggle('hidden', !e.target.checked);
     });
 
     // Repeat frequency change — show/hide day picker and interval input
@@ -2073,6 +2185,7 @@ async function saveTask(e) {
     const colorValue = document.getElementById('task-color')?.value;
     const color = colorValue || '#6366f1';
     const subtasks = getSubtasksFromForm();
+    const applyToChildren = document.getElementById('task-apply-to-children')?.checked ?? false;
 
     // Repeat options
     const isRecurring = document.getElementById('task-repeat-enabled')?.checked || false;
@@ -2147,6 +2260,10 @@ async function saveTask(e) {
         if (TaskState.editingTask) {
             const index = TaskState.tasks.findIndex(t => t.id === task.id);
             if (index >= 0) TaskState.tasks[index] = task;
+
+            if (applyToChildren && isRecurringTaskParent(task)) {
+                await syncRecurringChildTasks(task);
+            }
         } else {
             TaskState.tasks.push(task);
 
