@@ -2962,7 +2962,7 @@ async function endFocusMode() {
     stopAmbientSound();
 
     // Disable blocking (non-blocking; never let stop/get-stuck depend on this)
-    if (FocusState.settings.blockingEnabled) {
+    if (FocusState.settings.blockingEnabled && typeof disableDistractionBlocking === 'function') {
         disableDistractionBlocking().catch(() => void 0);
     }
 
