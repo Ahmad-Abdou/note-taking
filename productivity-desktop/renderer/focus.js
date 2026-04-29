@@ -1511,69 +1511,74 @@ function getSessionType(minutes) {
  * Start an open-ended focus session (count-up timer)
  * Timer runs until manually stopped by user
  */
-async function startOpenEndedSession() {
+async function startOpenEndedSession(options = {}) {
     // Best-effort: unlock audio on a user gesture (start click) so milestone
     // sounds can play reliably later.
     try {
-    try {
-        const tasks = await ProductivityData.DataStore.getTasks();
-        const pendingTasks = (Array.isArray(tasks) ? tasks : []).filter(t => t.status !== 'completed');
-
-        // Group by priority
-        const urgent = pendingTasks.filter(t => t.priority === 'urgent');
-        const high = pendingTasks.filter(t => t.priority === 'high');
-        const other = pendingTasks.filter(t => !['urgent', 'high'].includes(t.priority));
-
-        let html = '<option value="">No specific task</option>';
-
-        if (urgent.length > 0) {
-            html += '<optgroup label="🔴 Urgent">';
-            html += urgent.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
-            html += '</optgroup>';
-        }
-
-        if (high.length > 0) {
-            html += '<optgroup label="🟠 High Priority">';
-            html += high.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
-            html += '</optgroup>';
-        }
-
-        if (other.length > 0) {
-            html += '<optgroup label="📋 Other Tasks">';
-            html += other.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
-            html += '</optgroup>';
-        }
-
-        select.innerHTML = html;
-    } catch (error) {
-        console.error('[Focus] Failed to load task options:', error);
-        select.innerHTML = '<option value="">No specific task</option>';
+        window.NotificationSounds?.init?.();
+    } catch (e) {
+        // Ignore audio unlock errors
     }
+
+    // Check if there's a paused session - show options modal
+    const pausedCheck = await checkPausedSessionBeforeStart();
+    if (pausedCheck.action === 'cancelled') {
+        return; // User cancelled
+    }
+    if (pausedCheck.action === 'resume') {
+        // Resume the paused session
+        resumeFocusSession();
+        return;
+    }
+    if (pausedCheck.action === 'start-fresh-add-time') {
+        // End paused session, add time to stats, then start fresh
+        await endPausedSessionForFreshStart(true);
+    } else if (pausedCheck.action === 'start-fresh-discard') {
+        // End paused session without adding time
+        await endPausedSessionForFreshStart(false);
+    }
+
+    // Ask boredom level before starting (unless auto-starting)
+    const boredom = await maybeGetBoredomLevel(options);
+    if (!boredom.confirmed) {
+        showToast('info', 'Start canceled', 'No session started.');
+        return;
     }
 
     // Reset state for open-ended mode
+    FocusState.isOpenEnded = true;
+    FocusState.elapsedSeconds = 0;
+    FocusState.startTimestamp = Date.now();
+    FocusState.endTimestamp = null;
+    FocusState.pausedRemainingSeconds = null;
+    FocusState.pausedElapsedSeconds = null;
+    FocusState.selectedMinutes = 0;
+    FocusState.remainingSeconds = 0;
+    FocusState.isExtraTime = false;
+    FocusState.extraTimeSeconds = 0;
+    
     FocusState.isActive = true;
     FocusState.isPaused = false;
     FocusState.isBreak = false;
-    try {
-        // Get subjects from tasks and sessions
-        const subjects = new Set();
+    FocusState.isOverlayMinimized = false;
 
-        const tasks = await ProductivityData.DataStore.getTasks();
-        (Array.isArray(tasks) ? tasks : []).forEach(t => {
-            if (t.subject) subjects.add(t.subject);
-        });
-
-        // Add common subjects
-        ['Math', 'Science', 'English', 'History', 'Programming', 'Reading', 'Writing', 'Research', 'Other']
-            .forEach(s => subjects.add(s));
-
-        select.innerHTML = '<option value="">General Focus</option>' +
-            Array.from(subjects).sort().map(s => `<option value="${s}">${s}</option>`).join('');
-    } catch (error) {
-        console.error('[Focus] Failed to load subject options:', error);
-        select.innerHTML = '<option value="">General Focus</option>';
+    // Get linked task info (allow a pending task set from elsewhere in the app)
+    const taskSelect = document.getElementById('focus-task-select');
+    if (taskSelect && FocusState.pendingLinkedTaskId) {
+        const option = taskSelect.querySelector(`option[value="${FocusState.pendingLinkedTaskId}"]`);
+        if (option) {
+            taskSelect.value = FocusState.pendingLinkedTaskId;
+        }
     }
+
+    const linkedTaskId = taskSelect?.value || FocusState.pendingLinkedTaskId || null;
+    const linkedTaskTitle = linkedTaskId
+        ? (taskSelect?.selectedOptions?.[0]?.text || FocusState.pendingLinkedTaskTitle || '')
+        : '';
+
+    // Clear pending task after starting
+    FocusState.pendingLinkedTaskId = null;
+    FocusState.pendingLinkedTaskTitle = null;
 
     // Get subject
     const subjectSelect = document.getElementById('focus-subject-select');
@@ -3451,40 +3456,13 @@ function showWebNotification(title, body) {
 
 async function requestNotificationPermission() {
     if ('Notification' in window) {
-                        <span class="best-record-stat-value">${bestDay.focusSessions}</span>
-                        <span class="best-record-stat-label">Sessions</span>
-                    </div>
-                    <div class="best-record-stat">
-                        <span class="best-record-stat-value">${bestDay.tasksCompleted}</span>
-                        <span class="best-record-stat-label">Tasks Done</span>
-                    </div>
-                    ${bestDay.productivityScore > 0 ? `
-                    <div class="best-record-stat">
-                        <span class="best-record-stat-value">${bestDay.productivityScore}%</span>
-                        <span class="best-record-stat-label">Score</span>
-                    </div>` : ''}
-                </div>
-
-                ${!isToday ? `
-                <div class="best-record-progress">
-                    <div class="best-record-progress-header">
-                        <span class="best-record-progress-label">Today's progress toward record</span>
-                        <span class="best-record-progress-value">${Math.round(progress)}%</span>
-                    </div>
-                    <div class="best-record-progress-bar">
-                        <div class="best-record-progress-fill ${progress >= 100 ? 'complete' : progress >= 75 ? 'close' : ''}" style="width: ${progress}%"></div>
-                    </div>
-                    <div class="best-record-today-stats">
-                        <span>${formatFocusTime(todayFocus)} focused</span>
-                        <span>${todaySessions} session${todaySessions === 1 ? '' : 's'}</span>
-                        <span>${todayTasks} task${todayTasks === 1 ? '' : 's'} done</span>
-                        ${remaining > 0 ? `<span class="best-record-remaining">${formatFocusTime(remaining)} to beat record</span>` : `<span class="best-record-beaten">\uD83C\uDF89 Record beaten!</span>`}
-                    </div>
-                </div>` : ''}
-            </div>
-        `;
-    } catch (e) {
-        console.error('Failed to load best records:', e);
+        try {
+            if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                await Notification.requestPermission();
+            }
+        } catch (e) {
+            console.error('Failed to request notification permission:', e);
+        }
     }
 }
 
