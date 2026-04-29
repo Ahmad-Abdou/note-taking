@@ -1000,7 +1000,7 @@ async function updateTaskDateTime(taskId, newDate, newTime) {
 async function updateEventDateTime(eventId, newDate, newTime) {
     try {
         // Find the event in ScheduleState
-        const event = ScheduleState.events.find(e => e.id === eventId);
+        const event = ScheduleState.events.find(e => String(e.id) === String(eventId));
 
         if (!event) {
             console.error('Event not found:', eventId);
@@ -1388,7 +1388,7 @@ function setupEventResize() {
         if (!eventEl) return;
 
         const eventId = eventEl.dataset.eventId;
-        const event = ScheduleState.events.find(ev => ev.id === eventId);
+        const event = ScheduleState.events.find(ev => String(ev.id) === String(eventId));
         if (!event) return;
 
         ScheduleState.resizeState = {
@@ -1486,7 +1486,7 @@ async function handleResizeEnd(e) {
 
     // Save the new times if changed
     if (state.newStartTime || state.newEndTime) {
-        const event = ScheduleState.events.find(ev => ev.id === state.eventId);
+        const event = ScheduleState.events.find(ev => String(ev.id) === String(state.eventId));
         if (event) {
             const newStart = state.newStartTime || state.originalStartTime;
             const newEnd = state.newEndTime || state.originalEndTime;
@@ -2404,7 +2404,7 @@ async function renderSidebarEvents() {
         // Get tasks
         const tasks = await ProductivityData.DataStore.getTasks();
         const activeTasks = tasks
-            .filter(t => t.status !== 'completed')
+            .filter(t => t.status !== 'completed' && !t.parentTaskId)
             .sort((a, b) => {
                 const aDate = a.startDate || a.dueDate;
                 const bDate = b.startDate || b.dueDate;
@@ -3529,7 +3529,7 @@ async function saveScheduleEvent(e) {
 
         // Update local state
         if (ScheduleState.editingEvent) {
-            const index = ScheduleState.events.findIndex(e => e.id === event.id);
+            const index = ScheduleState.events.findIndex(e => String(e.id) === String(event.id));
             if (index >= 0) ScheduleState.events[index] = event;
         } else {
             ScheduleState.events.push(event);
@@ -3605,7 +3605,7 @@ async function deleteScheduleEvent(eventId) {
 }
 
 function viewEvent(eventId) {
-    const event = ScheduleState.events.find(e => e.id === eventId);
+    const event = ScheduleState.events.find(e => String(e.id) === String(eventId));
     if (!event) return;
 
     // Show task/event details directly on schedule page (don't navigate away)
@@ -3893,7 +3893,7 @@ function handleDrop(e, date) {
     const eventId = ScheduleState.draggedEvent;
     if (!eventId) return;
 
-    const event = ScheduleState.events.find(ev => ev.id === eventId);
+    const event = ScheduleState.events.find(ev => String(ev.id) === String(eventId));
     if (event && event.date !== date) {
         event.date = date;
         ProductivityData.DataStore.saveScheduleEvent(event);
@@ -4703,7 +4703,7 @@ async function processImportedData(text, format, settings = {}) {
             importedAt: markAsImported ? new Date().toISOString() : null
         });
         await ProductivityData.DataStore.saveScheduleEvent(event);
-        const existing = ScheduleState.events.findIndex(e => e.id === event.id);
+        const existing = ScheduleState.events.findIndex(e => String(e.id) === String(event.id));
         if (existing >= 0) {
             ScheduleState.events[existing] = event;
         } else {

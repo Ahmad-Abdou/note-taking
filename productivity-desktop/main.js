@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, globalShortcut, net, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, globalShortcut, net, shell, screen } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
@@ -1100,14 +1100,29 @@ function createWidgetWindow(cardId, opts = {}) {
     };
 
     if (typeof x === 'number' && typeof y === 'number') {
-        winOpts.x = x;
-        winOpts.y = y;
+        const bounds = { x, y, width, height };
+        const display = screen.getDisplayMatching(bounds);
+        const isVisible = (
+            x < display.bounds.x + display.bounds.width &&
+            x + width > display.bounds.x &&
+            y < display.bounds.y + display.bounds.height &&
+            y + height > display.bounds.y
+        );
+
+        if (isVisible) {
+            winOpts.x = x;
+            winOpts.y = y;
+        } else {
+            diag('info', `Widget bounds off-screen, resetting: ${x}, ${y}`);
+        }
     }
 
     const win = new BrowserWindow(winOpts);
 
     const widgetPath = path.join(__dirname, 'renderer', 'widget.html');
-    win.loadFile(widgetPath, { query: { card: cardId } }).catch((e) => {
+    win.loadFile(widgetPath, { query: { card: cardId } }).then(() => {
+        win.show();
+    }).catch((e) => {
         diagError('widget loadFile failed', e);
     });
 
