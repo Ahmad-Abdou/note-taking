@@ -1455,7 +1455,7 @@ async function startFocusSession(minutes = null, options = {}) {
     showFocusOverlay();
 
     // Enable distraction blocking if enabled (non-blocking)
-    if (FocusState.settings.blockingEnabled) {
+    if (FocusState.settings.blockingEnabled && typeof enableDistractionBlocking === 'function') {
         enableDistractionBlocking().catch(e =>
             console.error('Failed to enable distraction blocking:', e)
         );

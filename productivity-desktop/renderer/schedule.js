@@ -1271,25 +1271,60 @@ async function editCountdownTitle(eventId) {
     }
 
     const currentTitle = ScheduleState.countdownTitles[idStr] || ScheduleState.countdownTitles[eventId] || event.title;
-    const newTitle = prompt('Edit countdown title:', currentTitle);
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.zIndex = '9999';
+    overlay.innerHTML = `
+        <div class="modal-content" style="max-width: 400px; padding: 20px;">
+            <h3>Edit countdown title</h3>
+            <div class="form-group" style="margin-top: 15px;">
+                <input type="text" id="countdown-title-input" class="form-input" value="${escapeHtml(currentTitle)}" placeholder="Title..." autofocus>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" id="countdown-title-cancel">Cancel</button>
+                <button class="btn btn-primary" id="countdown-title-save">Save</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('#countdown-title-input');
+    
+    const closeDialog = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => overlay.remove(), 200);
+    };
 
-    // If user cancels the prompt, do nothing
-    if (newTitle === null) {
-        return;
-    }
+    const saveDialog = async () => {
+        const newTitle = input.value;
+        closeDialog();
+        
+        if (!newTitle.trim() || newTitle.trim() === event.title) {
+            delete ScheduleState.countdownTitles[idStr];
+            delete ScheduleState.countdownTitles[eventId];
+            showToast('info', 'Title Reset', 'Using original event title');
+        } else {
+            ScheduleState.countdownTitles[idStr] = newTitle.trim();
+            showToast('success', 'Title Updated', 'Countdown title has been changed');
+        }
 
-    // If new title is empty or same as original event title, remove custom title
-    if (!newTitle.trim() || newTitle.trim() === event.title) {
-        delete ScheduleState.countdownTitles[idStr];
-        delete ScheduleState.countdownTitles[eventId];
-        showToast('info', 'Title Reset', 'Using original event title');
-    } else {
-        ScheduleState.countdownTitles[idStr] = newTitle.trim();
-        showToast('success', 'Title Updated', 'Countdown title has been changed');
-    }
+        await savePinnedCountdowns();
+        renderCountdownsSection();
+    };
 
-    await savePinnedCountdowns();
-    renderCountdownsSection();
+    overlay.querySelector('#countdown-title-cancel').onclick = closeDialog;
+    overlay.querySelector('#countdown-title-save').onclick = saveDialog;
+    
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveDialog();
+        if (e.key === 'Escape') closeDialog();
+    });
+    
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 100);
 }
 
 function renderCountdownsSection() {
@@ -2431,13 +2466,42 @@ async function renderSidebarEvents() {
                 const dateDisplay = task.startDate || task.dueDate;
                 const dateObj = dateDisplay ? new Date(dateDisplay) : null;
                 const dateStr = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date';
-                html += `
-                    <div class="sidebar-event-item" data-task-id="${task.id}">
-                        <span class="event-dot" style="background: ${task.color || '#6366f1'}"></span>
-                        <span class="event-name">${escapeHtml(task.title)}</span>
-                        <span class="event-date">${dateStr}</span>
-                    </div>
-                `;
+                
+                const children = tasks.filter(t => t.parentTaskId === task.id && t.status !== 'completed');
+                
+                if (children.length > 0) {
+                    html += `
+                        <details class="sidebar-recurring-group" style="margin-bottom: 2px;">
+                            <summary class="sidebar-event-item" data-task-id="${task.id}" style="cursor: pointer; list-style-position: inside;">
+                                <span class="event-dot" style="background: ${task.color || '#6366f1'}"></span>
+                                <span class="event-name">${escapeHtml(task.title)}</span>
+                                <span class="event-date" style="font-size: 0.7rem; background: var(--border-color); padding: 2px 6px; border-radius: 4px;">${children.length} left</span>
+                            </summary>
+                            <div class="sidebar-recurring-children" style="padding-left: 20px; border-left: 2px solid var(--border-color); margin-left: 10px;">
+                                ${children.map(child => {
+                                    const cDate = child.startDate || child.dueDate;
+                                    const cDateObj = cDate ? new Date(cDate) : null;
+                                    const cDateStr = cDateObj ? cDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date';
+                                    return `
+                                        <div class="sidebar-event-item" data-task-id="${child.id}" style="margin-top: 2px;">
+                                            <span class="event-dot" style="background: transparent; border: 2px solid ${task.color || '#6366f1'}"></span>
+                                            <span class="event-name">${escapeHtml(child.title)}</span>
+                                            <span class="event-date">${cDateStr}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </details>
+                    `;
+                } else {
+                    html += `
+                        <div class="sidebar-event-item" data-task-id="${task.id}">
+                            <span class="event-dot" style="background: ${task.color || '#6366f1'}"></span>
+                            <span class="event-name">${escapeHtml(task.title)}</span>
+                            <span class="event-date">${dateStr}</span>
+                        </div>
+                    `;
+                }
             });
             if (activeTasks.length > 5) {
                 html += expanded

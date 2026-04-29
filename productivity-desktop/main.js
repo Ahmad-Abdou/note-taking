@@ -1023,16 +1023,6 @@ ipcMain.handle('store-clear', () => {
     return true;
 });
 
-// ===== IPC Handlers for Auto-Start =====
-
-ipcMain.handle('set-auto-start', (event, enable) => {
-    return setAutoStartEnabled(enable);
-});
-
-ipcMain.handle('get-auto-start', () => {
-    return getAutoStartEnabled();
-});
-
 // ===== IPC Handlers for Notifications =====
 
 // ===== Pinned Widget Windows =====
