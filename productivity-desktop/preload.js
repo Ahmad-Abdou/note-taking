@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
                 return await ipcRenderer.invoke('updater-check');
             } catch (error) {
                 const message = String(error?.message || error || '');
-                if (message.includes('No handler registered for') || message.includes('updater-check')) {
+                if (message.includes('No handler registered for')) {
                     return { ok: false, error: 'updater_handler_missing' };
                 }
                 throw error;
@@ -59,7 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
                 return await ipcRenderer.invoke('updater-update-now');
             } catch (error) {
                 const message = String(error?.message || error || '');
-                if (message.includes('No handler registered for') || message.includes('updater-update-now')) {
+                if (message.includes('No handler registered for')) {
                     return { ok: false, error: 'updater_handler_missing' };
                 }
                 throw error;

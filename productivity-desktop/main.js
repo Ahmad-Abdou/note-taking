@@ -1391,29 +1391,29 @@ ipcMain.handle('updater-get-version', () => {
 });
 
 ipcMain.handle('updater-check', async () => {
-    initAutoUpdater();
-
-    if (isPortableBuild()) {
-        sendUpdaterStatus({
-            state: 'error',
-            message: 'Auto-update is not supported in the portable EXE. Download and install the "Setup" (NSIS) build from GitHub Releases, then use in-app updates.'
-        });
-        return { ok: false, error: 'portable_not_supported' };
-    }
-
-    if (!app.isPackaged) {
-        // Don't hard-fail: allow the UI to show a helpful message.
-        sendUpdaterStatus({
-            state: 'error',
-            message: 'Updates are only available in packaged builds (build installer/portable and run that build).'
-        });
-        return { ok: false, error: 'not_packaged' };
-    }
-
-    const cfg = ensureUpdateConfigOrExplain();
-    if (!cfg.ok) return { ok: false, error: cfg.error };
-
     try {
+        initAutoUpdater();
+
+        if (isPortableBuild()) {
+            sendUpdaterStatus({
+                state: 'error',
+                message: 'Auto-update is not supported in the portable EXE. Download and install the "Setup" (NSIS) build from GitHub Releases, then use in-app updates.'
+            });
+            return { ok: false, error: 'portable_not_supported' };
+        }
+
+        if (!app.isPackaged) {
+            // Don't hard-fail: allow the UI to show a helpful message.
+            sendUpdaterStatus({
+                state: 'error',
+                message: 'Updates are only available in packaged builds (build installer/portable and run that build).'
+            });
+            return { ok: false, error: 'not_packaged' };
+        }
+
+        const cfg = ensureUpdateConfigOrExplain();
+        if (!cfg.ok) return { ok: false, error: cfg.error };
+
         pendingCheckAutoDownload = true;
         updaterLastAvailability = null;
 
@@ -1437,28 +1437,28 @@ ipcMain.handle('updater-check', async () => {
 });
 
 ipcMain.handle('updater-update-now', async () => {
-    initAutoUpdater();
-
-    if (isPortableBuild()) {
-        sendUpdaterStatus({
-            state: 'error',
-            message: 'Auto-update is not supported in the portable EXE. Download and install the "Setup" (NSIS) build from GitHub Releases, then use in-app updates.'
-        });
-        return { ok: false, error: 'portable_not_supported' };
-    }
-
-    if (!app.isPackaged) {
-        sendUpdaterStatus({
-            state: 'error',
-            message: 'Updates are only available in packaged builds (build installer/portable and run that build).'
-        });
-        return { ok: false, error: 'not_packaged' };
-    }
-
-    const cfg = ensureUpdateConfigOrExplain();
-    if (!cfg.ok) return { ok: false, error: cfg.error };
-
     try {
+        initAutoUpdater();
+
+        if (isPortableBuild()) {
+            sendUpdaterStatus({
+                state: 'error',
+                message: 'Auto-update is not supported in the portable EXE. Download and install the "Setup" (NSIS) build from GitHub Releases, then use in-app updates.'
+            });
+            return { ok: false, error: 'portable_not_supported' };
+        }
+
+        if (!app.isPackaged) {
+            sendUpdaterStatus({
+                state: 'error',
+                message: 'Updates are only available in packaged builds (build installer/portable and run that build).'
+            });
+            return { ok: false, error: 'not_packaged' };
+        }
+
+        const cfg = ensureUpdateConfigOrExplain();
+        if (!cfg.ok) return { ok: false, error: cfg.error };
+
         // If update is already downloaded (rare), just install.
         installAfterDownload = true;
         updaterLastAvailability = null;
