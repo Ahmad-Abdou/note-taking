@@ -78,6 +78,16 @@
                     </div>
 
                     <div id="toolbarViewerRight">
+                        <button id="ocrToggleBtn" class="toolbarButton" title="OCR Text Recognition (for scanned pages)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                <path d="M7 8h4"></path>
+                                <path d="M7 12h10"></path>
+                                <path d="M7 16h7"></path>
+                                <circle cx="18" cy="7" r="2"></circle>
+                            </svg>
+                        </button>
                         <button id="immersiveReader" class="toolbarButton" title="Immersive Reader">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
@@ -301,6 +311,46 @@
                             <span>Export</span>
                         </label>
                     </div>
+                </div>
+            </div>
+
+            <!-- OCR Settings -->
+            <div class="settings-section">
+                <h3>📷 OCR Text Recognition</h3>
+                <p style="font-size: 12px; color: #888; margin: 0 0 12px 0;">Enable OCR to select and highlight text from scanned/image-based PDF pages (e.g. scanned Arabic books).</p>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="pdfOcrEnabled" checked>
+                        <span>Enable OCR for scanned pages</span>
+                    </label>
+                </div>
+                <div class="settings-option" style="margin-top: 10px;">
+                    <label style="display: block; margin-bottom: 6px;">
+                        <span>OCR Language:</span>
+                    </label>
+                    <select id="ocrLanguageSelect" style="
+                        width: 100%;
+                        padding: 8px 12px;
+                        border-radius: 6px;
+                        border: 1px solid #444;
+                        background: #2a2a2a;
+                        color: #fff;
+                        font-size: 13px;
+                        cursor: pointer;
+                    ">
+                        <option value="ara+eng">Arabic + English (العربية + English)</option>
+                        <option value="ara">Arabic only (العربية)</option>
+                        <option value="eng">English only</option>
+                        <option value="fra+eng">French + English</option>
+                        <option value="deu+eng">German + English</option>
+                        <option value="spa+eng">Spanish + English</option>
+                        <option value="tur+eng">Turkish + English</option>
+                        <option value="fas+ara">Persian + Arabic (فارسی + العربية)</option>
+                        <option value="urd+ara">Urdu + Arabic (اردو + العربية)</option>
+                    </select>
+                </div>
+                <div id="ocrStatusInfo" style="margin-top: 10px; font-size: 11px; color: #888;">
+                    OCR will automatically process scanned pages when they become visible.
                 </div>
             </div>
         </div>
@@ -757,6 +807,9 @@
     <input type="file" id="vocabImportInput" class="hidden" accept=".json">
 
     <input type="file" id="fileInput" class="hidden" accept=".pdf">
+
+    <!-- Tesseract.js OCR Engine -->
+    <script src="../../tesseract/tesseract.min.js"></script>
 
     <!--  PDF.js from Local Build -->
     <script src="../build/pdf.js"></script>

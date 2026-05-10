@@ -68,6 +68,7 @@ function createSelectionTooltip() {
         <button class="tooltip-btn comment-btn" title="Add Comment">Comment</button>
         <button class="tooltip-btn note-btn" title="Add as Note">Add Note</button>
         <button class="tooltip-btn copy-btn" title="Copy">Copy</button>
+        <button class="tooltip-btn meaning-btn" title="Arabic meaning">Meaning</button>
         <button class="tooltip-btn synonyms-btn" title="Synonyms">Synonyms</button>
         <button class="tooltip-btn review-btn" title="Add to Review Queue">📚 Review</button>
     `;
@@ -307,6 +308,16 @@ function showSelectionTooltip(selection) {
     };
 
     // Synonyms button
+    const meaningBtn = tooltip.querySelector('.meaning-btn');
+    meaningBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        showArabicMeaningPanel(selectedText);
+        hideSelectionTooltip();
+        selection.removeAllRanges();
+    };
+
     const synonymsBtn = tooltip.querySelector('.synonyms-btn');
     synonymsBtn.onclick = (e) => {
         e.preventDefault();
@@ -529,6 +540,13 @@ function showSynonymsModal(word) {
                     Please configure your Gemini API key in settings to use the synonyms feature.
                 </div>
             `;
+        } else if (err.message === 'Gemini quota exceeded') {
+            errorEl.innerHTML = `
+                <div style="color: #b45309; margin-bottom: 8px;">Gemini quota reached</div>
+                <div style="font-size: 12px; color: #666;">
+                    Please wait a bit, use another API key, or check your Google AI Studio quota.
+                </div>
+            `;
         } else {
             errorEl.textContent = 'Error fetching synonyms. Please try again.';
         }
@@ -548,6 +566,181 @@ function closeSynonymsModal() {
     closeSynonymsPanel();
 }
 
+async function fetchArabicMeaningWithCurrentModels(word) {
+    const prompt = `Explain this Arabic word in Arabic: "${word}".
+Return JSON only, with Arabic values:
+{
+  "meaning": "short clear Arabic definition",
+  "root": "root or origin if known, otherwise empty string",
+  "synonyms": ["Arabic synonym 1", "Arabic synonym 2", "Arabic synonym 3"]
+}`;
+
+    const parsed = await fetchGeminiJson(prompt, 700);
+    return {
+        meaning: parsed.meaning || '',
+        root: parsed.root || '',
+        synonyms: Array.isArray(parsed.synonyms) ? parsed.synonyms.filter(Boolean).slice(0, 8) : []
+    };
+}
+
+let meaningPanel = null;
+
+function createMeaningPanel() {
+    if (meaningPanel) return meaningPanel;
+
+    meaningPanel = document.createElement('div');
+    meaningPanel.className = 'arabic-meaning-panel synonyms-side-panel';
+    meaningPanel.style.cssText = `
+        position: fixed;
+        top: 60px;
+        right: 340px;
+        width: 340px;
+        max-height: calc(100vh - 100px);
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        z-index: 9990;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+    `;
+
+    meaningPanel.innerHTML = `
+        <div class="meaning-header" style="
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #0f766e 0%, #2563eb 100%);
+            color: white;
+            cursor: grab;
+            user-select: none;
+        ">
+            <h3 style="margin: 0; font-size: 15px; font-weight: 600;">Meaning</h3>
+            <button id="close-meaning-panel" style="
+                background: rgba(255,255,255,0.2);
+                border: none;
+                color: white;
+                font-size: 16px;
+                cursor: pointer;
+                padding: 2px 8px;
+                border-radius: 6px;
+            ">x</button>
+        </div>
+        <div id="meaning-word-display" style="
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            font-size: 20px;
+            font-weight: 700;
+            color: #111827;
+            text-align: right;
+            direction: rtl;
+        "></div>
+        <div id="meaning-content" style="
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 16px;
+            direction: rtl;
+            text-align: right;
+            color: #1f2937;
+            line-height: 1.7;
+            font-size: 14px;
+        "></div>
+    `;
+
+    document.body.appendChild(meaningPanel);
+
+    if (window.makeDraggable) {
+        window.makeDraggable(meaningPanel, '.meaning-header');
+    }
+
+    meaningPanel.querySelector('#close-meaning-panel').addEventListener('click', () => {
+        meaningPanel.style.display = 'none';
+    });
+
+    return meaningPanel;
+}
+
+function showArabicMeaningPanel(selectionText) {
+    const panel = createMeaningPanel();
+    const word = normalizeArabicQuery(selectionText);
+    const wordDisplay = panel.querySelector('#meaning-word-display');
+    const content = panel.querySelector('#meaning-content');
+
+    panel.style.display = 'flex';
+    wordDisplay.textContent = word || selectionText;
+
+    if (!word) {
+        content.innerHTML = `<div style="color:#b91c1c;">Select one Arabic word to show its meaning.</div>`;
+        return;
+    }
+
+    content.innerHTML = `<div style="color:#64748b;">Loading Arabic meaning...</div>`;
+
+    fetchArabicMeaningWithCurrentModels(word).then(result => {
+        content.innerHTML = `
+            <section style="margin-bottom: 14px;">
+                <div style="font-weight:700; color:#0f766e; margin-bottom:4px;">المعنى</div>
+                <div>${escapeHTML(result.meaning || 'لم يتم العثور على معنى واضح.')}</div>
+            </section>
+            ${result.root ? `<section style="margin-bottom: 14px;">
+                <div style="font-weight:700; color:#0f766e; margin-bottom:4px;">الجذر أو الأصل</div>
+                <div>${escapeHTML(result.root)}</div>
+            </section>` : ''}
+            ${Array.isArray(result.synonyms) && result.synonyms.length ? `<section>
+                <div style="font-weight:700; color:#0f766e; margin-bottom:6px;">مرادفات</div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-start;">
+                    ${result.synonyms.map(s => `<button class="meaning-chip" data-word="${escapeHTML(s)}" style="
+                        border:1px solid #d1d5db;
+                        background:#f9fafb;
+                        color:#111827;
+                        border-radius:999px;
+                        padding:5px 10px;
+                        cursor:pointer;
+                        font-size:13px;
+                    ">${escapeHTML(s)}</button>`).join('')}
+                </div>
+            </section>` : ''}
+        `;
+
+        content.querySelectorAll('.meaning-chip').forEach(chip => {
+            chip.addEventListener('click', () => navigator.clipboard.writeText(chip.dataset.word || chip.textContent));
+        });
+    }).catch(error => {
+        if (error.message === 'No API key configured') {
+            content.innerHTML = `<div style="color:#b45309;">Set your Gemini API key in options to use Arabic meanings.</div>`;
+        } else if (error.message === 'Gemini quota exceeded') {
+            content.innerHTML = `<div style="color:#b45309;">Gemini rate limit or quota reached. Please wait a bit, switch to another API key, or check your Google AI Studio quota.</div>`;
+        } else {
+            content.innerHTML = `<div style="color:#b91c1c;">Could not fetch the meaning. Please try again.</div>`;
+        }
+    });
+}
+
+async function fetchArabicMeaning(word) {
+    const result = await chrome.storage.local.get(['geminiApiKey']);
+    const apiKey = result.geminiApiKey;
+    if (!apiKey) throw new Error('No API key configured');
+
+    const prompt = `اشرح الكلمة العربية التالية شرحا عربيا موجزا وواضحا: "${word}".
+أعد الرد بصيغة JSON فقط بهذا الشكل:
+{
+  "meaning": "تعريف عربي قصير وواضح",
+  "root": "الجذر أو الأصل إن كان معروفا، وإلا اتركه فارغا",
+  "synonyms": ["مرادف 1", "مرادف 2", "مرادف 3"]
+}`;
+
+    const parsed = await fetchGeminiJson(prompt, 700);
+    return {
+        meaning: parsed.meaning || '',
+        root: parsed.root || '',
+        synonyms: Array.isArray(parsed.synonyms) ? parsed.synonyms.filter(Boolean).slice(0, 8) : []
+    };
+}
+
 async function fetchSynonyms(word) {
     return new Promise((resolve, reject) => {
         chrome.storage.local.get(['geminiApiKey'], async (result) => {
@@ -560,20 +753,25 @@ async function fetchSynonyms(word) {
             const apiKey = result.geminiApiKey;
 
             // Models to try in order (primary, then fallbacks)
-            const models = [
-                'gemini-2.0-flash',
-                'gemini-2.0-flash-lite',
-                'gemini-1.5-flash-latest',
-                'gemini-1.5-pro'
-            ];
+            const models = getGeminiModelCandidates();
 
-            const prompt = `Give me 6-8 synonyms for the word "${query}". For each synonym, provide a brief definition.
+            const isArabic = hasArabicLetters(query);
+            const prompt = isArabic
+                ? `هات 6 إلى 8 مرادفات عربية للكلمة "${query}". لكل مرادف اكتب شرحا عربيا قصيرا.
+
+Return ONLY a JSON array in this exact format, no other text:
+[{"word": "مرادف", "definition": "شرح عربي قصير"}]`
+                : `Give me 6-8 synonyms for the word "${query}". For each synonym, provide a brief definition.
                                     
 Return ONLY a JSON array in this exact format, no other text:
 [{"word": "synonym1", "definition": "brief definition"}, {"word": "synonym2", "definition": "brief definition"}]`;
 
             // If no API key, fall back to public API.
             if (!apiKey) {
+                if (isArabic) {
+                    reject(new Error('No API key configured'));
+                    return;
+                }
                 try {
                     resolve(await fetchSynonymsFromDatamuse(query));
                 } catch (e) {
@@ -581,6 +779,8 @@ Return ONLY a JSON array in this exact format, no other text:
                 }
                 return;
             }
+
+            let sawQuotaError = false;
 
             for (const model of models) {
                 try {
@@ -603,13 +803,20 @@ Return ONLY a JSON array in this exact format, no other text:
                     );
 
                     // Check for rate limiting or not found - try next model
-                    if (response.status === 429 || response.status === 404) {
+                    if (response.status === 429) {
+                        sawQuotaError = true;
+                        continue;
+                    }
+                    if (response.status === 404) {
                         continue;
                     }
 
                     const data = await response.json();
 
                     if (data.error) {
+                        if (data.error.code === 429 || data.error.status === 'RESOURCE_EXHAUSTED') {
+                            sawQuotaError = true;
+                        }
                         continue;
                     }
 
@@ -634,6 +841,11 @@ Return ONLY a JSON array in this exact format, no other text:
                 }
             }
 
+            if (isArabic && sawQuotaError) {
+                reject(new Error('Gemini quota exceeded'));
+                return;
+            }
+
             // All models failed; fall back to a public synonyms API.
             try {
                 resolve(await fetchSynonymsFromDatamuse(query));
@@ -648,8 +860,118 @@ function normalizeSynonymsQuery(input) {
     if (!input) return '';
     const str = String(input).trim();
     // Prefer the first "word-like" token.
+    const arabicToken = normalizeArabicQuery(str);
+    if (arabicToken) return arabicToken;
     const token = (str.match(/[A-Za-z][A-Za-z\-']{0,63}/) || [])[0] || '';
     return token.toLowerCase();
+}
+
+function normalizeArabicQuery(input) {
+    if (!input) return '';
+    const cleaned = String(input)
+        .normalize('NFC')
+        .replace(/\u0640/g, '')
+        .trim();
+    const token = (cleaned.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+(?:[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]+)?/u) || [])[0] || '';
+    return token.trim();
+}
+
+function hasArabicLetters(input) {
+    return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(String(input || ''));
+}
+
+async function fetchGeminiJson(prompt, maxOutputTokens = 500) {
+    const result = await chrome.storage.local.get(['geminiApiKey']);
+    const apiKey = result.geminiApiKey;
+    if (!apiKey) throw new Error('No API key configured');
+
+    const models = await getAvailableGeminiModels(apiKey);
+    let sawQuotaError = false;
+    let sawReachableModel = false;
+
+    for (const model of models) {
+        try {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: {
+                            temperature: 0.2,
+                            maxOutputTokens,
+                            responseMimeType: 'application/json'
+                        }
+                    })
+                }
+            );
+
+            if (response.status === 429) {
+                sawQuotaError = true;
+                continue;
+            }
+            if (response.status === 404 || response.status === 503) continue;
+            sawReachableModel = true;
+
+            const data = await response.json();
+            if (data.error) {
+                if (data.error.code === 429 || data.error.status === 'RESOURCE_EXHAUSTED') {
+                    sawQuotaError = true;
+                }
+                continue;
+            }
+
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const trimmed = text.trim();
+            const objectMatch = trimmed.match(/\{[\s\S]*\}/);
+            const arrayMatch = trimmed.match(/\[[\s\S]*\]/);
+            const payload = objectMatch ? objectMatch[0] : (arrayMatch ? arrayMatch[0] : trimmed);
+            return JSON.parse(payload);
+        } catch (error) {
+            continue;
+        }
+    }
+
+    if (sawQuotaError && !sawReachableModel) {
+        throw new Error('Gemini quota exceeded');
+    }
+
+    throw new Error('No model returned valid JSON');
+}
+
+function getGeminiModelCandidates() {
+    return [
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-pro-latest'
+    ];
+}
+
+async function getAvailableGeminiModels(apiKey) {
+    const fallbackModels = getGeminiModelCandidates();
+
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!response.ok) return fallbackModels;
+
+        const data = await response.json();
+        const available = Array.isArray(data.models)
+            ? data.models
+                .filter(model => Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'))
+                .map(model => String(model.name || '').replace(/^models\//, ''))
+                .filter(Boolean)
+            : [];
+
+        const preferred = fallbackModels.filter(model => available.includes(model));
+        const extras = available.filter(model => /gemini/i.test(model) && !preferred.includes(model));
+        return preferred.concat(extras).slice(0, 8).length ? preferred.concat(extras).slice(0, 8) : fallbackModels;
+    } catch (error) {
+        return fallbackModels;
+    }
 }
 
 async function fetchSynonymsFromDatamuse(word) {

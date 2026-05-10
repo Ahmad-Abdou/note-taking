@@ -50,6 +50,7 @@
                 "lib/pdfjs/web/viewer.js",
                 "lib/pdfjs/build/pdf.js",
                 "lib/pdfjs/build/pdf.worker.js",
+                "lib/tesseract/*",
                 "icons/*"
             ],
             "matches": [
@@ -72,5 +73,8 @@
             "48": "icons/icon48.png"
         }
     },
-    "options_page": "options.html"
+    "options_page": "options.html",
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    }
 }

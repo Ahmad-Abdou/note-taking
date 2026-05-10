@@ -486,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupHighlightRerendering();
     initImmersiveReader();
     initToolbarActions(); // Initialize bookmark and native viewer buttons
+    initOcrSettings(); // Initialize OCR text recognition settings
 
     // Load highlights after a short delay to ensure PDF is loaded
     setTimeout(() => {

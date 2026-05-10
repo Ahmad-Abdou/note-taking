@@ -1,4 +1,4 @@
-﻿/* ========== _variables.css ========== */
+/* ========== _variables.css ========== */
 /**
  * ============================================================================
  * PDF VIEWER - CSS VARIABLES & THEMES
@@ -443,6 +443,72 @@ body {
     border: 1px solid #4285f4 !important;
 }
 
+@keyframes ocr-pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.toolbarButton.ocr-processing svg {
+    animation: ocr-pulse 1.5s infinite ease-in-out;
+    stroke: #4285f4; /* Make icon blue while processing */
+}
+
+#ocrProgressWidget {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width: min(320px, calc(100vw - 36px));
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(30, 30, 34, 0.96);
+    color: #fff;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+    z-index: 10002;
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#ocrProgressWidget.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+#ocrProgressWidget .ocr-progress-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+#ocrProgressWidget .ocr-progress-title {
+    font-weight: 700;
+}
+
+#ocrProgressWidget .ocr-progress-track {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+#ocrProgressFill {
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #22c55e, #38bdf8);
+    transition: width 0.18s ease;
+}
+
+#ocrProgressDetail {
+    margin-top: 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.72);
+}
+
 .toolbarButton svg {
     width: 18px;
     height: 18px;
@@ -860,6 +926,21 @@ body {
     -webkit-user-select: text;
     line-height: 1.0;
     overflow: hidden;
+}
+
+.page .textLayer span[data-ocr-span="true"] {
+    overflow: visible;
+    unicode-bidi: plaintext;
+    letter-spacing: 0;
+    font-variant-ligatures: normal;
+}
+
+.page .textLayer span[data-ocr-span="true"]::selection {
+    background: rgba(99, 102, 241, 0.16);
+}
+
+.page .textLayer span[data-ocr-span="true"]::-moz-selection {
+    background: rgba(99, 102, 241, 0.16);
 }
 
 /* Single unified selection color for text spans */

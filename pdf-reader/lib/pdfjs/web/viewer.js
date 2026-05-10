@@ -100,6 +100,1043 @@ const pageNumInput = document.getElementById('pageNumber');
 const numPagesSpan = document.getElementById('numPages');
 const scaleSelect = document.getElementById('scaleSelect');
 
+// OCR support for image-only PDFs (text layer fallback)
+let ocrEnabled = true;
+let ocrLanguage = 'ara+eng'; // Default: Arabic + English for scanned Arabic books
+const OCR_TARGET_DPI = 320;
+const OCR_MAX_DIMENSION = 4600;
+const OCR_MIN_DIMENSION = 1800;
+const OCR_CONFIDENCE_THRESHOLD = 12; // Arabic models often score useful words conservatively.
+const OCR_SELECTION_X_PADDING = 0.04;
+const OCR_SELECTION_Y_PADDING = 0.18;
+const ocrCache = new Map();
+const ocrQueue = [];
+const ocrInProgress = new Set();
+let ocrWorkerPromise = null;
+let isOcrProcessing = false;
+let ocrPagesProcessed = 0;
+let ocrPagesTotal = 0;
+let ocrCurrentPage = null;
+let ocrCurrentProgress = 0;
+let ocrProgressEl = null;
+
+function initOcrSettings() {
+    const ocrToggle = document.getElementById('pdfOcrEnabled');
+    const ocrLangSelect = document.getElementById('ocrLanguageSelect');
+    const ocrToolbarBtn = document.getElementById('ocrToggleBtn');
+
+    chrome.storage.local.get(['pdfOcrEnabled', 'pdfOcrLanguage'], (result) => {
+        ocrEnabled = result.pdfOcrEnabled !== false;
+        ocrLanguage = result.pdfOcrLanguage || 'ara+eng';
+
+        if (ocrToggle) {
+            ocrToggle.checked = ocrEnabled;
+        }
+        if (ocrLangSelect) {
+            ocrLangSelect.value = ocrLanguage;
+        }
+        if (ocrToolbarBtn) {
+            ocrToolbarBtn.classList.toggle('active', ocrEnabled);
+        }
+        if (ocrEnabled) {
+            applyOcrToRenderedPages();
+        } else {
+            clearOcrTextLayers();
+        }
+    });
+
+    // OCR toggle checkbox in settings
+    if (ocrToggle) {
+        ocrToggle.addEventListener('change', () => {
+            ocrEnabled = ocrToggle.checked;
+            chrome.storage.local.set({ pdfOcrEnabled: ocrEnabled });
+            if (ocrToolbarBtn) {
+                ocrToolbarBtn.classList.toggle('active', ocrEnabled);
+            }
+            if (ocrEnabled) {
+                applyOcrToRenderedPages();
+            } else {
+                clearOcrTextLayers();
+            }
+        });
+    }
+
+    // Language selector in settings
+    if (ocrLangSelect) {
+        ocrLangSelect.addEventListener('change', () => {
+            const newLang = ocrLangSelect.value;
+            if (newLang !== ocrLanguage) {
+                ocrLanguage = newLang;
+                chrome.storage.local.set({ pdfOcrLanguage: ocrLanguage });
+                // Terminate old worker and clear cache so OCR re-runs with new language
+                terminateOcrWorker();
+                ocrCache.clear();
+                clearOcrTextLayers();
+                if (ocrEnabled) {
+                    applyOcrToRenderedPages();
+                }
+            }
+        });
+    }
+
+    // Toolbar button quick toggle
+    if (ocrToolbarBtn) {
+        ocrToolbarBtn.addEventListener('click', () => {
+            ocrEnabled = !ocrEnabled;
+            chrome.storage.local.set({ pdfOcrEnabled: ocrEnabled });
+            ocrToolbarBtn.classList.toggle('active', ocrEnabled);
+            if (ocrToggle) {
+                ocrToggle.checked = ocrEnabled;
+            }
+            if (ocrEnabled) {
+                applyOcrToRenderedPages();
+                if (window.notificationManager) {
+                    window.notificationManager.info('OCR enabled — processing scanned pages...', 'general');
+                }
+            } else {
+                clearOcrTextLayers();
+                if (window.notificationManager) {
+                    window.notificationManager.info('OCR disabled', 'general');
+                }
+            }
+        });
+    }
+
+    // Listen for external storage changes
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace !== 'local') return;
+        if (changes.pdfOcrEnabled) {
+            ocrEnabled = changes.pdfOcrEnabled.newValue !== false;
+            if (ocrToggle) ocrToggle.checked = ocrEnabled;
+            if (ocrToolbarBtn) ocrToolbarBtn.classList.toggle('active', ocrEnabled);
+            if (ocrEnabled) {
+                applyOcrToRenderedPages();
+            } else {
+                clearOcrTextLayers();
+            }
+        }
+        if (changes.pdfOcrLanguage) {
+            const newLang = changes.pdfOcrLanguage.newValue || 'ara+eng';
+            if (newLang !== ocrLanguage) {
+                ocrLanguage = newLang;
+                if (ocrLangSelect) ocrLangSelect.value = ocrLanguage;
+                terminateOcrWorker();
+                ocrCache.clear();
+                clearOcrTextLayers();
+                if (ocrEnabled) applyOcrToRenderedPages();
+            }
+        }
+    });
+}
+
+function getLayerSize(textLayerDiv) {
+    if (!textLayerDiv) return { width: 0, height: 0 };
+    const width = textLayerDiv.clientWidth || parseFloat(textLayerDiv.style.width) || 0;
+    const height = textLayerDiv.clientHeight || parseFloat(textLayerDiv.style.height) || 0;
+    return { width, height };
+}
+
+function hasSelectableText(textContent) {
+    if (!textContent || !Array.isArray(textContent.items)) return false;
+    return textContent.items.some(item => {
+        const value = item && typeof item.str === 'string' ? item.str.trim() : '';
+        return value.length > 0;
+    });
+}
+
+function getOcrCanvas(sourceCanvas) {
+    if (!sourceCanvas) return null;
+    const width = sourceCanvas.width || 0;
+    const height = sourceCanvas.height || 0;
+    if (!width || !height) return sourceCanvas;
+
+    const longestSide = Math.max(width, height);
+    let scale = Math.min(OCR_MAX_DIMENSION / longestSide, 1);
+    if (longestSide < OCR_MIN_DIMENSION) {
+        scale = Math.min(OCR_MIN_DIMENSION / longestSide, OCR_MAX_DIMENSION / longestSide, 2);
+    }
+
+    const ocrCanvas = document.createElement('canvas');
+    ocrCanvas.width = Math.max(1, Math.round(width * scale));
+    ocrCanvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = ocrCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+    ctx.drawImage(sourceCanvas, 0, 0, ocrCanvas.width, ocrCanvas.height);
+    return preprocessOcrCanvas(ocrCanvas);
+}
+
+async function renderPageForOcr(page, fallbackCanvas) {
+    if (!page || typeof page.getViewport !== 'function') {
+        return getOcrCanvas(fallbackCanvas);
+    }
+
+    const baseViewport = page.getViewport({ scale: 1 });
+    const dpiScale = OCR_TARGET_DPI / 72;
+    const maxScale = OCR_MAX_DIMENSION / Math.max(baseViewport.width, baseViewport.height);
+    const scale = Math.max(1.5, Math.min(dpiScale, maxScale));
+    const viewport = page.getViewport({ scale });
+
+    const ocrCanvas = document.createElement('canvas');
+    ocrCanvas.width = Math.max(1, Math.floor(viewport.width));
+    ocrCanvas.height = Math.max(1, Math.floor(viewport.height));
+
+    const ctx = ocrCanvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+
+    await page.render({
+        canvasContext: ctx,
+        viewport,
+        background: 'rgb(255,255,255)'
+    }).promise;
+
+    return preprocessOcrCanvas(ocrCanvas);
+}
+
+function preprocessOcrCanvas(canvas) {
+    if (!canvas) return canvas;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return canvas;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const image = ctx.getImageData(0, 0, width, height);
+    const data = image.data;
+    const histogram = new Uint32Array(256);
+
+    for (let i = 0; i < data.length; i += 4) {
+        const gray = Math.round((data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114));
+        histogram[gray]++;
+    }
+
+    const threshold = getOtsuThreshold(histogram, width * height);
+    const low = Math.max(0, threshold - 42);
+    const high = Math.min(255, threshold + 58);
+
+    for (let i = 0; i < data.length; i += 4) {
+        const gray = (data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114);
+        const stretched = Math.max(0, Math.min(255, ((gray - low) * 255) / Math.max(1, high - low)));
+        const sharpened = stretched < threshold ? Math.max(0, stretched - 24) : Math.min(255, stretched + 18);
+        const value = sharpened < threshold ? 0 : 255;
+        data[i] = value;
+        data[i + 1] = value;
+        data[i + 2] = value;
+        data[i + 3] = 255;
+    }
+
+    ctx.putImageData(image, 0, 0);
+    return canvas;
+}
+
+function getOtsuThreshold(histogram, totalPixels) {
+    let sum = 0;
+    for (let i = 0; i < 256; i++) {
+        sum += i * histogram[i];
+    }
+
+    let sumBackground = 0;
+    let weightBackground = 0;
+    let maxVariance = 0;
+    let threshold = 160;
+
+    for (let i = 0; i < 256; i++) {
+        weightBackground += histogram[i];
+        if (weightBackground === 0) continue;
+
+        const weightForeground = totalPixels - weightBackground;
+        if (weightForeground === 0) break;
+
+        sumBackground += i * histogram[i];
+        const meanBackground = sumBackground / weightBackground;
+        const meanForeground = (sum - sumBackground) / weightForeground;
+        const variance = weightBackground * weightForeground * Math.pow(meanBackground - meanForeground, 2);
+
+        if (variance > maxVariance) {
+            maxVariance = variance;
+            threshold = i;
+        }
+    }
+
+    return threshold;
+}
+
+function getExtensionUrl(path, relativeFallback) {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+        return chrome.runtime.getURL(path);
+    }
+    return relativeFallback || path;
+}
+
+function terminateOcrWorker() {
+    if (ocrWorkerPromise) {
+        ocrWorkerPromise.then(worker => {
+            try { worker.terminate(); } catch (e) { /* ignore */ }
+        }).catch(() => {});
+        ocrWorkerPromise = null;
+    }
+}
+
+function getOcrLangPath(lang) {
+    // Project Naptha hosts a common directory, so mixed languages such as
+    // ara+eng can resolve every required traineddata file from one base path.
+    return 'https://tessdata.projectnaptha.com/4.0.0_best';
+}
+
+function ensureOcrProgressElement() {
+    if (ocrProgressEl) return ocrProgressEl;
+
+    ocrProgressEl = document.createElement('div');
+    ocrProgressEl.id = 'ocrProgressWidget';
+    ocrProgressEl.innerHTML = `
+        <div class="ocr-progress-header">
+            <span class="ocr-progress-title">OCR extraction</span>
+            <span id="ocrProgressText">Preparing...</span>
+        </div>
+        <div class="ocr-progress-track">
+            <div id="ocrProgressFill"></div>
+        </div>
+        <div id="ocrProgressDetail">Scanning rendered pages</div>
+    `;
+    document.body.appendChild(ocrProgressEl);
+    return ocrProgressEl;
+}
+
+function updateOcrProgress(progress = ocrCurrentProgress) {
+    const widget = ensureOcrProgressElement();
+    const fill = widget.querySelector('#ocrProgressFill');
+    const text = widget.querySelector('#ocrProgressText');
+    const detail = widget.querySelector('#ocrProgressDetail');
+
+    ocrCurrentProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+    const pageFraction = ocrPagesTotal > 0 ? ocrPagesProcessed / ocrPagesTotal : 0;
+    const activeFraction = ocrPagesTotal > 0 ? (ocrCurrentProgress / ocrPagesTotal) : 0;
+    const totalProgress = Math.max(pageFraction, Math.min(1, pageFraction + activeFraction));
+    const percent = Math.round(totalProgress * 100);
+
+    widget.classList.add('visible');
+    if (fill) fill.style.width = `${percent}%`;
+    if (text) text.textContent = `${percent}%`;
+    if (detail) {
+        const current = ocrCurrentPage ? `Page ${ocrCurrentPage}` : 'Waiting';
+        detail.textContent = `${current} - ${ocrPagesProcessed}/${ocrPagesTotal || 0} pages complete`;
+    }
+
+    const status = document.getElementById('ocrStatusInfo');
+    if (status) {
+        status.textContent = `OCR extraction: ${percent}% (${ocrPagesProcessed}/${ocrPagesTotal || 0} pages complete)`;
+    }
+}
+
+function finishOcrProgressIfIdle() {
+    if (ocrQueue.length > 0 || isOcrProcessing) return;
+
+    ocrCurrentPage = null;
+    ocrCurrentProgress = 1;
+    updateOcrProgress(1);
+
+    setTimeout(() => {
+        if (ocrQueue.length === 0 && !isOcrProcessing && ocrProgressEl) {
+            ocrProgressEl.classList.remove('visible');
+            ocrPagesProcessed = 0;
+            ocrPagesTotal = 0;
+            ocrCurrentProgress = 0;
+            const status = document.getElementById('ocrStatusInfo');
+            if (status) {
+                status.textContent = 'OCR will automatically process scanned pages when they become visible.';
+            }
+        }
+    }, 1200);
+}
+
+async function getOcrWorker() {
+    if (ocrWorkerPromise) return ocrWorkerPromise;
+    if (!window.Tesseract || typeof window.Tesseract.createWorker !== 'function') {
+        throw new Error('Tesseract library is not available.');
+    }
+
+    const workerPath = getExtensionUrl('lib/tesseract/worker-filter.js', '../../tesseract/worker-filter.js');
+    const corePath = getExtensionUrl('lib/tesseract/tesseract-core.wasm.js', '../../tesseract/tesseract-core.wasm.js');
+    const oem = (window.Tesseract.OEM && window.Tesseract.OEM.LSTM_ONLY !== undefined)
+        ? window.Tesseract.OEM.LSTM_ONLY
+        : 1;
+    const langPath = getOcrLangPath(ocrLanguage);
+
+    ocrWorkerPromise = window.Tesseract.createWorker(ocrLanguage, oem, {
+        workerPath,
+        corePath,
+        langPath,
+        workerBlobURL: false,
+        logger: (m) => {
+            // Update toolbar button with progress if recognizing
+            if (m && m.status === 'recognizing text' && m.progress > 0) {
+                const btn = document.getElementById('ocrToggleBtn');
+                if (btn) {
+                    btn.title = `OCR: ${Math.round(m.progress * 100)}% — processing page...`;
+                }
+                updateOcrProgress(m.progress);
+            }
+        }
+    });
+
+    ocrWorkerPromise = ocrWorkerPromise.then(async worker => {
+        if (worker && typeof worker.setParameters === 'function') {
+            const psm = window.Tesseract.PSM && window.Tesseract.PSM.AUTO
+                ? window.Tesseract.PSM.AUTO
+                : '3';
+            const baseParameters = {
+                tessedit_pageseg_mode: psm,
+                preserve_interword_spaces: '1',
+                user_defined_dpi: String(OCR_TARGET_DPI)
+            };
+
+            try {
+                await worker.setParameters({
+                    ...baseParameters,
+                    textord_tablefind_recognize_tables: '1',
+                    textord_heavy_nr: '1'
+                });
+            } catch (error) {
+                console.warn('[OCR] Advanced Tesseract parameters were rejected; using base settings.', error);
+                await worker.setParameters(baseParameters);
+            }
+        }
+        return worker;
+    });
+
+    return ocrWorkerPromise;
+}
+
+function extractOcrWords(data) {
+    if (data && Array.isArray(data.words) && data.words.length > 0) {
+        return data.words.map(word => ({
+            text: word.text || '',
+            confidence: word.confidence,
+            blockNum: word.block_num,
+            paragraphNum: word.par_num,
+            lineNum: word.line_num,
+            bbox: word.bbox || {
+                x0: word.x0,
+                y0: word.y0,
+                x1: word.x1,
+                y1: word.y1
+            }
+        }));
+    }
+
+    if (data && typeof data.tsv === 'string') {
+        return parseTsvWords(data.tsv);
+    }
+
+    return [];
+}
+
+function parseTsvWords(tsvText) {
+    const lines = tsvText.split('\n');
+    if (lines.length <= 1) return [];
+
+    const words = [];
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const parts = line.split('\t');
+        if (parts.length < 12) continue;
+
+        const level = parseInt(parts[0], 10);
+        const left = parseFloat(parts[6]);
+        const top = parseFloat(parts[7]);
+        const width = parseFloat(parts[8]);
+        const height = parseFloat(parts[9]);
+        const confidence = parseFloat(parts[10]);
+        const text = parts[11] || '';
+
+        if (level !== 5 || !text.trim()) continue;
+        if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height)) continue;
+
+        words.push({
+            text: text.trim(),
+            confidence,
+            bbox: {
+                x0: left,
+                y0: top,
+                x1: left + width,
+                y1: top + height
+            }
+        });
+    }
+
+    return words;
+}
+
+function normalizeOcrWords(words, imageWidth, imageHeight) {
+    if (!imageWidth || !imageHeight) return [];
+
+    const normalized = [];
+    words.forEach(word => {
+        const text = (word.text || '').trim();
+        if (!text) return;
+
+        if (typeof word.confidence === 'number' && word.confidence >= 0 && word.confidence < OCR_CONFIDENCE_THRESHOLD) {
+            return;
+        }
+
+        const bbox = word.bbox || {};
+        const x0 = Number.isFinite(bbox.x0) ? bbox.x0 : bbox.left;
+        const y0 = Number.isFinite(bbox.y0) ? bbox.y0 : bbox.top;
+        const x1 = Number.isFinite(bbox.x1) ? bbox.x1 : (bbox.left + bbox.width);
+        const y1 = Number.isFinite(bbox.y1) ? bbox.y1 : (bbox.top + bbox.height);
+
+        if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
+
+        const width = x1 - x0;
+        const height = y1 - y0;
+        if (width <= 0 || height <= 0) return;
+
+        normalized.push({
+            text: normalizeArabicOcrText(text),
+            leftPct: x0 / imageWidth,
+            topPct: y0 / imageHeight,
+            widthPct: width / imageWidth,
+            heightPct: height / imageHeight,
+            direction: hasArabicScript(text) ? 'rtl' : 'ltr'
+        });
+    });
+
+    return normalized;
+}
+
+function normalizeOcrWordSpans(words, imageWidth, imageHeight) {
+    if (!Array.isArray(words) || words.length === 0 || !imageWidth || !imageHeight) return [];
+
+    const usableWords = words
+        .map(word => ({ ...word, text: normalizeArabicOcrText(word.text || ''), box: getOcrBBox(word) }))
+        .filter(word => {
+            if (!word.text) return false;
+            if (typeof word.confidence === 'number' && word.confidence >= 0 && word.confidence < OCR_CONFIDENCE_THRESHOLD) return false;
+            return Number.isFinite(word.box.x0) && Number.isFinite(word.box.y0) &&
+                Number.isFinite(word.box.x1) && Number.isFinite(word.box.y1);
+        })
+        .sort((a, b) => ((a.box.y0 + a.box.y1) / 2) - ((b.box.y0 + b.box.y1) / 2));
+
+    if (usableWords.length === 0) return [];
+
+    const medianHeight = getMedian(usableWords.map(word => Math.max(1, word.box.y1 - word.box.y0))) || 12;
+    const lineTolerance = Math.max(8, medianHeight * 0.65);
+    const groups = [];
+
+    usableWords.forEach(word => {
+        const centerY = (word.box.y0 + word.box.y1) / 2;
+        let group = groups.find(candidate => Math.abs(candidate.centerY - centerY) <= lineTolerance);
+
+        if (!group) {
+            group = { centerY, words: [] };
+            groups.push(group);
+        }
+
+        group.words.push(word);
+        group.centerY = group.words.reduce((sum, item) => sum + ((item.box.y0 + item.box.y1) / 2), 0) / group.words.length;
+    });
+
+    const spans = [];
+    groups
+        .sort((a, b) => a.centerY - b.centerY)
+        .forEach(group => {
+            const lineText = group.words.map(word => word.text).join(' ');
+            const direction = hasArabicScript(lineText) ? 'rtl' : 'ltr';
+            const sortedWords = [...group.words].sort((a, b) => {
+                const aX = direction === 'rtl' ? a.box.x1 : a.box.x0;
+                const bX = direction === 'rtl' ? b.box.x1 : b.box.x0;
+                return direction === 'rtl' ? bX - aX : aX - bX;
+            });
+
+            sortedWords.forEach((word, index) => {
+                const width = word.box.x1 - word.box.x0;
+                const height = word.box.y1 - word.box.y0;
+                if (width <= 0 || height <= 0) return;
+
+                spans.push({
+                    text: word.text,
+                    leftPct: word.box.x0 / imageWidth,
+                    topPct: word.box.y0 / imageHeight,
+                    widthPct: width / imageWidth,
+                    heightPct: height / imageHeight,
+                    direction,
+                    lineBreak: index === sortedWords.length - 1
+                });
+            });
+        });
+
+    return spans;
+}
+
+function normalizeOcrLines(data, imageWidth, imageHeight) {
+    if (!imageWidth || !imageHeight || !data) return [];
+
+    const lines = Array.isArray(data.lines) ? data.lines : [];
+    const allWords = extractOcrWords(data);
+    if (lines.length === 0) {
+        return normalizeOcrWordLines(allWords, imageWidth, imageHeight);
+    }
+
+    const normalized = [];
+    lines.forEach(line => {
+        const wordsInLine = getOcrWordsForLine(line, allWords);
+        const wordText = getOcrLineTextFromWords(wordsInLine, line.text);
+        const text = normalizeArabicOcrText(wordText || line.text || '');
+        if (!text) return;
+
+        if (wordsInLine.length === 0 &&
+            typeof line.confidence === 'number' &&
+            line.confidence >= 0 &&
+            line.confidence < OCR_CONFIDENCE_THRESHOLD) {
+            return;
+        }
+
+        const lineBox = getOcrBBox(line);
+        if (!Number.isFinite(lineBox.x0) || !Number.isFinite(lineBox.y0) || !Number.isFinite(lineBox.x1) || !Number.isFinite(lineBox.y1)) return;
+
+        const wordBox = getUnionOcrBBox(wordsInLine);
+        const x0 = Number.isFinite(wordBox.x0) ? Math.min(lineBox.x0, wordBox.x0) : lineBox.x0;
+        const y0 = Number.isFinite(wordBox.y0) ? Math.min(lineBox.y0, wordBox.y0) : lineBox.y0;
+        const x1 = Number.isFinite(wordBox.x1) ? Math.max(lineBox.x1, wordBox.x1) : lineBox.x1;
+        const y1 = Number.isFinite(wordBox.y1) ? Math.max(lineBox.y1, wordBox.y1) : lineBox.y1;
+
+        if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) return;
+
+        const width = x1 - x0;
+        const height = y1 - y0;
+        if (width <= 0 || height <= 0) return;
+
+        normalized.push({
+            text,
+            leftPct: x0 / imageWidth,
+            topPct: y0 / imageHeight,
+            widthPct: width / imageWidth,
+            heightPct: height / imageHeight,
+            direction: hasArabicScript(text) ? 'rtl' : 'ltr',
+            lineBreak: true
+        });
+    });
+
+    const uncoveredWords = allWords.filter(word => !isOcrWordCoveredByLines(word, normalized, imageWidth, imageHeight));
+    normalized.push(...normalizeOcrWordLines(uncoveredWords, imageWidth, imageHeight));
+
+    return sortOcrLinesForSelection(normalized);
+}
+
+function getOcrBBox(item) {
+    const bbox = (item && item.bbox) || {};
+    const x0 = Number.isFinite(bbox.x0) ? bbox.x0 : bbox.left;
+    const y0 = Number.isFinite(bbox.y0) ? bbox.y0 : bbox.top;
+    const x1 = Number.isFinite(bbox.x1) ? bbox.x1 : (bbox.left + bbox.width);
+    const y1 = Number.isFinite(bbox.y1) ? bbox.y1 : (bbox.top + bbox.height);
+    return { x0, y0, x1, y1 };
+}
+
+function getUnionOcrBBox(items) {
+    const boxes = (items || [])
+        .map(getOcrBBox)
+        .filter(box => Number.isFinite(box.x0) && Number.isFinite(box.y0) && Number.isFinite(box.x1) && Number.isFinite(box.y1));
+
+    if (boxes.length === 0) {
+        return { x0: NaN, y0: NaN, x1: NaN, y1: NaN };
+    }
+
+    return {
+        x0: Math.min(...boxes.map(box => box.x0)),
+        y0: Math.min(...boxes.map(box => box.y0)),
+        x1: Math.max(...boxes.map(box => box.x1)),
+        y1: Math.max(...boxes.map(box => box.y1))
+    };
+}
+
+function getOcrWordsForLine(line, allWords) {
+    const lineWords = Array.isArray(line.words) ? extractOcrWords({ words: line.words }) : [];
+    if (lineWords.length > 0) {
+        return lineWords;
+    }
+
+    const lineBox = getOcrBBox(line);
+    if (!Number.isFinite(lineBox.x0) || !Number.isFinite(lineBox.y0) || !Number.isFinite(lineBox.x1) || !Number.isFinite(lineBox.y1)) {
+        return [];
+    }
+
+    const lineHeight = Math.max(1, lineBox.y1 - lineBox.y0);
+    const expandedLineBox = {
+        x0: lineBox.x0 - Math.max(12, lineHeight * 0.8),
+        y0: lineBox.y0 - Math.max(4, lineHeight * 0.35),
+        x1: lineBox.x1 + Math.max(12, lineHeight * 0.8),
+        y1: lineBox.y1 + Math.max(4, lineHeight * 0.35)
+    };
+
+    return (allWords || []).filter(word => {
+        const text = normalizeArabicOcrText(word.text || '');
+        if (!text) return false;
+        if (typeof word.confidence === 'number' && word.confidence >= 0 && word.confidence < OCR_CONFIDENCE_THRESHOLD) return false;
+
+        const wordBox = getOcrBBox(word);
+        if (!Number.isFinite(wordBox.x0) || !Number.isFinite(wordBox.y0) || !Number.isFinite(wordBox.x1) || !Number.isFinite(wordBox.y1)) {
+            return false;
+        }
+
+        const wordCenterX = (wordBox.x0 + wordBox.x1) / 2;
+        const wordCenterY = (wordBox.y0 + wordBox.y1) / 2;
+        return wordCenterX >= expandedLineBox.x0 &&
+            wordCenterX <= expandedLineBox.x1 &&
+            wordCenterY >= expandedLineBox.y0 &&
+            wordCenterY <= expandedLineBox.y1;
+    });
+}
+
+function getOcrLineTextFromWords(words, fallbackText) {
+    if (!Array.isArray(words) || words.length === 0) return '';
+
+    const direction = hasArabicScript(fallbackText || words.map(word => word.text).join(' ')) ? 'rtl' : 'ltr';
+    const sortedWords = [...words].sort((a, b) => {
+        const boxA = getOcrBBox(a);
+        const boxB = getOcrBBox(b);
+        const aX = direction === 'rtl' ? boxA.x1 : boxA.x0;
+        const bX = direction === 'rtl' ? boxB.x1 : boxB.x0;
+        return direction === 'rtl' ? bX - aX : aX - bX;
+    });
+
+    return sortedWords
+        .map(word => normalizeArabicOcrText(word.text || ''))
+        .filter(Boolean)
+        .join(' ');
+}
+
+function normalizeOcrWordLines(words, imageWidth, imageHeight) {
+    if (!Array.isArray(words) || words.length === 0 || !imageWidth || !imageHeight) return [];
+
+    const usableWords = words
+        .map(word => ({ ...word, text: normalizeArabicOcrText(word.text || ''), box: getOcrBBox(word) }))
+        .filter(word => {
+            if (!word.text) return false;
+            if (typeof word.confidence === 'number' && word.confidence >= 0 && word.confidence < OCR_CONFIDENCE_THRESHOLD) return false;
+            return Number.isFinite(word.box.x0) && Number.isFinite(word.box.y0) &&
+                Number.isFinite(word.box.x1) && Number.isFinite(word.box.y1);
+        })
+        .sort((a, b) => ((a.box.y0 + a.box.y1) / 2) - ((b.box.y0 + b.box.y1) / 2));
+
+    if (usableWords.length === 0) return [];
+
+    const medianHeight = getMedian(usableWords.map(word => Math.max(1, word.box.y1 - word.box.y0))) || 12;
+    const lineTolerance = Math.max(8, medianHeight * 0.65);
+    const groups = [];
+
+    usableWords.forEach(word => {
+        const centerY = (word.box.y0 + word.box.y1) / 2;
+        let group = groups.find(candidate => Math.abs(candidate.centerY - centerY) <= lineTolerance);
+
+        if (!group) {
+            group = { centerY, words: [] };
+            groups.push(group);
+        }
+
+        group.words.push(word);
+        group.centerY = group.words.reduce((sum, item) => sum + ((item.box.y0 + item.box.y1) / 2), 0) / group.words.length;
+    });
+
+    return groups.map(group => {
+        const text = normalizeArabicOcrText(getOcrLineTextFromWords(group.words, group.words.map(word => word.text).join(' ')));
+        const box = getUnionOcrBBox(group.words);
+        if (!text || !Number.isFinite(box.x0) || !Number.isFinite(box.y0) || !Number.isFinite(box.x1) || !Number.isFinite(box.y1)) {
+            return null;
+        }
+
+        const width = box.x1 - box.x0;
+        const height = box.y1 - box.y0;
+        if (width <= 0 || height <= 0) return null;
+
+        return {
+            text,
+            leftPct: box.x0 / imageWidth,
+            topPct: box.y0 / imageHeight,
+            widthPct: width / imageWidth,
+            heightPct: height / imageHeight,
+            direction: hasArabicScript(text) ? 'rtl' : 'ltr',
+            lineBreak: true
+        };
+    }).filter(Boolean);
+}
+
+function isOcrWordCoveredByLines(word, lines, imageWidth, imageHeight) {
+    const box = getOcrBBox(word);
+    if (!Number.isFinite(box.x0) || !Number.isFinite(box.y0) || !Number.isFinite(box.x1) || !Number.isFinite(box.y1)) {
+        return false;
+    }
+
+    const centerX = (box.x0 + box.x1) / 2;
+    const centerY = (box.y0 + box.y1) / 2;
+
+    return lines.some(line => {
+        const x0 = line.leftPct * imageWidth;
+        const y0 = line.topPct * imageHeight;
+        const x1 = x0 + (line.widthPct * imageWidth);
+        const y1 = y0 + (line.heightPct * imageHeight);
+        const padding = Math.max(8, (y1 - y0) * 0.6);
+
+        return centerX >= x0 - padding &&
+            centerX <= x1 + padding &&
+            centerY >= y0 - padding &&
+            centerY <= y1 + padding;
+    });
+}
+
+function sortOcrLinesForSelection(lines) {
+    return [...lines].sort((a, b) => {
+        const topDiff = a.topPct - b.topPct;
+        if (Math.abs(topDiff) > 0.005) return topDiff;
+
+        if (a.direction === 'rtl' || b.direction === 'rtl') {
+            return (b.leftPct + b.widthPct) - (a.leftPct + a.widthPct);
+        }
+
+        return a.leftPct - b.leftPct;
+    });
+}
+
+function getMedian(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (sorted.length === 0) return 0;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function hasArabicScript(text) {
+    return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(text);
+}
+
+function normalizeArabicOcrText(text) {
+    return String(text || '')
+        .normalize('NFC')
+        .replace(/\u0640/g, '')
+        .replace(/\s+([\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED])/g, '$1')
+        .replace(/([\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED])\s+(?=[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED])/g, '$1')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\s+([\u060C\u061B\u061F])/g, '$1')
+        .normalize('NFC')
+        .trim();
+}
+
+function renderOcrTextLayer(textLayerDiv, layerWidth, layerHeight, words) {
+    if (!textLayerDiv || !layerWidth || !layerHeight) return;
+
+    textLayerDiv.textContent = '';
+    textLayerDiv.dataset.ocr = 'true';
+    textLayerDiv.dataset.vocabHighlighted = 'false';
+
+    const fragment = document.createDocumentFragment();
+
+    words.forEach(word => {
+        let left = word.leftPct * layerWidth;
+        let top = word.topPct * layerHeight;
+        let width = word.widthPct * layerWidth;
+        let height = word.heightPct * layerHeight;
+
+        if (!Number.isFinite(left) || !Number.isFinite(top) || width < 1 || height < 1) return;
+
+        const xPadding = Math.max(4, Math.min(32, width * OCR_SELECTION_X_PADDING));
+        const yPadding = Math.max(2, Math.min(14, height * OCR_SELECTION_Y_PADDING));
+        const originalRight = left + width;
+        left = Math.max(0, left - xPadding);
+        top = Math.max(0, top - yPadding);
+        width = Math.min(layerWidth - left, (originalRight - left) + xPadding);
+        height = Math.min(layerHeight - top, height + (yPadding * 2));
+
+        const span = document.createElement('span');
+        span.textContent = word.text + (word.lineBreak ? '\n' : ' '); // Add separator for copy/paste
+        span.dataset.ocrSpan = 'true';
+        span.setAttribute('dir', word.direction || (hasArabicScript(word.text) ? 'rtl' : 'auto'));
+        span.style.left = `${left}px`;
+        span.style.top = `${top}px`;
+        span.style.fontSize = `${Math.max(1, height - (yPadding * 2))}px`;
+        span.style.height = `${height}px`;
+        span.style.width = `${width}px`;
+        span.style.lineHeight = '1.2';
+        span.style.whiteSpace = 'pre'; // Ensure space isn't collapsed
+        span.style.textAlign = word.direction === 'rtl' ? 'right' : 'left';
+        span.style.unicodeBidi = 'plaintext';
+        span.style.overflow = 'visible';
+        span.style.transformOrigin = word.direction === 'rtl' ? 'right top' : 'left top';
+        span.dataset.ocrWidth = width.toFixed(2);
+
+        fragment.appendChild(span);
+    });
+
+    textLayerDiv.appendChild(fragment);
+
+    const spans = textLayerDiv.querySelectorAll('span[data-ocr-width]');
+    spans.forEach(span => {
+        const targetWidth = parseFloat(span.dataset.ocrWidth);
+        if (!targetWidth) return;
+
+        const actualWidth = span.getBoundingClientRect().width;
+        if (!actualWidth) return;
+
+        const scaleX = Math.max(0.9, Math.min(1.2, targetWidth / actualWidth));
+        if (Number.isFinite(scaleX) && scaleX > 0) {
+            span.style.transform = `scaleX(${scaleX})`;
+        }
+    });
+
+    if (highlightVocabEnabled && vocabularyWords.length > 0) {
+        highlightWordsInTextLayer(textLayerDiv);
+    }
+}
+
+function applyOcrCacheToPage(pageNumber) {
+    if (!ocrEnabled || !ocrCache.has(pageNumber)) return;
+
+    const pageDiv = viewer.querySelector(`[data-page-number="${pageNumber}"]`);
+    if (!pageDiv) return;
+
+    const textLayerDiv = pageDiv.querySelector('.textLayer');
+    if (!textLayerDiv) return;
+
+    const size = getLayerSize(textLayerDiv);
+    if (!size.width || !size.height) return;
+
+    renderOcrTextLayer(textLayerDiv, size.width, size.height, ocrCache.get(pageNumber));
+}
+
+function queueOcrForPage(task) {
+    if (!ocrEnabled || !task || !task.canvas || !task.textLayerDiv) return;
+
+    const pageNumber = task.pageNumber;
+    if (!Number.isFinite(pageNumber)) return;
+
+    if (ocrCache.has(pageNumber)) {
+        const size = getLayerSize(task.textLayerDiv);
+        if (size.width && size.height) {
+            renderOcrTextLayer(task.textLayerDiv, size.width, size.height, ocrCache.get(pageNumber));
+        }
+        return;
+    }
+
+    if (ocrInProgress.has(pageNumber)) return;
+
+    ocrQueue.push(task);
+    ocrInProgress.add(pageNumber);
+    ocrPagesTotal += 1;
+    updateOcrProgress(0);
+    processOcrQueue();
+}
+
+async function processOcrQueue() {
+    if (isOcrProcessing || ocrQueue.length === 0) return;
+    if (!ocrEnabled) {
+        ocrQueue.length = 0;
+        ocrInProgress.clear();
+        return;
+    }
+
+    isOcrProcessing = true;
+    const ocrToggleBtn = document.getElementById('ocrToggleBtn');
+    if (ocrToggleBtn) ocrToggleBtn.classList.add('ocr-processing');
+    const task = ocrQueue.shift();
+    ocrCurrentPage = task.pageNumber;
+    ocrCurrentProgress = 0;
+    updateOcrProgress(0);
+
+    try {
+        const worker = await getOcrWorker();
+        const ocrCanvas = await renderPageForOcr(task.page, task.canvas);
+        if (!ocrCanvas) throw new Error('OCR canvas unavailable');
+
+        const result = await worker.recognize(ocrCanvas);
+        const data = result && result.data ? result.data : result;
+        const words = extractOcrWords(data);
+        let normalized = normalizeOcrWordSpans(words, ocrCanvas.width, ocrCanvas.height);
+        if (normalized.length === 0) {
+            normalized = normalizeOcrLines(data, ocrCanvas.width, ocrCanvas.height);
+        }
+        if (normalized.length === 0) {
+            normalized = normalizeOcrWords(words, ocrCanvas.width, ocrCanvas.height);
+        }
+
+        ocrCache.set(task.pageNumber, normalized);
+
+        if (task.textLayerDiv && task.textLayerDiv.isConnected) {
+            const size = getLayerSize(task.textLayerDiv);
+            if (size.width && size.height) {
+                renderOcrTextLayer(task.textLayerDiv, size.width, size.height, normalized);
+            }
+        } else {
+            applyOcrCacheToPage(task.pageNumber);
+        }
+    } catch (error) {
+        console.warn('[OCR] Failed to process page', task.pageNumber, error);
+    } finally {
+        ocrPagesProcessed = Math.min(ocrPagesTotal, ocrPagesProcessed + 1);
+        ocrInProgress.delete(task.pageNumber);
+        isOcrProcessing = false;
+        const ocrToggleBtn = document.getElementById('ocrToggleBtn');
+
+        if (ocrQueue.length > 0) {
+            processOcrQueue();
+        } else if (ocrToggleBtn) {
+            ocrToggleBtn.classList.remove('ocr-processing');
+            // Reset title when done
+            if (ocrEnabled) ocrToggleBtn.title = 'OCR Text Recognition (enabled)';
+            finishOcrProgressIfIdle();
+        }
+    }
+}
+
+async function renderTextLayerWithOcr({ page, viewport, textLayerDiv, canvas, pageNumber }) {
+    let textContent = null;
+    try {
+        textContent = await page.getTextContent();
+    } catch (error) {
+        console.warn('[TextLayer] getTextContent failed:', error);
+    }
+
+    if (hasSelectableText(textContent)) {
+        await pdfjsLib.renderTextLayer({
+            textContentSource: textContent,
+            container: textLayerDiv,
+            viewport: viewport,
+            textDivs: []
+        }).promise;
+        textLayerDiv.dataset.ocr = 'false';
+        return;
+    }
+
+    textLayerDiv.dataset.ocr = 'pending';
+    queueOcrForPage({ pageNumber, canvas, textLayerDiv, page });
+}
+
+function applyOcrToRenderedPages() {
+    if (!ocrEnabled) return;
+
+    const pages = viewer.querySelectorAll('.page[data-rendered="true"]');
+    pages.forEach(pageDiv => {
+        const textLayerDiv = pageDiv.querySelector('.textLayer');
+        if (!textLayerDiv || textLayerDiv.childElementCount > 0) return;
+
+        const canvas = pageDiv.querySelector('canvas');
+        const pageNumber = parseInt(pageDiv.dataset.pageNumber, 10);
+        if (!canvas || !Number.isFinite(pageNumber)) return;
+
+        queueOcrForPage({ pageNumber, canvas, textLayerDiv });
+    });
+}
+
+function clearOcrTextLayers() {
+    const layers = viewer.querySelectorAll('.textLayer[data-ocr="true"], .textLayer[data-ocr="pending"]');
+    layers.forEach(layer => {
+        layer.textContent = '';
+        layer.dataset.ocr = 'false';
+        layer.dataset.vocabHighlighted = 'false';
+    });
+}
+
 function syncScaleSelectWithScale() {
     if (!scaleSelect) return;
 
@@ -662,14 +1699,14 @@ async function renderPage(num) {
     };
     await page.render(renderContext).promise;
 
-    // Render text layer
-    const textContent = await page.getTextContent();
-    await pdfjsLib.renderTextLayer({
-        textContentSource: textContent,
-        container: textLayerDiv,
-        viewport: viewport,
-        textDivs: []
-    }).promise;
+    // Render text layer (with OCR fallback for scanned pages)
+    await renderTextLayerWithOcr({
+        page,
+        viewport,
+        textLayerDiv,
+        canvas,
+        pageNumber: num
+    });
 
     // NOTE: AnnotationLayer for internal PDF links is not available in this PDF.js build
     // Implement a minimal link overlay so embedded PDF links work.
@@ -736,8 +1773,7 @@ async function renderPageImmediate(num) {
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-        // Add text layer with proper --scale-factor for alignment
-        const textContent = await page.getTextContent();
+        // Add text layer with OCR fallback for scanned pages
         const textLayerDiv = document.createElement('div');
         textLayerDiv.className = 'textLayer';
         textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
@@ -745,11 +1781,12 @@ async function renderPageImmediate(num) {
         textLayerDiv.style.height = `${viewport.height}px`;
         pageDiv.appendChild(textLayerDiv);
 
-        pdfjsLib.renderTextLayer({
-            textContentSource: textContent,
-            container: textLayerDiv,
-            viewport: viewport,
-            textDivs: []
+        await renderTextLayerWithOcr({
+            page,
+            viewport,
+            textLayerDiv,
+            canvas,
+            pageNumber: num
         });
 
         // Annotation layer for internal/external links
