@@ -743,34 +743,239 @@ body {
 
 .widget-container.is-card-habit-tracker {
   width: 100%;
+  --bg-card: var(--widget-bg);
+  --bg-secondary: var(--widget-bg-card);
+  --bg-input: var(--widget-bg-card);
+  --bg-card-hover: var(--widget-bg-hover);
+  --border-color: var(--widget-border);
+  --text-primary: var(--widget-text);
+  --text-secondary: var(--widget-text-secondary);
+  --text-muted: var(--widget-text-muted);
+  --primary: var(--widget-primary);
+  --primary-light: var(--widget-accent-soft);
+  --danger: var(--widget-danger);
+  --danger-light: rgba(239, 68, 68, 0.12);
+  --info: var(--widget-primary);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --spacing-xs: 6px;
+  --spacing-sm: 8px;
+  --spacing-md: 10px;
+  --spacing-lg: 12px;
+  --spacing-max: 14px;
+  --shadow-md: none;
+  --transition-fast: 0.15s ease;
+}
+
+.widget-container.is-card-habit-tracker .widget-body {
+  overflow: auto;
 }
 
 .widget-container.is-card-habit-tracker .widget-content {
-  padding: 8px;
+  min-width: 0;
+  padding: 10px;
   overflow: auto;
 }
 
 .widget-container.is-card-habit-tracker #habit-tracker-root {
+  width: 100%;
+  max-width: 100%;
   margin: 0;
+  overflow: visible;
 }
 
 .widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-card {
-  border: 0;
+  min-height: 100%;
+  border: 1px solid var(--widget-border);
+  border-radius: 10px;
   box-shadow: none;
-  background: transparent;
-  padding: 8px;
+  background: var(--widget-bg-card);
+  padding: 12px;
 }
 
 .widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-header {
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-titlewrap {
+  min-width: 0;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-title {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-subtitle {
+  display: none;
 }
 
 .widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-controls {
-  flex: 1 1 100%;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  overflow: visible;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-ctrl {
+  min-width: 0;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-view-tabs,
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-period-nav,
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-date-controls {
+  grid-column: 1 / -1;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-view-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-view-tab {
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-period-nav {
+  justify-content: space-between;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-period-label {
+  flex: 1;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-date-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-date-controls.is-hidden {
+  display: none;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-date {
+  width: 100%;
 }
 
 .widget-container.is-card-habit-tracker #habit-tracker-root .pin-card-btn {
   display: none;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-panel {
+  position: static;
+  inset: auto;
+  margin-top: 10px;
+  max-height: none;
+  overflow: visible;
+  border: 1px solid var(--widget-border);
+  border-radius: 10px;
+  background: var(--widget-bg);
+  padding: 12px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-tracker-stats-row,
+.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-grid-wrap,
+.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-reasons-timeline,
+.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-tracker-chart {
+  display: none;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-header-row,
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-row,
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-item {
+  align-items: stretch;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-list {
+  max-height: 260px;
+  min-height: 0;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-actions {
+  gap: 6px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-actions .habit-ghost {
+  padding: 0 7px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-body {
+  margin-top: 10px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-stats-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-legend {
+  gap: 8px 12px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-grid-wrap {
+  overflow-x: auto;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-grid {
+  grid-template-rows: repeat(7, 22px);
+  grid-auto-columns: 22px;
+  gap: 5px;
+  padding: 8px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-weekdays {
+  gap: 3px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-weekday,
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-cell {
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-chart {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-controls {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-row,
+  .widget-container.is-card-habit-tracker #habit-tracker-root .habit-manage-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Task label */
