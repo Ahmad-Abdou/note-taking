@@ -29,7 +29,8 @@
                     { id: 'workout', label: 'Workout' },
                     { id: 'read', label: 'Read 20 pages' }
                 ],
-                weekStartsOn = 'monday' // 'monday' | 'sunday'
+                weekStartsOn = 'monday', // 'monday' | 'sunday'
+                compactWidget = false
             } = options || {};
 
             if (!mountEl) throw new Error('HabitTrackerCalendar: mountEl is required');
@@ -38,11 +39,13 @@
             this.storageKey = storageKey;
             this.defaultGoals = Array.isArray(goals) ? goals : [];
             this.weekStartsOn = weekStartsOn;
+            this.compactWidget = compactWidget === true;
 
             this.state = {
                 activeGoalId: this.defaultGoals[0]?.id || 'default',
                 activeView: 'monthly', // 'weekly' | 'monthly' | 'yearly' | 'custom'
                 periodOffset: 0,       // 0 = current period, -1 = one period back, etc.
+                isSettingsOpen: false,
                 isManageOpen: false,
                 editingGoalId: null,
                 data: { version: 2, goalsMeta: [], goals: {} }
@@ -61,6 +64,7 @@
             this._handleExternalDataChanged = this._handleExternalDataChanged.bind(this);
             this._handleNavPrev = this._handleNavPrev.bind(this);
             this._handleNavNext = this._handleNavNext.bind(this);
+            this._handleToggleSettings = this._handleToggleSettings.bind(this);
         }
 
         async init() {
@@ -467,6 +471,8 @@
             this.mountEl.innerHTML = '';
             this.mountEl.classList.remove('habit-tracker-card');
             this.mountEl.classList.add('habit-tracker-card');
+            this.mountEl.classList.toggle('habit-tracker-compact', this.compactWidget);
+            this.mountEl.classList.toggle('settings-open', this.compactWidget && (this.state.isSettingsOpen || this.state.isManageOpen));
 
             const header = document.createElement('div');
             header.className = 'habit-tracker-header';
@@ -504,6 +510,14 @@
             }
             goalSelect.addEventListener('change', this._handleGoalChange);
             goalLabel.appendChild(goalSelect);
+
+            const settingsBtn = document.createElement('button');
+            settingsBtn.className = 'habit-ghost habit-widget-settings-btn';
+            settingsBtn.type = 'button';
+            settingsBtn.setAttribute('aria-label', this.state.isSettingsOpen ? 'Hide habit tracker settings' : 'Show habit tracker settings');
+            settingsBtn.setAttribute('title', this.state.isSettingsOpen ? 'Hide settings' : 'Settings');
+            settingsBtn.innerHTML = `<i class="fas ${this.state.isSettingsOpen ? 'fa-chevron-up' : 'fa-cog'}" aria-hidden="true"></i><span>${this.state.isSettingsOpen ? 'Done' : 'Settings'}</span>`;
+            settingsBtn.addEventListener('click', this._handleToggleSettings);
 
             const manageBtn = document.createElement('button');
             manageBtn.className = 'habit-ghost habit-manage-btn';
@@ -593,6 +607,9 @@
             importBtn.addEventListener('click', this._handleImport);
 
             controls.appendChild(goalLabel);
+            if (this.compactWidget) {
+                controls.appendChild(settingsBtn);
+            }
             controls.appendChild(manageBtn);
             controls.appendChild(pinBtn);
             controls.appendChild(viewTabs);
@@ -694,6 +711,7 @@
             body.appendChild(statsRow);
 
             // Manage panel (add/delete habits)
+            let managePanel = null;
             if (this.state.isManageOpen) {
                 const panel = document.createElement('div');
                 panel.className = 'habit-manage-panel';
@@ -825,16 +843,19 @@
                 panel.appendChild(manageHeader);
                 panel.appendChild(row);
                 panel.appendChild(list);
-                this.mountEl.appendChild(panel); // append to mountEl for overlay styling
+                managePanel = panel;
             }
 
             body.appendChild(gridWrap);
-            body.appendChild(this._buildMissedReasonsTimeline());
-            
-            // Add comparative bar chart
-            body.appendChild(this._buildBarChart());
+            if (!this.compactWidget) {
+                body.appendChild(this._buildMissedReasonsTimeline());
+
+                // Add comparative bar chart
+                body.appendChild(this._buildBarChart());
+            }
 
             this.mountEl.appendChild(header);
+            if (managePanel) this.mountEl.appendChild(managePanel);
             this.mountEl.appendChild(body);
         }
 
@@ -1495,6 +1516,15 @@
                 window.ChallengeManager.recordProgress('habits', 1);
             }
             this._emitDataChanged('habit', { immediate: true });
+        }
+
+        _handleToggleSettings() {
+            this.state.isSettingsOpen = !this.state.isSettingsOpen;
+            if (!this.state.isSettingsOpen) {
+                this.state.isManageOpen = false;
+                this.state.editingGoalId = null;
+            }
+            this.render();
         }
 
         async _applyPinButtonState(pinBtn) {

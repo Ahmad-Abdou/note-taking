@@ -491,7 +491,8 @@
                 { id: 'workout', label: 'Workout' },
                 { id: 'read', label: 'Read 20 pages' }
             ],
-            weekStartsOn: 'monday'
+            weekStartsOn: 'monday',
+            compactWidget: true
         });
 
         await tracker.init();

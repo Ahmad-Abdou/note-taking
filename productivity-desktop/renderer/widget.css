@@ -804,6 +804,10 @@ body {
   min-width: 0;
 }
 
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact .habit-tracker-titlewrap {
+  display: none;
+}
+
 .widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-title {
   font-size: 15px;
   line-height: 1.2;
@@ -816,10 +820,30 @@ body {
 .widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-controls {
   flex: none;
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) auto auto;
+  grid-template-columns: minmax(190px, 1fr) auto auto;
   align-items: end;
   gap: 8px;
   overflow: visible;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact:not(.settings-open) .habit-tracker-controls {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact:not(.settings-open) .habit-tracker-controls > :not(.habit-ctrl):not(.habit-widget-settings-btn) {
+  display: none;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact:not(.settings-open) .habit-tracker-stats-row {
+  display: none;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-widget-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .widget-container.is-card-habit-tracker #habit-tracker-root .habit-ctrl {
@@ -886,10 +910,12 @@ body {
   padding: 12px;
 }
 
-.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-tracker-stats-row,
-.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-grid-wrap,
-.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-reasons-timeline,
-.widget-container.is-card-habit-tracker #habit-tracker-root:has(.habit-manage-panel) .habit-tracker-chart {
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact.settings-open .habit-tracker-body {
+  margin-top: 12px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact.settings-open .habit-manage-panel + .habit-tracker-body,
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-compact:has(.habit-manage-panel) .habit-tracker-body {
   display: none;
 }
 
