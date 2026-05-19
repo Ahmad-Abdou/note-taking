@@ -658,6 +658,8 @@
             stats.className = 'habit-tracker-stats';
             stats.textContent = this._buildStatsText();
 
+            const compactOverview = this.compactWidget ? this._buildCompactOverview() : null;
+
             const gridWrap = document.createElement('div');
             gridWrap.className = 'habit-grid-wrap';
 
@@ -709,6 +711,7 @@
             statsRow.appendChild(legend);
 
             body.appendChild(statsRow);
+            if (compactOverview) body.appendChild(compactOverview);
 
             // Manage panel (add/delete habits)
             let managePanel = null;
@@ -857,6 +860,32 @@
             this.mountEl.appendChild(header);
             if (managePanel) this.mountEl.appendChild(managePanel);
             this.mountEl.appendChild(body);
+        }
+
+        _buildCompactOverview() {
+            const { startDate, endDate, completed } = this._getActiveGoalRange();
+            const start = this._parseIso(startDate);
+            const end = this._parseIso(endDate);
+            const days = (!start || !end || start > end) ? 0 : Math.floor((end - start) / 86400000) + 1;
+            const doneCount = Object.keys(completed || {}).filter((iso) => iso >= startDate && iso <= endDate).length;
+            const pct = days > 0 ? Math.round((doneCount / days) * 100) : 0;
+
+            const wrap = document.createElement('div');
+            wrap.className = 'habit-widget-overview';
+            wrap.innerHTML = `
+                <div class="habit-widget-overview-top">
+                    <div class="habit-widget-period">${this._getPeriodLabel()}</div>
+                    <div class="habit-widget-percent">${pct}%</div>
+                </div>
+                <div class="habit-widget-progress" aria-label="${pct}% complete">
+                    <div class="habit-widget-progress-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div>
+                </div>
+                <div class="habit-widget-overview-meta">
+                    <span>${doneCount}/${days || 0} complete</span>
+                    <span>${this.state.activeView === 'custom' ? `${startDate} - ${endDate}` : this.state.activeView}</span>
+                </div>
+            `;
+            return wrap;
         }
 
         _renderGridCellsInto(gridEl) {
