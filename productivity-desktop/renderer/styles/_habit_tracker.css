@@ -222,6 +222,16 @@
     background: rgba(255, 255, 255, 0.04);
 }
 
+#habit-tracker-root .pin-card-btn {
+    opacity: 1;
+    pointer-events: auto;
+    display: inline-flex;
+}
+
+#habit-tracker-root .pin-card-btn.pinned {
+    color: var(--primary);
+}
+
 #habit-tracker-root .habit-manage-panel {
     position: absolute;
     inset: 0;
