@@ -741,6 +741,38 @@ body {
   color: var(--widget-focus-pin);
 }
 
+.widget-container.is-card-habit-tracker {
+  width: 100%;
+}
+
+.widget-container.is-card-habit-tracker .widget-content {
+  padding: 8px;
+  overflow: auto;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root {
+  margin: 0;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root.habit-tracker-card {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 8px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-header {
+  gap: 8px;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .habit-tracker-controls {
+  flex: 1 1 100%;
+}
+
+.widget-container.is-card-habit-tracker #habit-tracker-root .pin-card-btn {
+  display: none;
+}
+
 /* Task label */
 .widget-focus-target {
   width: 100%;

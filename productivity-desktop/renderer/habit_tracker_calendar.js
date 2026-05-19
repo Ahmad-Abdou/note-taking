@@ -271,6 +271,10 @@
                     ...detail
                 }
             }));
+
+            if (window.electronAPI?.widgets?.notifyDataChanged) {
+                window.electronAPI.widgets.notifyDataChanged('habit-tracker');
+            }
         }
 
         _handleExternalDataChanged(event) {
@@ -476,7 +480,7 @@
 
             const subtitle = document.createElement('div');
             subtitle.className = 'habit-tracker-subtitle';
-            subtitle.textContent = 'Click a day to mark complete. Click missed days or outside-timeframe challenge completions to log thoughts.';
+            subtitle.textContent = 'Click any current or past day to mark it complete. Outside-timeframe challenge completions can still store thoughts.';
 
             titleWrap.appendChild(title);
             titleWrap.appendChild(subtitle);
@@ -507,6 +511,15 @@
             manageBtn.textContent = this.state.isManageOpen ? 'Done' : 'Manage';
             manageBtn.setAttribute('data-testid', 'habit-manage');
             manageBtn.addEventListener('click', this._handleToggleManage);
+
+            const pinBtn = document.createElement('button');
+            pinBtn.className = 'habit-ghost pin-card-btn';
+            pinBtn.type = 'button';
+            pinBtn.setAttribute('data-card', 'habit-tracker');
+            pinBtn.setAttribute('title', 'Pin as widget');
+            pinBtn.setAttribute('aria-label', 'Pin habit tracker as widget');
+            pinBtn.innerHTML = '<i class="fas fa-thumbtack" aria-hidden="true"></i>';
+            this._applyPinButtonState(pinBtn);
 
             // View selector tabs
             const viewTabs = document.createElement('div');
@@ -581,6 +594,7 @@
 
             controls.appendChild(goalLabel);
             controls.appendChild(manageBtn);
+            controls.appendChild(pinBtn);
             controls.appendChild(viewTabs);
 
             // Period navigation (prev / label / next) — hidden in custom view
@@ -1357,7 +1371,17 @@
 
             // Don't allow clicking on missed days (past days that aren't done)
             const today = this._isoToday();
-            const goalData = this.state.data.goals[this.state.activeGoalId];
+            let goalData = this.state.data.goals[this.state.activeGoalId];
+            if (!goalData) {
+                this._ensureGoalDefaults();
+                const fallbackGoalId = this._getGoalsList()[0]?.id;
+                if (fallbackGoalId) this.state.activeGoalId = fallbackGoalId;
+                goalData = this.state.data.goals[this.state.activeGoalId];
+            }
+            if (!goalData) {
+                this._flashError('No habit selected.');
+                return;
+            }
             const isChallengeTiming = this._isChallengeTimingHabit(this.state.activeGoalId);
             if (!goalData.completed) goalData.completed = {};
             if (!goalData.missedReasons || typeof goalData.missedReasons !== 'object') goalData.missedReasons = {};
@@ -1366,6 +1390,19 @@
             const isPast = iso < today;
             const reasonsForDay = this._normalizeReasonList(goalData.missedReasons[iso]);
             const challengeOutcome = goalData.challengeDayStatus?.[iso];
+
+            if (isPast && !isDone && !isChallengeTiming) {
+                goalData.completed[iso] = 1;
+                delete goalData.missedReasons[iso];
+                await this._save();
+                this.render();
+
+                if (window.ChallengeManager) {
+                    window.ChallengeManager.recordProgress('habits', 1);
+                }
+                this._emitDataChanged('habit', { immediate: true });
+                return;
+            }
 
             if (isPast && !isDone) {
                 const result = await this._showMissedReasonsModal({
@@ -1458,6 +1495,21 @@
                 window.ChallengeManager.recordProgress('habits', 1);
             }
             this._emitDataChanged('habit', { immediate: true });
+        }
+
+        async _applyPinButtonState(pinBtn) {
+            if (!pinBtn || !window.electronAPI?.widgets?.getPinned) return;
+
+            try {
+                const pinnedState = await window.electronAPI.widgets.getPinned() || {};
+                if (pinnedState['habit-tracker']?.pinned) {
+                    pinBtn.classList.add('pinned');
+                    pinBtn.title = 'Unpin widget';
+                    pinBtn.setAttribute('aria-label', 'Unpin habit tracker widget');
+                }
+            } catch {
+                // ignore
+            }
         }
 
         async _handleExport() {

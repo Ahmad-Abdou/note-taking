@@ -1046,6 +1046,12 @@ function createWidgetWindow(cardId, opts = {}) {
             collapsedHeight: 220,
             expandedHeight: 280,
             minimizedHeight: 40
+        },
+        'habit-tracker': {
+            width: 620,
+            collapsedHeight: 460,
+            expandedHeight: 720,
+            minimizedHeight: 40
         }
     };
 

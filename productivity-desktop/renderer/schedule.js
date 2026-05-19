@@ -1616,15 +1616,19 @@ function setupDragToCreateTask() {
         const hourSlot = target.closest('.hour-slot[data-hour]');
         if (hourSlot) {
             const col = hourSlot.closest('.calendar-day-column');
-            return col ? { column: col, date: col.dataset.date, pxPerHour: 50, startHour: 0, slotSelector: '.hour-slot' } : null;
+            const firstSlot = col?.querySelector('.hour-slot[data-hour]');
+            const startHour = Number(firstSlot?.dataset.hour ?? hourSlot.dataset.hour ?? 0);
+            return col ? { column: col, date: col.dataset.date, pxPerHour: 50, startHour, slotSelector: '.hour-slot' } : null;
         }
         // Day view: .day-hour-slot inside .day-events-column
         const daySlot = target.closest('.day-hour-slot[data-hour]');
         if (daySlot) {
-            const col = daySlot.closest('.day-events-column') || daySlot.closest('.day-events-container');
-            if (!col) return null;
-            const dateEl = col.closest('[data-date]') || col;
-            return { column: col, date: dateEl.dataset.date || new Date().toISOString().split('T')[0], pxPerHour: 60, startHour: 0, slotSelector: '.day-hour-slot' };
+            const container = daySlot.closest('.day-events-container');
+            const dateEl = daySlot.closest('.day-events-column[data-date]');
+            if (!container) return null;
+            const firstSlot = container.querySelector('.day-hour-slot[data-hour]');
+            const startHour = Number(firstSlot?.dataset.hour ?? daySlot.dataset.hour ?? 0);
+            return { column: container, date: dateEl?.dataset.date || new Date().toISOString().split('T')[0], pxPerHour: 60, startHour, slotSelector: '.day-hour-slot' };
         }
         return null;
     }
@@ -1913,8 +1917,11 @@ function updateCurrentTimeLine() {
     const hours = now.getHours();
     const minutes = now.getMinutes();
 
-    if (hours >= 0 && hours <= 23) {
-        const top = (hours * 60 + minutes) * (50 / 60);
+    const firstSlot = line.closest('.calendar-day-column')?.querySelector('.hour-slot[data-hour]');
+    const startHour = Number(firstSlot?.dataset.hour ?? 0);
+
+    if (hours >= startHour && hours <= 23) {
+        const top = ((hours - startHour) * 60 + minutes) * (50 / 60);
         line.style.top = `${top}px`;
         line.style.display = 'block';
     } else {
@@ -2466,42 +2473,16 @@ async function renderSidebarEvents() {
                 const dateDisplay = task.startDate || task.dueDate;
                 const dateObj = dateDisplay ? new Date(dateDisplay) : null;
                 const dateStr = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date';
-                
-                const children = tasks.filter(t => t.parentTaskId === task.id && t.status !== 'completed');
-                
-                if (children.length > 0) {
-                    html += `
-                        <details class="sidebar-recurring-group" style="margin-bottom: 2px;">
-                            <summary class="sidebar-event-item" data-task-id="${task.id}" style="cursor: pointer; list-style-position: inside;">
-                                <span class="event-dot" style="background: ${task.color || '#6366f1'}"></span>
-                                <span class="event-name">${escapeHtml(task.title)}</span>
-                                <span class="event-date" style="font-size: 0.7rem; background: var(--border-color); padding: 2px 6px; border-radius: 4px;">${children.length} left</span>
-                            </summary>
-                            <div class="sidebar-recurring-children" style="padding-left: 20px; border-left: 2px solid var(--border-color); margin-left: 10px;">
-                                ${children.map(child => {
-                                    const cDate = child.startDate || child.dueDate;
-                                    const cDateObj = cDate ? new Date(cDate) : null;
-                                    const cDateStr = cDateObj ? cDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date';
-                                    return `
-                                        <div class="sidebar-event-item" data-task-id="${child.id}" style="margin-top: 2px;">
-                                            <span class="event-dot" style="background: transparent; border: 2px solid ${task.color || '#6366f1'}"></span>
-                                            <span class="event-name">${escapeHtml(child.title)}</span>
-                                            <span class="event-date">${cDateStr}</span>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        </details>
-                    `;
-                } else {
-                    html += `
-                        <div class="sidebar-event-item" data-task-id="${task.id}">
-                            <span class="event-dot" style="background: ${task.color || '#6366f1'}"></span>
-                            <span class="event-name">${escapeHtml(task.title)}</span>
-                            <span class="event-date">${dateStr}</span>
-                        </div>
-                    `;
-                }
+                const childCount = tasks.filter(t => t.parentTaskId === task.id && t.status !== 'completed').length;
+                const recurringLabel = childCount > 0 ? `${childCount} repeats` : dateStr;
+
+                html += `
+                    <div class="sidebar-event-item" data-task-id="${task.id}" role="button" tabindex="0" title="Edit task">
+                        <span class="event-dot" style="background: ${task.color || '#6366f1'}"></span>
+                        <span class="event-name">${escapeHtml(task.title)}</span>
+                        <span class="event-date">${escapeHtml(recurringLabel)}</span>
+                    </div>
+                `;
             });
             if (activeTasks.length > 5) {
                 html += expanded
@@ -2521,13 +2502,48 @@ async function renderSidebarEvents() {
                 if (action === 'toggle-sidebar-tasks') {
                     ScheduleState.ui.sidebarTasksExpanded = !ScheduleState.ui.sidebarTasksExpanded;
                     renderSidebarEvents();
+                    return;
                 }
+
+                const taskItem = e.target.closest('.sidebar-event-item[data-task-id]');
+                if (taskItem) {
+                    openSidebarTaskEditor(taskItem.dataset.taskId);
+                }
+            });
+            container.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const taskItem = e.target.closest('.sidebar-event-item[data-task-id]');
+                if (!taskItem) return;
+                e.preventDefault();
+                openSidebarTaskEditor(taskItem.dataset.taskId);
             });
         }
     } catch (e) {
         console.error('Error rendering sidebar events:', e);
         container.innerHTML = '<p class="empty-hint">Error loading tasks</p>';
     }
+}
+
+async function openSidebarTaskEditor(taskId) {
+    if (!taskId || typeof window.openTaskModal !== 'function') return;
+
+    let tasks = [];
+    try {
+        tasks = await ProductivityData.DataStore.getTasks();
+    } catch (error) {
+        console.error('Failed to load task for sidebar edit:', error);
+    }
+
+    const task = (Array.isArray(tasks) ? tasks : []).find(t => String(t.id) === String(taskId));
+    if (!task) {
+        showToast('error', 'Not Found', 'Could not find that task.');
+        return;
+    }
+
+    task.__recurringChildCount = (Array.isArray(tasks) ? tasks : [])
+        .filter(t => String(t.parentTaskId) === String(task.id) && t.status !== 'completed')
+        .length;
+    window.openTaskModal(task, task.status || 'not-started', {});
 }
 
 // Render imported calendars section with their names and delete buttons

@@ -57,6 +57,14 @@
             collapsedHeight: 110,
             expandedHeight: 340
         },
+        'habit-tracker': {
+            icon: 'fa-table-cells',
+            title: 'Habit Tracker',
+            collapsedCount: 1,
+            expandedCount: 1,
+            collapsedHeight: 460,
+            expandedHeight: 720
+        },
         'progress': {
             icon: 'fa-chart-line',
             title: 'This Week',
@@ -462,6 +470,32 @@
                 </div>
             `;
         }).join('');
+    }
+
+    async function renderHabitTracker() {
+        const content = document.getElementById('widget-content');
+        if (!content) return;
+
+        if (typeof window.HabitTrackerCalendar !== 'function') {
+            content.innerHTML = emptyState('Habit tracker unavailable');
+            return;
+        }
+
+        content.innerHTML = '<div id="habit-tracker-root" class="widget-habit-tracker-root"></div>';
+        const mountEl = content.querySelector('#habit-tracker-root');
+        const tracker = new window.HabitTrackerCalendar({
+            mountEl,
+            storageKey: 'habitTrackerCalendar',
+            goals: [
+                { id: 'study', label: 'Study 2 hours' },
+                { id: 'workout', label: 'Workout' },
+                { id: 'read', label: 'Read 20 pages' }
+            ],
+            weekStartsOn: 'monday'
+        });
+
+        await tracker.init();
+        window.widgetHabitTrackerInstance = tracker;
     }
 
     async function renderWeeklyProgress() {
@@ -882,6 +916,7 @@
         'deadlines': renderDeadlines,
         'goals': renderGoals,
         'challenges': renderChallenges,
+        'habit-tracker': renderHabitTracker,
         'progress': renderWeeklyProgress,
         'review': renderReview,
         'focus-session': renderFocusSession

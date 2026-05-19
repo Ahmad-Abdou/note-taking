@@ -1470,7 +1470,9 @@ function openTaskModal(task = null, defaultStatus = 'not-started', prefillData =
     const defaultStartDate = prefillData.startDate || task?.startDate || '';
     const defaultStartTime = prefillData.startTime || task?.startTime || '';
     const defaultDueTime = prefillData.dueTime || task?.dueTime || '';
-    const recurringChildCount = isRecurringTaskParent(task) ? getRecurringChildCount(task) : 0;
+    const recurringChildCount = isRecurringTaskParent(task)
+        ? Math.max(getRecurringChildCount(task), Number(task?.__recurringChildCount || 0))
+        : 0;
 
     modal.innerHTML = `
         <div class="modal-backdrop" data-action="close-task-modal"></div>
